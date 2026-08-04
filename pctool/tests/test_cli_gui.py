@@ -161,6 +161,9 @@ def test_gui_logs_resolve_run_start_name(guiserver):
     assert starts, [e["kind"] for e in entries]
     assert starts[-1].get("name") == "サンプル", starts[-1]
     assert starts[-1].get("a") == 5, starts[-1]
+    # どの装置の記録かのタグ(2台化 P1)。取り出した瞬間に付けないと、
+    # 装置側は読むと消えるため帰属が永久に分からなくなる
+    assert starts[-1].get("dev"), starts[-1]
 
 
 def test_gui_run_transfers_when_version_differs(guiserver, proj):

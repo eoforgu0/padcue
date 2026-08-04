@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,12 +73,61 @@ class Project:
 
     def load_config(self) -> dict:
         if self.config_path.is_file():
-            return json.loads(self.config_path.read_text(encoding="utf-8"))
-        return {"host": "padctl.local", "port": 5555}
+            cfg = json.loads(self.config_path.read_text(encoding="utf-8"))
+        else:
+            cfg = {"host": "padctl.local", "port": 5555}
+        return self._migrate_config(cfg)
+
+    def _migrate_config(self, cfg: dict) -> dict:
+        """旧形式(host/port 単一)を装置台帳(devices)へ移行する(2026-08-04 P1)。
+
+        - devices: [{id(MAC・保存キー), name(表示名), host, port}] を正とする
+        - 旧キー host/port は devices[0] の写しとして併記し続ける(移行期間中の
+          旧コード・外部ツールが読めるように)
+        - 初回移行時は元ファイルを .bak として残す(事故時に手で戻せる)
+        """
+        if "devices" not in cfg:
+            if self.config_path.is_file():
+                bak = self.config_path.with_suffix(".json.bak")
+                if not bak.exists():
+                    bak.write_text(self.config_path.read_text(encoding="utf-8"),
+                                   encoding="utf-8")
+            cfg["devices"] = [{"id": "", "name": "1P",
+                              "host": cfg.get("host", "padctl.local"),
+                              "port": int(cfg.get("port", 5555))}]
+            self.save_config(cfg)
+        return cfg
 
     def save_config(self, cfg: dict) -> None:
+        devs = cfg.get("devices")
+        if devs:
+            # 旧キー host/port を書き換えた呼び出し元(既存ツール)の意図は
+            # 「1台目の接続先の変更」なので devices[0] へ取り込む。
+            # そうでなければ devices[0] を旧キーへ写す(常に両者を一致させる)
+            if cfg.get("host") not in (None, devs[0]["host"]) \
+                    or cfg.get("port") not in (None, devs[0]["port"]):
+                if cfg.get("host") is not None:
+                    devs[0]["host"] = cfg["host"]
+                if cfg.get("port") is not None:
+                    devs[0]["port"] = int(cfg["port"])
+            cfg["host"] = devs[0]["host"]
+            cfg["port"] = devs[0]["port"]
         self.config_path.write_text(
             json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def update_device(self, cfg: dict, idx: int, **fields) -> None:
+        """装置台帳のエントリを更新して保存する(新コードはこれを使う)。
+
+        直接 devices[idx] を書き換えて save_config すると、旧キー host/port
+        との突き合わせで巻き戻される(save_config は「旧キーの変更=1台目の
+        接続先変更の意図」と解釈するため)。ここで両方を同時に揃えて保存する。
+        """
+        dev = cfg["devices"][idx]
+        dev.update(fields)
+        if idx == 0:
+            cfg["host"] = dev["host"]
+            cfg["port"] = dev["port"]
+        self.save_config(cfg)
 
     # ---- ログ(logs.jsonl) ----
     # 実機のログは取り出すと実機側から消える(リングバッファ)。取り出した端から
@@ -89,7 +139,14 @@ class Project:
     def log_path(self):
         return self.root / "logs.jsonl"
 
-    def append_logs(self, entries: list[dict]) -> None:
+    # 書き込みは単一ライタに直列化する。装置2台のログを別スレッドが並行して
+    # 追記すると、追記と間引き(全読み・全書き)が競合して行が消えるため
+    # (2026-08-04 2台化 P1。今までは GUI の単一 lock が偶然守っていた)
+    _log_write_lock = threading.Lock()
+
+    def append_logs(self, entries: list[dict], dev: str = "") -> None:
+        """ログを追記する。dev は装置の個体ID(2台化で「どの装置の記録か」を
+        後から区別するため。保存キーは改名に耐える id、表示時に名前へ解決)。"""
         if not entries:
             return
         now = time.time()
@@ -97,10 +154,13 @@ class Project:
         for e in entries:
             d = dict(e)
             d["at"] = now          # PC が受け取った時刻(UNIX 秒)
+            if dev and "dev" not in d:
+                d["dev"] = dev
             lines.append(json.dumps(d, ensure_ascii=False))
-        with self.log_path().open("a", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        self._trim_logs()
+        with self._log_write_lock:
+            with self.log_path().open("a", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            self._trim_logs()
 
     def _trim_logs(self) -> None:
         p = self.log_path()

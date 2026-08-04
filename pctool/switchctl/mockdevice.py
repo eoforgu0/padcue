@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import select
 import socket
 import threading
 import time
@@ -69,6 +70,7 @@ class MockDevice:
     frame_period_ns: int = 16666667
     speed: float = 1000.0            # 実行の早送り倍率(テスト用)
     usb_mounted: bool = True
+    device_id: str = "mock00000000"  # 個体識別子(2台立てるときは変えること)
 
     _procs: dict = field(default_factory=dict)
     _staged: tuple | None = None
@@ -88,9 +90,16 @@ class MockDevice:
 
     def start(self, discover_port: int = 0) -> int:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Windows の SO_REUSEADDR は「使用中のポートへの二重 bind」まで通して
+        # しまい、2つ目の mock が同じポートで黙って壊れる。排他 bind にして
+        # 衝突を即エラーにする(2026-08-04 2台化 P1)
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self._sock.setsockopt(socket.SOL_SOCKET,
+                                  socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind((self.host, self.port))
-        self._sock.listen(1)
+        self._sock.listen(2)
         self.port = self._sock.getsockname()[1]
         self._log("BOOT")
         self._thread = threading.Thread(target=self._serve, daemon=True)
@@ -102,7 +111,10 @@ class MockDevice:
     def _start_discover(self, port: int) -> None:
         """探索の問い合わせに応答する(実機と同じ仕組み)。"""
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("", port))
         self._dsock = s
 
@@ -114,7 +126,7 @@ class MockDevice:
                     return
                 if not data.startswith(b"PADCTL?"):
                     continue
-                reply = json.dumps({"magic": "padctl", "id": "mock00000000",
+                reply = json.dumps({"magic": "padctl", "id": self.device_id,
                                     "fw": FW_VERSION, "port": self.port}).encode()
                 try:
                     s.sendto(reply, addr)
@@ -172,27 +184,51 @@ class MockDevice:
                 conn, _ = self._sock.accept()
             except OSError:
                 return
-            try:
-                self._handle(conn)
-            except (ConnectionError, OSError):
-                pass
-            finally:
-                conn.close()
+            # 後着優先の横取り(実機と同じ): _handle が新しい接続を返したら
+            # そのまま乗り換える
+            while conn is not None and not self._stop:
+                try:
+                    nxt = self._handle(conn)
+                except (ConnectionError, OSError):
+                    nxt = None
+                finally:
+                    conn.close()
+                conn = nxt
 
-    def _handle(self, conn: socket.socket) -> None:
+    def _handle(self, conn: socket.socket) -> socket.socket | None:
+        """クライアント1本を処理する。
+
+        実機(app_ctrl.c handle_client)と同じく、現クライアントが約1秒無通信の
+        間に新しい接続が来たら現接続を手放す(後着優先の横取り)。この挙動が
+        mock に無いと、2台化で最も危険な「収集と操作の接続奪い合い」故障を
+        テストで再現できない(2026-08-04 P1)。奪った接続を返す(無ければ None)。
+        """
         buf = b""
+        idle_since = time.monotonic()
         while not self._stop:
             got = proto.unpack_from(buf)
             if got is None:
+                r, _, _ = select.select([conn, self._sock], [], [], 0.2)
+                if self._sock in r and time.monotonic() - idle_since >= 1.0:
+                    try:
+                        nxt, _ = self._sock.accept()
+                        return nxt          # 現接続を手放して乗り換える
+                    except OSError:
+                        return None
+                if conn not in r:
+                    continue
                 chunk = conn.recv(65536)
                 if not chunk:
-                    return
+                    return None
                 buf += chunk
+                idle_since = time.monotonic()
                 continue
             msg, consumed = got
             buf = buf[consumed:]
             reply = self._dispatch(msg)
             conn.sendall(proto.pack(reply))
+            idle_since = time.monotonic()
+        return None
 
     def _err(self, code: str, message: str) -> Message:
         return Message(proto.T_ERROR, {"code": code, "message": message})
@@ -221,6 +257,7 @@ class MockDevice:
                     and r["frames"] >= r["await_at"]
                     and r["frames_at_await"] == 0):
                 r["awaiting"] = True
+                r["await_gen"] = r.get("await_gen", 0) + 1
                 r["frames"] = r["await_at"]
                 self._set_state("AWAITING")
                 return
@@ -258,7 +295,7 @@ class MockDevice:
         o = msg.obj
         if t == proto.T_HELLO:
             return Message(proto.T_HELLO | proto.T_RESP, {
-                "magic": "padctl", "fw": FW_VERSION,
+                "magic": "padctl", "id": self.device_id, "fw": FW_VERSION,
                 "schema": binfmt.SCHEMA_VERSION,
                 "mode": self.mode, "binterval": self.binterval,
                 "partition": "ota_0", "reset_reason": "POWERON",
@@ -352,6 +389,11 @@ class MockDevice:
                 arm = int(o.get("arm", -1))
                 if not (0 <= arm < r["await_arms"]):
                     return self._err("BAD_ARG", "腕の番号が範囲外です")
+                # 世代照合(実機と同じ): 別の駐機に宛てた古い選択を拒否する
+                if isinstance(o.get("gen"), (int, float))                         and int(o["gen"]) != r.get("await_gen", 0):
+                    return self._err("STALE_SELECT",
+                                     "その選択は前の駐機に宛てたものです"
+                                     "(状態を取り直してください)")
                 r["awaiting"] = False
                 r["t0"] = time.monotonic()   # 待っていた時間ぶんずらす
                 r["frames_at_await"] = r["frames"]
@@ -448,7 +490,7 @@ class MockDevice:
                 # 待機分岐があれば、そのフレームに達したら選択待ちで止まる
                 "await_at": await_rel,
                 "await_arms": await_arms,
-                "awaiting": False, "frames_at_await": 0,
+                "awaiting": False, "frames_at_await": 0, "await_gen": 0,
             }
             self._set_state("RUNNING")
         # a=指定周回数(0=無限)、b/c=手順ハッシュの上位/下位 32bit。
@@ -469,6 +511,7 @@ class MockDevice:
                        "awaiting": bool(r.get("awaiting")),
                        "stop_graceful": bool(r.get("stop_graceful")),
                        "await_arms": r.get("await_arms", 0),
+                       "await_gen": r.get("await_gen", 0),
                        "session_loop": (min(loop, r["loop_n"])
                                         if r["loop_n"] else loop),
                        "frames_elapsed": r["frames"],

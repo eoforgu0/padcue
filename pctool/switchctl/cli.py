@@ -20,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from .client import DeviceClient, DeviceError
+from .client import DeviceClient, DeviceError, connect_verified
 from .discover import discover
 from .flowfmt import FlowError
 from .project import Project
@@ -30,51 +30,105 @@ def _project(args) -> Project:
     return Project(Path(args.project).resolve())
 
 
-def _client(args) -> DeviceClient:
-    """接続先を決めて繋ぐ。控えた IP で繋がらなければ LAN 内を探し直す。
+def _pick_device(args, cfg: dict) -> dict:
+    """--device 名前(省略時は1台目)から装置台帳のエントリを選ぶ。"""
+    devs = cfg.get("devices", [])
+    if not devs:
+        raise SystemExit("装置が登録されていません(switchctl device add <IP> <名前>)")
+    want = getattr(args, "device", None)
+    if not want:
+        return devs[0]
+    for d in devs:
+        if d.get("name") == want or d.get("id") == want:
+            return d
+    names = " / ".join(d.get("name", "?") for d in devs)
+    raise SystemExit(f"装置「{want}」は登録されていません(登録済み: {names})")
 
-    マイコンの IP は DHCP で決まるため変わりうる。変わっていたら自動で
-    見つけ直して控え直すので、手で IP を探す必要はない。
+
+def _learn_id(p, cfg: dict, dev: dict, info) -> None:
+    """初回接続で個体IDを覚える(以後の接続はこのIDと照合される)。"""
+    if not dev.get("id") and info.device_id:
+        p.update_device(cfg, cfg["devices"].index(dev), id=info.device_id)
+        print(f"装置 {dev.get('name')} の個体ID {info.device_id} を控えました",
+              file=sys.stderr)
+
+
+def _client(args) -> DeviceClient:
+    """接続先を決めて繋ぎ、個体ID(MAC)を照合する。
+
+    控えた IP で繋がらなければ LAN 内を探すが、控え直すのは**同じ個体**
+    (ID が一致する応答)だけ。以前は「実際に繋がった最初の1台」へ黙って
+    乗り換えていたが、2台環境では意図しない実機を操作する事故になるため
+    廃止した(2026-08-04 P1)。--host 指定は照合なしの直結(復旧用の逃げ道)。
     """
     p = _project(args)
     cfg = p.load_config()
-    port = int(cfg.get("port", 5555))
-    host = args.host or cfg.get("host") or ""
-    if host:
-        c = DeviceClient(host, port)
-        try:
-            c.connect()
-            return c
-        except (OSError, ConnectionError, DeviceError):
-            c.close()
-            print(f"{host} に繋がりません。LAN 内を探します…", file=sys.stderr)
+    if args.host:                       # 明示指定 = 直結(控えもしない)
+        c = DeviceClient(args.host, int(cfg.get("port", 5555)))
+        c.connect()
+        return c
+    dev = _pick_device(args, cfg)
+    try:
+        c, info = connect_verified(dev)
+        _learn_id(p, cfg, dev, info)
+        return c
+    except DeviceError as e:
+        if e.code == "DEVICE_MISMATCH":
+            print(f"{dev['host']} は {dev.get('name')} ではありません。"
+                  "LAN 内で本人を探します…", file=sys.stderr)
+        else:
+            raise
+    except (OSError, ConnectionError):
+        print(f"{dev['host']} に繋がりません。LAN 内を探します…", file=sys.stderr)
     found = discover()
     if not found:
         raise SystemExit(
             "マイコンが見つかりません。電源と WiFi を確認してください"
             "(接続先を指定する場合: switchctl device <IPアドレス>)")
-    # 探索の返事は「届いた経路の住所」で見えるため、PC に仮想アダプタ(VPN・
-    # 仮想マシン)があると自分の別の住所が候補に混じる。実際に繋がるものだけを
-    # 採用する(確かめずに控え直すと、以後ずっと繋がらない住所を覚えてしまう)
-    for target in found:
-        c = DeviceClient(target.host, target.port)
+    # 探索応答の中から「登録した個体(ID一致)」だけを追跡する。
+    # ID 未学習(初回)の場合のみ、繋がる相手が1台だけなら採用して学習する
+    want_id = dev.get("id", "")
+    candidates = [f for f in found if not want_id or f.device_id == want_id]
+    connected = []
+    for target in candidates:
+        probe = dict(dev, host=target.host, port=target.port)
         try:
-            c.connect()
+            c, info = connect_verified(probe)
         except (OSError, ConnectionError, DeviceError):
-            c.close()
             continue
-        cfg["host"], cfg["port"] = target.host, target.port
-        p.save_config(cfg)
+        connected.append((target, c, info))
+        if want_id:
+            break                        # ID 一致は本人確定
+    if want_id and connected:
+        target, c, info = connected[0]
+        p.update_device(cfg, cfg["devices"].index(dev),
+                        host=target.host, port=target.port)
         print(f"見つかりました: {target.host}(控え直しました)", file=sys.stderr)
         return c
+    if not want_id and len(connected) == 1:
+        target, c, info = connected[0]
+        p.update_device(cfg, cfg["devices"].index(dev),
+                        host=target.host, port=target.port)
+        _learn_id(p, cfg, dev, info)
+        print(f"見つかりました: {target.host}(控え直しました)", file=sys.stderr)
+        return c
+    for _t, c, _i in connected:
+        c.close()
+    if not want_id and len(connected) > 1:
+        where = " / ".join(f"{t.host}(id={i.device_id or '不明'})"
+                           for t, _c, i in connected)
+        raise SystemExit(
+            f"padctl が複数見つかりました: {where}\n"
+            "  どれがこの装置か特定できません。IP を指定して一度接続し、"
+            "個体IDを学習させてください: switchctl device <IPアドレス>")
     where = " / ".join(f.host for f in found)
     raise SystemExit(
-        f"{where} は見つかりましたが、つないでも応答しません。" + "\n"
+        f"{where} は見つかりましたが、登録した個体ではないか応答しません。" + "\n"
         "  ・操作画面(padctl.bat)を開いていませんか? "
         "実機は同時に1つのプログラムしか受け付けません。"
         "閉じてからやり直してください" + "\n"
-        "  ・同じ PC の別のネットワーク口が答えた可能性もあります。"
-        "その場合は実機の IP を指定してください: switchctl device <IPアドレス>")
+        "  ・別の個体しか居ない場合は乗り換えません(誤爆防止)。"
+        "新しい装置なら登録してください: switchctl device add <IPアドレス> <名前>")
 
 
 def _print_build(r) -> None:
@@ -282,26 +336,104 @@ def cmd_ota(args) -> int:
 
 
 def cmd_device(args) -> int:
+    """装置台帳の管理。
+
+    device list                    登録済み装置の一覧
+    device add <IP> [名前]         新しい装置を登録(接続して個体IDを学習)
+    device rename <名前> <新名前>  表示名の変更(IDで参照するため履歴は切れない)
+    device auto                    1台目のIPを探索で追跡(ID一致のみ)
+    device <IP>                    1台目の接続先を手で設定(従来互換)
+    """
     p = _project(args)
     cfg = p.load_config()
-    if args.address == "auto":
-        found = discover()
-        if not found:
-            print("マイコンが見つかりません(電源と WiFi を確認してください)")
-            return 1
-        cfg["host"], cfg["port"] = found[0].host, found[0].port
-        p.save_config(cfg)
-        print(f"接続先を {found[0].host} に設定しました")
+    devs = cfg.get("devices", [])
+    a = args.address
+
+    if a == "list":
+        for i, d in enumerate(devs):
+            mark = "(既定)" if i == 0 else ""
+            print(f"{d.get('name', '?'):<8} {d.get('host')}:{d.get('port')}"
+                  f"  id={d.get('id') or '未学習'} {mark}")
+        if not devs:
+            print("(登録なし)")
         return 0
-    addr = args.address.strip()
-    if not addr:
-        # 空にすると以後どのコマンドも「接続先が未設定です」になる
-        print("接続先が空です。IP か名前(padctl.local)を指定するか、"
-              "auto で探してください")
+
+    if a == "add":
+        if not args.extra:
+            print("使い方: switchctl device add <IP> [名前]")
+            return 1
+        host = args.extra[0]
+        name = args.extra[1] if len(args.extra) > 1 else f"{len(devs) + 1}P"
+        if any(d.get("name") == name for d in devs):
+            print(f"名前「{name}」は使用済みです")
+            return 1
+        # 受け入れモード: 接続して個体IDを確認してから登録する。
+        # IDを名乗らない旧ファームは登録できない(照合できない装置を台帳に
+        # 入れると誤爆防止が成り立たない)。先に有線か --host 直結で OTA する
+        try:
+            c = DeviceClient(host, int(cfg.get("port", 5555)))
+            c.connect()
+            info = c.hello()
+            c.close()
+        except (OSError, ConnectionError, DeviceError) as e:
+            print(f"{host} に接続できません: {e}")
+            return 1
+        if not info.device_id:
+            print(f"{host} は個体IDを名乗らない古いファームです。先に更新してください:\n"
+                  f"  switchctl --host {host} ota firmware/build/padctl.bin")
+            return 1
+        if any(d.get("id") == info.device_id for d in devs):
+            other = next(d for d in devs if d.get("id") == info.device_id)
+            print(f"この個体は「{other.get('name')}」として登録済みです")
+            return 1
+        devs.append({"id": info.device_id, "name": name,
+                     "host": host, "port": int(cfg.get("port", 5555))})
+        cfg["devices"] = devs
+        p.save_config(cfg)
+        print(f"登録しました: {name} = {host} (id={info.device_id})")
+        return 0
+
+    if a == "rename":
+        if len(args.extra) != 2:
+            print("使い方: switchctl device rename <名前> <新名前>")
+            return 1
+        old, new = args.extra
+        for d in devs:
+            if d.get("name") == old:
+                d["name"] = new
+                p.save_config(cfg)
+                print(f"{old} → {new} に変更しました(個体IDでの参照は不変)")
+                return 0
+        print(f"装置「{old}」は登録されていません")
         return 1
-    cfg["host"] = addr
-    p.save_config(cfg)
-    print(f"接続先を {addr} に設定しました")
+
+    if a == "auto":
+        # 1台目(または --device 指定)の IP を探索で追跡する。
+        # ID が学習済みなら一致する応答のみ採用(別個体へは乗り換えない)
+        dev = _pick_device(args, cfg)
+        found = discover()
+        match = [f for f in found
+                 if not dev.get("id") or f.device_id == dev["id"]]
+        if not match:
+            print("登録した個体が見つかりません(電源と WiFi を確認してください)")
+            return 1
+        if not dev.get("id") and len(match) > 1:
+            where = " / ".join(f"{f.host}(id={f.device_id or '不明'})" for f in match)
+            print(f"複数見つかりました: {where}\n"
+                  "どれか特定できません。IP を指定してください")
+            return 1
+        p.update_device(cfg, cfg["devices"].index(dev),
+                        host=match[0].host, port=match[0].port)
+        print(f"接続先を {match[0].host} に設定しました")
+        return 0
+
+    addr = a.strip()
+    if not addr:
+        print("接続先が空です。IP か名前を指定するか、auto で探してください")
+        return 1
+    dev = _pick_device(args, cfg)
+    p.update_device(cfg, cfg["devices"].index(dev), host=addr)
+    print(f"{dev.get('name')} の接続先を {addr} に設定しました")
     return 0
 
 
@@ -353,7 +485,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="switchctl", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default=".", help="プロジェクトフォルダ")
-    ap.add_argument("--host", default="", help="デバイスの IP(設定を上書き)")
+    ap.add_argument("--host", default="", help="デバイスの IP(照合なしの直結。復旧用)")
+    ap.add_argument("--device", default="",
+                    help="操作する装置の名前(省略時は1台目)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init", help="雛形を作る").set_defaults(func=cmd_init)
@@ -399,8 +533,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("image", nargs="?", default="firmware/build/padctl.bin")
     p.set_defaults(func=cmd_ota)
 
-    p = sub.add_parser("device", help="接続先を設定(auto で自動検出)")
-    p.add_argument("address", help="IP アドレス、または auto")
+    p = sub.add_parser("device", help="装置の登録・一覧・接続先設定")
+    p.add_argument("address", help="list / add / rename / auto / IP アドレス")
+    p.add_argument("extra", nargs="*", help="add <IP> [名前] / rename <旧> <新>")
     p.set_defaults(func=cmd_device)
 
     p = sub.add_parser("discover", help="LAN 内のマイコンを探す")

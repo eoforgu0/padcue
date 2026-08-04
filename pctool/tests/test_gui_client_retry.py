@@ -29,6 +29,13 @@ class _FakeClient:
     def connect(self):
         pass
 
+    def hello(self):
+        from switchctl.client import DeviceInfo
+        return DeviceInfo(fw_version="fake", schema_version=1,
+                          transport_mode="procon", binterval=1,
+                          partition="ota_0", reset_reason="",
+                          rolled_back=False, state="IDLE")
+
     def is_alive(self):
         return not self.closed
 

@@ -35,6 +35,7 @@ class DeviceInfo:
     state: str               # 状態機械(BOOT/IDLE/RUNNING/AWAITING/ERROR/OTA)
     frame_period_ns: int = 16_666_667   # 1フレームの長さ(進捗の補間に使う)
     imu_enabled: bool = False           # 本体が IMU を有効化したか
+    device_id: str = ""      # 個体識別子(WiFi MAC 12桁hex)。旧ファームは空
 
 
 def proc_hash(data: bytes) -> str:
@@ -134,6 +135,7 @@ class DeviceClient:
             state=o.get("state", ""),
             frame_period_ns=int(o.get("frame_period_ns", 16_666_667)),
             imu_enabled=bool(o.get("imu_enabled", False)),
+            device_id=o.get("id", ""),
         )
 
     def put(self, name: str, data: bytes, chunk: int = 4096) -> str:
@@ -171,9 +173,17 @@ class DeviceClient:
             obj["resume"] = resume
         self._send(Message(proto.T_RUN, obj))
 
-    def select(self, arm: int) -> None:
-        """待機分岐で止まっているときに、進む腕を選ぶ。"""
-        self._send(Message(proto.T_SELECT, {"arm": int(arm)}))
+    def select(self, arm: int, gen: int | None = None) -> None:
+        """待機分岐で止まっているときに、進む腕を選ぶ。
+
+        gen は STATUS の await_gen(この実行で何回目の駐機か)。渡すと装置側が
+        照合し、別の駐機に宛てた古い選択を拒否する(2台の自動合流用)。
+        省略すれば従来どおり無条件に選ぶ。
+        """
+        obj: dict = {"arm": int(arm)}
+        if gen is not None:
+            obj["gen"] = int(gen)
+        self._send(Message(proto.T_SELECT, obj))
 
     def stop(self, mode: str = "immediate") -> None:
         """止める。cancel は「今の周で止める」予約の取り消し(既に止まって
@@ -230,3 +240,42 @@ class DeviceClient:
                 progress(sent, len(image))
         r = self._send(Message(proto.T_OTA, {"action": "end"}))
         return {"partition": partition, "written": r.obj.get("written", sent)}
+
+
+# ---- 個体照合つきの接続(装置台帳の唯一の入口) ----
+# 接続を作る経路をここ1箇所に集約する。IP は DHCP で変わるため、接続のたびに
+# HELLO の個体ID(MAC)を登録簿と突き合わせ、意図しない実機への操作
+# (取り違え誤爆)を構造的に防ぐ(2026-08-04 2台化 P1)。
+
+def connect_verified(dev: dict, timeout: float = 3.0,
+                     client_cls=None) -> tuple[DeviceClient, DeviceInfo]:
+    """装置台帳のエントリ {id, name, host, port} へ接続し、個体IDを照合する。
+
+    - 登録 id があり、相手の id と食い違う → DEVICE_MISMATCH(絶対に操作させない)
+    - 登録 id が空(初回) → 相手の id を呼び出し元が学習できるよう info を返す
+    - 相手の id が空(旧ファーム) → 照合不能。登録 id があるなら拒否する
+    client_cls はテストの差し替え口(既定は DeviceClient)。
+    """
+    cls = client_cls or DeviceClient
+    c = cls(dev.get("host", ""), int(dev.get("port", 5555)), timeout=timeout)
+    c.connect()
+    try:
+        info = c.hello()
+    except Exception:
+        c.close()
+        raise
+    want = dev.get("id", "")
+    if want and info.device_id != want:
+        c.close()
+        name = dev.get("name", "?")
+        if info.device_id:
+            raise DeviceError(
+                "DEVICE_MISMATCH",
+                f"{dev.get('host')} にいるのは別の個体です"
+                f"(登録 {name}={want} / 実際 {info.device_id})。"
+                "IP が入れ替わった可能性があります。探索で追跡してください")
+        raise DeviceError(
+            "DEVICE_MISMATCH",
+            f"{dev.get('host')} の相手は個体IDを名乗らない古いファームです。"
+            f"登録済みの {name} とは照合できないため操作しません")
+    return c, info

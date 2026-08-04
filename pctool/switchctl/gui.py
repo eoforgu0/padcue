@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import binfmt, engine
-from .client import DeviceClient, DeviceError
+from .client import DeviceClient, DeviceError, connect_verified
 from .discover import discover
 from .project import Project, validate_name
 from .record import Recorder
@@ -110,8 +110,9 @@ class _Handler(BaseHTTPRequestHandler):
         直列化してあるので1本を共有して問題ない。相手が閉じていたら繋ぎ直す。
         """
         cfg = self.project.load_config()
-        host = cfg.get("host") or ""
-        port = int(cfg.get("port", 5555))
+        dev = (cfg.get("devices") or [{}])[0]
+        host = dev.get("host") or ""
+        port = int(dev.get("port", 5555))
         if not host:
             raise DeviceError("NO_HOST", "接続先が未設定です")
         cl = _Handler.dev
@@ -120,8 +121,13 @@ class _Handler(BaseHTTPRequestHandler):
             self._drop_client()
             cl = None
         if cl is None:
-            cl = DeviceClient(host, port, timeout=3.0)
-            cl.connect()
+            # 接続のたびに個体ID(MAC)を照合する。IP の入れ替わりで別個体に
+            # 繋がっても操作しない(誤爆防止)。初回はIDを学習して控える。
+            # DeviceClient をモジュール名で渡すのはテストの差し替えを生かすため
+            cl, info = connect_verified(dev, timeout=3.0,
+                                        client_cls=DeviceClient)
+            if not dev.get("id") and info.device_id:
+                self.project.update_device(cfg, 0, id=info.device_id)
             _Handler.dev = cl
         try:
             yield cl
@@ -224,7 +230,10 @@ class _Handler(BaseHTTPRequestHandler):
                                     e["name"] = names[h]
                     except (DeviceError, OSError):
                         pass
-                    self.project.append_logs(entries)
+                    # どの装置の記録かを取り出した瞬間に付ける(装置側は読むと
+                    # 消えるため、今を逃すと帰属が永久に分からなくなる)
+                    dev0 = (self.project.load_config().get("devices") or [{}])[0]
+                    self.project.append_logs(entries, dev=dev0.get("id", ""))
             except (DeviceError, OSError) as e:
                 err = str(e)
             n = int(parse_qs(u.query).get("limit", ["1000"])[0])
@@ -292,8 +301,9 @@ class _Handler(BaseHTTPRequestHandler):
             # あると「自分の別の住所」が候補に混じる。確かめずに採用すると、
             # いま繋がっているのに未接続へ落ちる
             cfg = self.project.load_config()
-            cur_host = (cfg.get("host") or "").strip()
-            cur_port = int(cfg.get("port", 5555))
+            dev0 = (cfg.get("devices") or [{}])[0]
+            cur_host = (dev0.get("host") or "").strip()
+            cur_port = int(dev0.get("port", 5555))
             # 今つながっているなら何も変えない。持ち回している接続が生きている
             # かどうかで判る(改めて試すと、名前が引けない場合に数秒待たされる)
             cl = _Handler.dev
@@ -302,11 +312,16 @@ class _Handler(BaseHTTPRequestHandler):
                     and cl.is_alive()):
                 return {"ok": True, "host": cur_host, "kept": True}
             found = discover(timeout=float(body.get("timeout", 1.5)))
+            # 追跡するのは登録した個体(ID一致)だけ。ID 未学習の初回のみ、
+            # 相手が名乗る ID を問わず接続確認して採用する(黙って別個体へ
+            # 乗り換えない。2026-08-04 P1)
+            want_id = dev0.get("id", "")
             for f in found:
+                if want_id and f.device_id and f.device_id != want_id:
+                    continue
                 if not self._reachable(f.host, f.port):
                     continue
-                cfg["host"], cfg["port"] = f.host, f.port
-                self.project.save_config(cfg)
+                self.project.update_device(cfg, 0, host=f.host, port=f.port)
                 self._drop_client()
                 return {"ok": True, "host": f.host,
                         "found": [{"host": x.host, "port": x.port, "fw": x.fw,
