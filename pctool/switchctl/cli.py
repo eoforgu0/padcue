@@ -46,7 +46,13 @@ def _pick_device(args, cfg: dict) -> dict:
 
 
 def _learn_id(p, cfg: dict, dev: dict, info) -> None:
-    """初回接続で個体IDを覚える(以後の接続はこのIDと照合される)。"""
+    """初回接続で個体IDを覚える(以後の接続はこのIDと照合される)。
+
+    模擬デバイス(mock〜)は覚えない。練習で mock に繋いだだけで台帳が
+    mock のIDで埋まると、実機へ戻れなくなるため。
+    """
+    if info.device_id.startswith("mock"):
+        return
     if not dev.get("id") and info.device_id:
         p.update_device(cfg, cfg["devices"].index(dev), id=info.device_id)
         print(f"装置 {dev.get('name')} の個体ID {info.device_id} を控えました",
@@ -81,14 +87,33 @@ def _client(args) -> DeviceClient:
     except (OSError, ConnectionError):
         print(f"{dev['host']} に繋がりません。LAN 内を探します…", file=sys.stderr)
     found = discover()
+    want_id_early = dev.get("id", "")
+    if want_id_early and not any(f.device_id == want_id_early for f in found):
+        # UDP 探索で本人が見えない。個体名(mDNS)でも追跡を試す
+        # (ブロードキャストが通らないネットワークの保険。実機は
+        # padctl-<MAC下4桁>.local を名乗る)
+        name_host = f"padctl-{want_id_early[-4:]}.local"
+        try:
+            c, info = connect_verified(dict(dev, host=name_host))
+            p.update_device(cfg, cfg["devices"].index(dev), host=name_host)
+            print(f"見つかりました: {name_host}(名前で控え直しました)",
+                  file=sys.stderr)
+            return c
+        except (OSError, ConnectionError, DeviceError):
+            pass
     if not found:
         raise SystemExit(
             "マイコンが見つかりません。電源と WiFi を確認してください"
             "(接続先を指定する場合: switchctl device <IPアドレス>)")
     # 探索応答の中から「登録した個体(ID一致)」だけを追跡する。
     # ID 未学習(初回)の場合のみ、繋がる相手が1台だけなら採用して学習する
+    # 追跡できるのは「登録した個体(ID一致)」だけ。mock は自動採用の対象外
+    # (消し忘れの mock へ黙って乗り換える偽成功を防ぐ。練習への切替は
+    # device 127.0.0.1 の明示操作で行う)。ID 未学習のときも実機のみが対象
     want_id = dev.get("id", "")
-    candidates = [f for f in found if not want_id or f.device_id == want_id]
+    candidates = [f for f in found
+                  if (f.device_id == want_id if want_id
+                      else not f.device_id.startswith("mock"))]
     connected = []
     for target in candidates:
         probe = dict(dev, host=target.host, port=target.port)
@@ -221,6 +246,8 @@ def cmd_status(args) -> int:
     with _client(args) as c:
         info = c.hello()
         st = c.status()
+        if info.device_id.startswith("mock"):
+            print("⚠ 練習用の模擬デバイスに接続中です(実機は動きません)")
         print(f"ファーム   : {info.fw_version} ({info.partition})")
         print(f"転送方式   : {info.transport_mode} / bInterval={info.binterval}")
         print(f"状態       : {st.get('state')}")
@@ -291,6 +318,9 @@ def cmd_clear_error(args) -> int:
 def cmd_logs(args) -> int:
     with _client(args) as c:
         entries = c.logs()
+        # 実機側のログは読むと消える。ここで保存しないと、この回収分は
+        # 画面のログ蓄積(logs.jsonl)から永久に欠落する(装置タグ付き)
+        _project(args).append_logs(entries, dev=getattr(c, "device_id", ""))
         if not entries:
             print("(ログなし)")
         for e in entries:
@@ -398,6 +428,12 @@ def cmd_device(args) -> int:
             print("使い方: switchctl device rename <名前> <新名前>")
             return 1
         old, new = args.extra
+        if not new.strip():
+            print("新名前が空です")
+            return 1
+        if any(d.get("name") == new for d in devs):
+            print(f"名前「{new}」は使用済みです(重複すると指名で取り違えます)")
+            return 1
         for d in devs:
             if d.get("name") == old:
                 d["name"] = new
@@ -405,6 +441,35 @@ def cmd_device(args) -> int:
                 print(f"{old} → {new} に変更しました(個体IDでの参照は不変)")
                 return 0
         print(f"装置「{old}」は登録されていません")
+        return 1
+
+    if a == "forget":
+        # 装置の交換(基板が変わり MAC も変わった)用: IDの控えだけを解除する。
+        # 次の接続で新しい個体のIDを学習し直す
+        if len(args.extra) != 1:
+            print("使い方: switchctl device forget <名前>")
+            return 1
+        for d in devs:
+            if d.get("name") == args.extra[0]:
+                d["id"] = ""
+                p.save_config(cfg)
+                print(f"{d['name']} のIDの控えを解除しました"
+                      "(次の接続で学習し直します)")
+                return 0
+        print(f"装置「{args.extra[0]}」は登録されていません")
+        return 1
+
+    if a == "remove":
+        if len(args.extra) != 1:
+            print("使い方: switchctl device remove <名前>")
+            return 1
+        for i, d in enumerate(devs):
+            if d.get("name") == args.extra[0]:
+                devs.pop(i)
+                p.save_config(cfg)
+                print(f"{d['name']} を台帳から外しました")
+                return 0
+        print(f"装置「{args.extra[0]}」は登録されていません")
         return 1
 
     if a == "auto":
@@ -432,7 +497,21 @@ def cmd_device(args) -> int:
         print("接続先が空です。IP か名前を指定するか、auto で探してください")
         return 1
     dev = _pick_device(args, cfg)
-    p.update_device(cfg, cfg["devices"].index(dev), host=addr)
+    fields = {"host": addr}
+    # 向け先を確かめる。相手が模擬デバイス(練習)なら、IDの控えを解除して
+    # 向け替える(控えたまま向けると照合で止まり練習が成立しない。解除は
+    # この明示操作のときだけ。探索が黙って mock を採用することはない)
+    try:
+        probe = DeviceClient(addr, int(cfg.get("port", 5555)), timeout=1.5)
+        info = probe.connect()
+        probe.close()
+        if info.device_id.startswith("mock") and dev.get("id"):
+            fields["id"] = ""
+            print("相手は練習用の模擬デバイスです。IDの控えを解除して向けます"
+                  "(実機へ戻るときは「探す」か device auto で学習し直します)")
+    except (OSError, ConnectionError, DeviceError):
+        pass          # まだ起動していない宛先も設定はできる(従来どおり)
+    p.update_device(cfg, cfg["devices"].index(dev), **fields)
     print(f"{dev.get('name')} の接続先を {addr} に設定しました")
     return 0
 
@@ -451,15 +530,21 @@ def cmd_mock(args) -> int:
     from .discover import PORT as DISCOVER_PORT
     from .mockdevice import MockDevice
     d = MockDevice(host="127.0.0.1", port=args.port, speed=args.speed)
+    # 本体(TCP)の待ち受けに失敗したら偽の成功を表示しない(排他 bind に
+    # したため、二重起動はここで確実に失敗する。2026-08-05 レビュー)
+    try:
+        port = d.start()
+    except OSError:
+        print(f"ポート {args.port} を確保できません。既に模擬デバイス"
+              "(または他のプログラム)が使っています。--port で番号を変えるか、"
+              "先に動いている方を使ってください")
+        return 1
     # 探索の問いかけにも応える。実機と同じく画面の「探す」で見つかるようにして、
     # 練習の手順が本番と食い違わないようにする
     try:
-        port = d.start(discover_port=DISCOVER_PORT)
+        d._start_discover(DISCOVER_PORT)
         findable = True
     except OSError:
-        # 5557 が使用中(別の模擬デバイスが動いている等)。
-        # この時点で本体の待ち受けは既に始まっているので作り直さない
-        port = d.port
         findable = False
     print(f"模擬デバイスを起動しました: 127.0.0.1:{port}(Ctrl+C で終了)")
     if findable:

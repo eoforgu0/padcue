@@ -126,7 +126,9 @@ class _Handler(BaseHTTPRequestHandler):
             # DeviceClient をモジュール名で渡すのはテストの差し替えを生かすため
             cl, info = connect_verified(dev, timeout=3.0,
                                         client_cls=DeviceClient)
-            if not dev.get("id") and info.device_id:
+            # 模擬デバイスのIDは学習しない(練習が台帳を汚さないように)
+            if (not dev.get("id") and info.device_id
+                    and not info.device_id.startswith("mock")):
                 self.project.update_device(cfg, 0, id=info.device_id)
             _Handler.dev = cl
         try:
@@ -170,9 +172,15 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
 
     def _reachable(self, host: str, port: int) -> bool:
-        """その住所で本当に padctl が応答するか(短い待ちで確かめる)。"""
+        """その住所で本当に padctl が応答するか(短い待ちで確かめる)。
+
+        待ちを 3 秒取るのは、実機が「先客が黙ってから」新しい接続へ乗り換える
+        ため(最大1秒。app_ctrl.c handle_client)。1.5 秒では乗り換え待ちと
+        重なったときに取りこぼし、見つかっているのに『応答しません』になる
+        (2026-08-05 uicheck で再現)
+        """
         self._drop_client()      # 実機は同時1接続。試す前に手放す
-        cl = DeviceClient(host, port, timeout=1.5)
+        cl = DeviceClient(host, port, timeout=3.0)
         try:
             cl.connect()
             return True
@@ -231,9 +239,11 @@ class _Handler(BaseHTTPRequestHandler):
                     except (DeviceError, OSError):
                         pass
                     # どの装置の記録かを取り出した瞬間に付ける(装置側は読むと
-                    # 消えるため、今を逃すと帰属が永久に分からなくなる)
-                    dev0 = (self.project.load_config().get("devices") or [{}])[0]
-                    self.project.append_logs(entries, dev=dev0.get("id", ""))
+                    # 消えるため、今を逃すと帰属が永久に分からなくなる)。
+                    # タグは「この接続が実際に名乗ったID」(台帳の登録IDではなく。
+                    # 練習の mock でも帰属が正しく残る)
+                    self.project.append_logs(
+                        entries, dev=getattr(c, "device_id", ""))
             except (DeviceError, OSError) as e:
                 err = str(e)
             n = int(parse_qs(u.query).get("limit", ["1000"])[0])
@@ -316,8 +326,17 @@ class _Handler(BaseHTTPRequestHandler):
             # 相手が名乗る ID を問わず接続確認して採用する(黙って別個体へ
             # 乗り換えない。2026-08-04 P1)
             want_id = dev0.get("id", "")
-            for f in found:
-                if want_id and f.device_id and f.device_id != want_id:
+            # ID学習済みなら本人(完全一致)のみ。未学習なら実機のみを
+            # 対象にし、実機を差し置いて mock を採用しない(127.0.0.1 は
+            # IP 順で先頭に来がち)。mock への切替は明示操作
+            # (padctl-練習.bat / device 127.0.0.1)だけで行う
+            ordered = sorted(found,
+                             key=lambda f: f.device_id.startswith("mock"))
+            for f in ordered:
+                if want_id:
+                    if f.device_id != want_id:
+                        continue
+                elif f.device_id.startswith("mock"):
                     continue
                 if not self._reachable(f.host, f.port):
                     continue
@@ -1038,8 +1057,8 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <span id="devchip" class="chip">確認中…</span>
         <span class="sep"></span>
         <label class="lbl" for="host">接続先</label>
-        <input type="text" id="host" size="16" placeholder="padctl.local"
-               title="マイコンの名前か IP。ふだんは padctl.local のままで大丈夫です">
+        <input type="text" id="host" size="16" placeholder="IP か padctl-xxxx.local"
+               title="マイコンの IP か名前(padctl-<個体ID下4桁>.local)。ふだんは「探す」で自動設定されます">
         <button id="finddev" class="small"
                 title="LAN からマイコンを探して接続先にします">探す</button>
         <button id="sethost" class="small"

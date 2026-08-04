@@ -15,6 +15,7 @@ __pycache__/
 # プロジェクト作業物(手順のコンパイル結果と接続先設定は環境依存)
 build/
 switchctl.json
+switchctl.json.bak
 
 # 実行時生成物
 logs.jsonl

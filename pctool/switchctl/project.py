@@ -118,16 +118,35 @@ class Project:
     def update_device(self, cfg: dict, idx: int, **fields) -> None:
         """装置台帳のエントリを更新して保存する(新コードはこれを使う)。
 
-        直接 devices[idx] を書き換えて save_config すると、旧キー host/port
-        との突き合わせで巻き戻される(save_config は「旧キーの変更=1台目の
-        接続先変更の意図」と解釈するため)。ここで両方を同時に揃えて保存する。
+        2つの事故を防ぐ:
+        - 旧キー host/port との突き合わせによる巻き戻り(save_config は
+          「旧キーの変更=1台目の接続先変更の意図」と解釈するため、
+          ここで両方を同時に揃える)
+        - 手元の cfg が古いまま全量保存して、他プロセスの変更(別端末の
+          device add 等)を消すこと。保存直前にディスクから読み直し、
+          対象エントリ(IDが控えてあればID、なければ名前、最後は位置で特定)
+          にだけ変更を当てる
         """
-        dev = cfg["devices"][idx]
-        dev.update(fields)
-        if idx == 0:
-            cfg["host"] = dev["host"]
-            cfg["port"] = dev["port"]
-        self.save_config(cfg)
+        target = cfg["devices"][idx]
+        target.update(fields)                      # 呼び出し元の観測も揃える
+        fresh = cfg
+        if self.config_path.is_file():
+            try:
+                fresh = self._migrate_config(json.loads(
+                    self.config_path.read_text(encoding="utf-8")))
+            except ValueError:
+                pass                               # 壊れていれば手元を正とする
+        devs = fresh.get("devices") or [target]
+        hit = (next((d for d in devs
+                     if target.get("id") and d.get("id") == target["id"]), None)
+               or next((d for d in devs
+                        if d.get("name") == target.get("name")), None)
+               or devs[min(idx, len(devs) - 1)])
+        hit.update(fields)
+        if hit is devs[0]:
+            fresh["host"] = hit["host"]
+            fresh["port"] = hit["port"]
+        self.save_config(fresh)
 
     # ---- ログ(logs.jsonl) ----
     # 実機のログは取り出すと実機側から消える(リングバッファ)。取り出した端から

@@ -85,6 +85,9 @@ class MockDevice:
     _thread: threading.Thread | None = None
     _stop: bool = False
     _lock: threading.Lock = field(default_factory=threading.Lock)
+    # 駐機の通し番号(装置レベル。実行をまたいでも増え続ける。前の実行に
+    # 宛てた SELECT が新しい実行の駐機と偶然一致しないように)
+    _await_gen: int = 0
 
     # ---- ライフサイクル ----
 
@@ -204,12 +207,14 @@ class MockDevice:
         テストで再現できない(2026-08-04 P1)。奪った接続を返す(無ければ None)。
         """
         buf = b""
-        idle_since = time.monotonic()
         while not self._stop:
             got = proto.unpack_from(buf)
             if got is None:
                 r, _, _ = select.select([conn, self._sock], [], [], 0.2)
-                if self._sock in r and time.monotonic() - idle_since >= 1.0:
+                # 要求を受けかけていない(buf が空)ときだけ乗り換える。
+                # 実機も select の待ちが空振りしたとき=現クライアントが
+                # 黙っているときにだけ手放す(処理の途中では切らない)
+                if self._sock in r and not buf:
                     try:
                         nxt, _ = self._sock.accept()
                         return nxt          # 現接続を手放して乗り換える
@@ -221,13 +226,11 @@ class MockDevice:
                 if not chunk:
                     return None
                 buf += chunk
-                idle_since = time.monotonic()
                 continue
             msg, consumed = got
             buf = buf[consumed:]
             reply = self._dispatch(msg)
             conn.sendall(proto.pack(reply))
-            idle_since = time.monotonic()
         return None
 
     def _err(self, code: str, message: str) -> Message:
@@ -254,10 +257,11 @@ class MockDevice:
             r["frames"] = (min(frames, r["total_frames"])
                            if r["total_frames"] else frames)
             if (r.get("await_at") is not None
-                    and r["frames"] >= r["await_at"]
-                    and r["frames_at_await"] == 0):
+                    and r["frames"] >= r["await_at"]):
+                # 実機は周回のたびに待機分岐で毎回駐機する。次の駐機点は
+                # SELECT で進める(自動合流の検証土台。2026-08-05 レビュー)
                 r["awaiting"] = True
-                r["await_gen"] = r.get("await_gen", 0) + 1
+                self._await_gen += 1
                 r["frames"] = r["await_at"]
                 self._set_state("AWAITING")
                 return
@@ -390,13 +394,20 @@ class MockDevice:
                 if not (0 <= arm < r["await_arms"]):
                     return self._err("BAD_ARG", "腕の番号が範囲外です")
                 # 世代照合(実機と同じ): 別の駐機に宛てた古い選択を拒否する
-                if isinstance(o.get("gen"), (int, float))                         and int(o["gen"]) != r.get("await_gen", 0):
+                if isinstance(o.get("gen"), (int, float))                         and int(o["gen"]) != self._await_gen:
                     return self._err("STALE_SELECT",
                                      "その選択は前の駐機に宛てたものです"
                                      "(状態を取り直してください)")
                 r["awaiting"] = False
                 r["t0"] = time.monotonic()   # 待っていた時間ぶんずらす
                 r["frames_at_await"] = r["frames"]
+                # 次の周回の駐機点(実機は周回のたびに毎回駐機する)。
+                # 全周ぶん終わる位置なら駐機はもう無い
+                nxt = r["await_at"] + r["loop_frames"]
+                if r["total_frames"] and nxt >= r["total_frames"]:
+                    r["await_at"] = None
+                else:
+                    r["await_at"] = nxt
                 self._set_state("RUNNING")
             return Message(proto.T_SELECT | proto.T_RESP, {})
         if t == proto.T_PASSTHRU:
@@ -490,7 +501,7 @@ class MockDevice:
                 # 待機分岐があれば、そのフレームに達したら選択待ちで止まる
                 "await_at": await_rel,
                 "await_arms": await_arms,
-                "awaiting": False, "frames_at_await": 0, "await_gen": 0,
+                "awaiting": False, "frames_at_await": 0,
             }
             self._set_state("RUNNING")
         # a=指定周回数(0=無限)、b/c=手順ハッシュの上位/下位 32bit。
@@ -511,7 +522,7 @@ class MockDevice:
                        "awaiting": bool(r.get("awaiting")),
                        "stop_graceful": bool(r.get("stop_graceful")),
                        "await_arms": r.get("await_arms", 0),
-                       "await_gen": r.get("await_gen", 0),
+                       "await_gen": self._await_gen,
                        "session_loop": (min(loop, r["loop_n"])
                                         if r["loop_n"] else loop),
                        "frames_elapsed": r["frames"],

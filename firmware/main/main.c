@@ -239,6 +239,10 @@ void app_main(void)
         ESP_ERROR_CHECK(app_usb_start(load_settings(), &ucb));
     }
 
+    // 個体IDをここで確定させる(単一タスクのうちに)。制御サーバと mDNS の
+    // 2タスクが初回呼び出しで競合し、書き込み途中の短い文字列を HELLO が
+    // 返す理論上の窓を塞ぐ
+    ESP_LOGI(TAG, "個体ID: %s", app_discover_device_id());
     ESP_LOGI(TAG, "制御サーバを開始します");
     ESP_ERROR_CHECK(app_ctrl_start());
     ESP_LOGI(TAG, "探索(mDNS)を開始します");

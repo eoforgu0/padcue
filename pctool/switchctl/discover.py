@@ -110,14 +110,14 @@ def _probe_once(bind_addr: str, port: int, timeout: float) -> list[Found]:
 
 def discover(timeout: float = 1.5, port: int = PORT,
              use_name: bool = True) -> list[Found]:
-    """マイコンを探す。名前で呼べればそれを優先し、駄目なら問いかける。"""
-    found: dict[str, Found] = {}
+    """マイコンを探す。
 
-    if use_name:
-        ip = resolve_by_name()
-        if ip:
-            found[ip] = Found(host=ip, port=CTRL_PORT, device_id="", fw="",
-                              how="名前 padctl.local")
+    UDP の問いかけ(個体IDが返る)を主とし、名前解決は補助。
+    順序が重要: 名前解決の結果は ID を持たないため、先に入れると
+    同じホストの「ID付きの応答」を隠してしまい、ID一致で追跡する側が
+    本人をその場に見ているのに不一致と誤判定する(2026-08-05 レビュー)。
+    """
+    found: dict[str, Found] = {}
 
     # 各アダプタから個別に問いかける(仮想アダプタが複数あっても届くように)
     for bind_addr in _local_ipv4_addresses():
@@ -125,5 +125,13 @@ def discover(timeout: float = 1.5, port: int = PORT,
             found.setdefault(f.host, f)
         if found and bind_addr != "0.0.0.0":
             break      # 1つでも見つかれば全アダプタを試す必要はない
+
+    if use_name and not found:
+        # 旧ファーム(固定名 padctl.local)の保険。新ファームは個体名
+        # (padctl-<MAC下4桁>.local)を名乗るため、ここでは見つからない
+        ip = resolve_by_name()
+        if ip:
+            found[ip] = Found(host=ip, port=CTRL_PORT, device_id="", fw="",
+                              how="名前 padctl.local")
 
     return sorted(found.values(), key=lambda f: f.host)

@@ -174,7 +174,12 @@ def main() -> int:
     # 実機と同じく全アダプタで待つ(探索で見つかった自分の IP へ繋げるように)
     dev = MockDevice(speed=1.0, host="0.0.0.0")
     dev.start(discover_port=5557)   # 探索の問いかけにも応える(実機と同じ番号)
+    # 装置台帳は毎回まっさらにする。出力フォルダは使い回されるため、前回の
+    # 実行が控えた個体IDが残っていると、今回の模擬デバイスが別個体として
+    # 拒否される(2026-08-05 に実際に起きた)
     cfg = proj.load_config()
+    cfg["devices"] = [{"id": "", "name": "1P",
+                       "host": "127.0.0.1", "port": dev.port}]
     cfg["host"], cfg["port"] = "127.0.0.1", dev.port
     proj.save_config(cfg)
 

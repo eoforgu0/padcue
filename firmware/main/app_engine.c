@@ -69,7 +69,8 @@ static bool s_graceful_armed;
 static uint32_t s_graceful_passes;
 // 待機分岐
 static _Atomic bool s_awaiting;
-// この実行で何回目の駐機か(SELECT の宛先照合用。古い選択を弾く)
+// 駐機の通し番号(起動から単調増加。SELECT の宛先照合用。実行をまたいだ
+// 古い選択も弾けるよう、実行ごとにリセットしない)
 static _Atomic uint32_t s_await_gen;
 
 // **IRAM_ATTR は必須**。この関数は割り込み(on_alarm → stop_engine_from_isr)
@@ -395,7 +396,9 @@ esp_err_t app_engine_start(const uint8_t *data, size_t len, uint32_t session_loo
     atomic_store(&s_pub_pass, 1);
     atomic_store(&s_pub_index, 0);
     atomic_store(&s_pub_done, 0);
-    atomic_store(&s_await_gen, 0);
+    // s_await_gen は実行をまたいでも 0 に戻さない(起動からの通し番号)。
+    // 実行ごとに戻すと「前の実行の1回目の駐機」宛ての遅れた SELECT が、
+    // 「新しい実行の1回目の駐機」と偶然一致して通ってしまう(2026-08-05)
     atomic_store(&s_status, APP_ENGINE_RUNNING);
     s_graceful_armed = false;
     s_graceful_passes = 0;

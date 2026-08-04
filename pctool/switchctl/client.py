@@ -48,6 +48,7 @@ class DeviceClient:
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.device_id = ""      # 直近の HELLO で相手が名乗った個体ID
         self._sock: socket.socket | None = None
         self._buf = b""
 
@@ -124,6 +125,7 @@ class DeviceClient:
         # (DHCP で IP が変わり、古いアドレスを他の機器が取った場合の保険)
         if o.get("magic") not in (None, "padctl"):
             raise DeviceError("NOT_PADCTL", "この宛先は padctl ではありません")
+        self.device_id = o.get("id", "")
         return DeviceInfo(
             fw_version=o.get("fw", ""),
             schema_version=o.get("schema", 0),
@@ -265,15 +267,29 @@ def connect_verified(dev: dict, timeout: float = 3.0,
         c.close()
         raise
     want = dev.get("id", "")
+    if not want and info.device_id.startswith("mock"):
+        # 模擬デバイスは、IDを控えていない(=練習に向けた)ときだけ許す。
+        # 学習もしない。控えがあるのに相手が mock なら下で拒否する —
+        # 黙って mock を操作して「実機で動いた」と誤認する偽成功の方が、
+        # 止まるより害が大きい(2026-08-05 レビュー)
+        return c, info
     if want and info.device_id != want:
         c.close()
         name = dev.get("name", "?")
+        if info.device_id.startswith("mock"):
+            raise DeviceError(
+                "DEVICE_MISMATCH",
+                f"{dev.get('host')} にいるのは練習用の模擬デバイスです"
+                f"(登録 {name}={want})。練習に切り替えるなら"
+                " padctl-練習.bat か「switchctl device 127.0.0.1」"
+                "(IDの控えを解除して向け替えます)を使ってください")
         if info.device_id:
             raise DeviceError(
                 "DEVICE_MISMATCH",
                 f"{dev.get('host')} にいるのは別の個体です"
                 f"(登録 {name}={want} / 実際 {info.device_id})。"
-                "IP が入れ替わった可能性があります。探索で追跡してください")
+                "IP が入れ替わったなら探索で追跡されます。装置を交換したなら"
+                f" switchctl device forget {name} で控えを解除してください")
         raise DeviceError(
             "DEVICE_MISMATCH",
             f"{dev.get('host')} の相手は個体IDを名乗らない古いファームです。"
