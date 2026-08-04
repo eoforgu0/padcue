@@ -1,0 +1,1928 @@
+"""GUI を実際にブラウザで操作して、想定どおりかを確かめる。
+
+    python tools/uicheck.py [出力フォルダ]
+
+各項目を「こうしたらこうなるはず」で照合し、合否を並べる。
+失敗した項目はスクリーンショットを残す。
+"""
+from __future__ import annotations
+
+import json
+import re
+import sys
+import threading
+import time
+import traceback
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from playwright.sync_api import sync_playwright  # noqa: E402
+
+from switchctl import gui  # noqa: E402
+from switchctl.mockdevice import MockDevice  # noqa: E402
+
+from _localonly import lock_to_mock  # noqa: E402
+from switchctl.project import Project  # noqa: E402
+
+FLOWS = {
+    "素材周回": {
+        "schema": 1, "name": "素材周回", "pre": "拠点前",
+        "body": [
+            {"type": "label", "text": "移動"},
+            {"type": "stick", "side": "L", "x": 0, "y": 2047},
+            {"type": "wait", "frames": 120},
+            {"type": "stick", "side": "L", "x": 0, "y": 0},
+            {"type": "label", "text": "戦闘"},
+            {"type": "loop", "count": 3, "body": [
+                {"type": "part", "ref": "コンボ"},
+                {"type": "wait", "frames": 25},
+            ]},
+            {"type": "label", "text": "回収"},
+            {"type": "press", "buttons": ["A"], "frames": 5},
+            {"type": "wait", "frames": 90},
+        ],
+    },
+    "選んで進む": {
+        "schema": 1, "name": "選んで進む", "body": [
+            {"type": "label", "text": "確認"},
+            {"type": "press", "buttons": ["A"], "frames": 5},
+            {"type": "wait", "frames": 25},
+            {"type": "wait_branch", "arms": {
+                "出た": [{"type": "press", "buttons": ["B"], "frames": 5},
+                         {"type": "wait", "frames": 55}],
+                "出ない": [{"type": "press", "buttons": ["X"], "frames": 5},
+                           {"type": "wait", "frames": 25}],
+            }},
+            {"type": "wait", "frames": 60},
+        ],
+    },
+    "周回で変える": {
+        "schema": 1, "name": "周回で変える", "body": [
+            {"type": "loop", "count": 4, "body": [
+                {"type": "counter_branch", "arms": [
+                    [{"type": "press", "buttons": ["A"], "frames": 3},
+                     {"type": "wait", "frames": 27}],
+                    [{"type": "press", "buttons": ["B"], "frames": 3},
+                     {"type": "wait", "frames": 27}],
+                ]},
+            ]},
+            {"type": "wait", "frames": 30},
+        ],
+    },
+}
+PART = "F,A,B,ZL,LX,GP\n1,1,,,,\n2,1,,,,\n3,1,1,1,-1200,300\n4,1,,1,-1200,300\n5,,,,,\n"
+
+
+class Checker:
+    def __init__(self, page, out: Path):
+        self.page = page
+        self.out = out
+        self.results: list[tuple[str, str, str]] = []
+        self.n = 0
+
+    def check(self, name: str, fn):
+        self.n += 1
+        try:
+            fn()
+            self.results.append(("OK", name, ""))
+            print(f"  OK   {name}", flush=True)
+        except AssertionError as e:
+            self.results.append(("NG", name, str(e)))
+            print(f"  NG   {name}\n       {e}", flush=True)
+            self._shot(name)
+        except Exception as e:  # noqa: BLE001
+            detail = f"{type(e).__name__}: {e}".splitlines()[0]
+            self.results.append(("ERR", name, detail))
+            print(f"  ERR  {name}\n       {detail}", flush=True)
+            print(tail_trace(), flush=True)
+            self._shot(name)
+
+    def _shot(self, name):
+        safe = "".join(c if c.isalnum() else "_" for c in name)[:50]
+        try:
+            self.page.screenshot(path=str(self.out / f"NG-{self.n:02d}-{safe}.png"),
+                                 full_page=True)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def summary(self) -> int:
+        bad = [r for r in self.results if r[0] != "OK"]
+        print(f"\n===== {len(self.results)} 項目: "
+              f"OK {len(self.results) - len(bad)} / 問題 {len(bad)} =====")
+        for status, name, detail in bad:
+            print(f"{status}  {name}\n     {detail}")
+        return 1 if bad else 0
+
+
+def tail_trace() -> str:
+    return "\n".join("       " + line
+                     for line in traceback.format_exc().splitlines()[-4:])
+
+
+def build_project(root: Path) -> Project:
+    (root / "procedures").mkdir(parents=True, exist_ok=True)
+    (root / "parts").mkdir(parents=True, exist_ok=True)
+    for name, doc in FLOWS.items():
+        (root / "procedures" / f"{name}.flow.json").write_text(
+            json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    (root / "parts" / "コンボ.csv").write_text(PART, encoding="utf-8")
+    return Project(root)
+
+
+def text(page, sel: str) -> str:
+    return page.inner_text(sel).strip()
+
+
+def blk_icon(page, idx: int, cls: str):
+    """idx 番目のブロックの操作アイコン(cpy=複製 / delx=削除)を返す。
+
+    ボタンは普段薄いだけで常に押せる(hover で濃くなる見せ方)。
+    """
+    blk = page.locator("#flowbody .blk").nth(idx)
+    blk.hover()
+    return blk.locator(".delx.cpy" if cls == "cpy" else ".delx:not(.cpy)")
+
+
+def row_icon(page, list_sel: str, name: str, nth: int):
+    """一覧の行アイコン(0=名前変更 1=複製 2=削除)。"""
+    row = page.locator(f"{list_sel} .proc", has_text=name).first
+    row.hover()
+    return row.locator(".rowops button").nth(nth)
+
+
+def drag(page, box, tx, ty, steps: int = 8):
+    page.mouse.move(box["x"] + 5, box["y"] + 5)
+    page.mouse.down()
+    page.mouse.move(tx, ty, steps=steps)
+    page.wait_for_timeout(120)
+    page.mouse.up()
+    page.wait_for_timeout(300)
+
+
+def wait_state(page, want: str, timeout_ms: int = 8000) -> None:
+    page.wait_for_function(
+        "want => document.getElementById('devchip').textContent.includes(want)",
+        arg=want, timeout=timeout_ms)
+
+
+def main() -> int:
+    out = Path(sys.argv[1] if len(sys.argv) > 1 else "uicheck")
+    out.mkdir(parents=True, exist_ok=True)
+    proj = build_project(out / "_proj")
+    # 実機と同じく全アダプタで待つ(探索で見つかった自分の IP へ繋げるように)
+    dev = MockDevice(speed=1.0, host="0.0.0.0")
+    dev.start(discover_port=5557)   # 探索の問いかけにも応える(実機と同じ番号)
+    cfg = proj.load_config()
+    cfg["host"], cfg["port"] = "127.0.0.1", dev.port
+    proj.save_config(cfg)
+
+    # 【重要】実機に触れないよう固定する(理由は tools/_localonly.py)
+    lock_to_mock(dev.port)
+
+    gui._Handler.project = proj
+    gui._Handler.recorder = None
+    gui._Handler.trials = []
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1400, "height": 1000})
+        prompt_value = ["自動テスト"]
+        dialogs: list = []
+        page.on("dialog", lambda d: (dialogs.append(d.message),
+                                     d.accept(prompt_value[0])))
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e).splitlines()[0]))
+        page.on("console", lambda m: errors.append(f"console.error: {m.text}")
+                if m.type == "error" else None)
+        page.goto(base)
+        page.wait_for_timeout(1500)
+
+        # 画面が初期化できていないなら、その先の検査は全部倒れて原因が
+        # 分からなくなる。ここで止めて理由を出す(2026-08-02: 定数の定義順を
+        # 崩して JS が丸ごと止まり、80 項目が「確認中…」で失敗した)
+        booted = page.evaluate(
+            "() => typeof state !== 'undefined' && state !== null"
+            " && Array.isArray(state.procedures)")
+        if not booted:
+            print("!! 画面が初期化できていません(JavaScript が止まっています)")
+            for e in dict.fromkeys(errors) or ["(エラーは記録されませんでした)"]:
+                print("   ", e)
+            print("   → 定数の定義順・構文エラーを疑ってください")
+            browser.close()
+            srv.shutdown()
+            srv.server_close()
+            dev.stop()
+            return 1
+
+        c = Checker(page, out)
+        run_all(c, page, proj, dev, prompt_value, dialogs)
+        print()
+        if errors:
+            print("=== ブラウザ側のエラー ===")
+            for e in dict.fromkeys(errors):
+                print("  ", e)
+        rc = c.summary()
+        if errors:
+            rc = 1
+        browser.close()
+    srv.shutdown()
+    srv.server_close()
+    dev.stop()
+    return rc
+
+
+def run_all(c: Checker, page, proj: Project, dev: MockDevice,
+            prompt_value: list, dialogs: list):
+    # ================= 実行・監視 =================
+    print("[実行・監視]", flush=True)
+
+    statusRows = [0]
+
+    def t_initial():
+        assert text(page, "#devchip") == "待機中", text(page, "#devchip")
+        statusRows[0] = page.locator("#status dt").count()
+        assert page.input_value("#loops") == "0", \
+            f"周回の既定が 0 でない: {page.input_value('#loops')!r}"
+        names = page.locator("#procs .proc b").all_inner_texts()
+        assert names == ["周回で変える", "素材周回", "選んで進む"], names
+        assert page.locator("#stopg").is_disabled(), "停止中に区切り停止が押せる"
+        assert page.locator("#stopi").is_disabled(), "停止中に即時停止が押せる"
+        assert page.locator("#run").is_enabled(), "待機中に実行が押せない"
+    c.check("初期表示: 状態・一覧・ボタンの活殺", t_initial)
+
+    def t_status_shows_imu():
+        st = text(page, "#status")
+        assert "ジャイロ" in st, f"状態表示にジャイロ(IMU)の行が無い: {st!r}"
+        assert "有効化済み" in st, st
+    c.check("状態表示に本体の IMU 有効化が出る", t_status_shows_imu)
+
+    def t_select_switches_timeline():
+        page.locator("#procs .proc").nth(1).click()   # 素材周回
+        page.wait_for_timeout(600)
+        marks = page.locator("#tl .marks span").all_inner_texts()
+        assert marks == ["移動", "戦闘", "回収"], marks
+        tracks = page.locator("#tl .tlrow .nm").all_inner_texts()
+        assert "A" in tracks and "LY" in tracks, tracks
+    c.check("手順を選ぶとタイムラインが切り替わる", t_select_switches_timeline)
+
+    def t_resume_options():
+        opts = page.locator("#resume option").all_inner_texts()
+        assert opts == ["先頭から", "移動", "戦闘", "回収"], opts
+    c.check("開始位置にラベルが並ぶ", t_resume_options)
+
+    def t_push():
+        page.click("#push")
+        page.wait_for_timeout(900)
+        msg = text(page, "#actmsg")
+        assert "転送しました" in msg, msg
+    c.check("転送のみ → 転送できたと出る", t_push)
+
+    def t_message_persists():
+        first = text(page, "#actmsg")
+        assert "転送" in first, f"転送の結果が出ていない: {first!r}"
+        page.wait_for_timeout(2600)      # 状態更新が2回以上走る間
+        assert text(page, "#actmsg") == first, \
+            "操作の結果メッセージが状態更新で消えている"
+    c.check("操作の結果メッセージが消えない", t_message_persists)
+
+    def t_device_controls_are_grouped():
+        """デバイスの状態と接続先が1つのまとまりとして見えること。"""
+        box = page.locator("#devbar")
+        assert box.is_visible(), "デバイスのまとまりが無い"
+        t = box.inner_text()
+        # 呼び名は「マイコン」で統一する(「デバイス」「実機」を混ぜない)
+        assert "マイコン" in t, f"何についての表示か書かれていない: {t!r}"
+        assert "接続先" in t, f"接続先のラベルが無い: {t!r}"
+        for sel in ("#devchip", "#host", "#finddev", "#sethost"):
+            assert page.locator("#devbar " + sel).count() == 1, \
+                f"{sel} がまとまりの外にある"
+        assert page.locator("#sethost").is_disabled(), \
+            "接続先を変えていないのに「接続」が押せる"
+        page.fill("#host", "127.0.0.2")
+        page.wait_for_timeout(200)
+        assert page.locator("#sethost").is_enabled(), \
+            "接続先を変えたのに「接続」が押せない"
+        page.fill("#host", "127.0.0.1")
+        page.wait_for_timeout(200)
+    c.check("デバイスの状態と接続操作が1か所にまとまっている",
+            t_device_controls_are_grouped)
+
+    def t_run_and_monitor():
+        page.fill("#loops", "50")
+        page.click("#run")
+        wait_state(page, "実行中")
+        assert page.locator("#play").is_visible(), "実行中に再生位置が出ない"
+        assert page.locator("#run").is_disabled(), "実行中に実行が押せる"
+        assert page.locator("#push").is_disabled(), "実行中に転送が押せる"
+        assert page.locator("#manual").is_disabled(), "実行中に手動操作が押せる"
+        assert page.locator("#stopi").is_enabled(), "実行中に即時停止が押せない"
+        page.wait_for_timeout(1200)
+        st = text(page, "#status")
+        assert "実行中" in st, st
+        # 進み具合はタイムラインの見出しに出る(実行パネルの行数は変えない)
+        tp = text(page, "#tlprog")
+        assert "周" in tp and "フレーム" in tp, f"進み具合が出ていない: {tp!r}"
+        assert page.locator("#play").is_visible(), "再生位置が出ていない"
+        # 実行中でも実行パネルの項目数は増えない(高さが変わらない)
+        rows = page.locator("#status dt").count()
+        assert rows == statusRows[0], \
+            f"実行中に状態の行数が変わっている: {rows} != {statusRows[0]}"
+    c.check("実行 → 状態/進み具合/ボタン/再生位置", t_run_and_monitor)
+    def t_stop_immediate():
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        assert page.locator("#play").is_hidden(), "停止後も再生位置が残る"
+        assert page.locator("#play").is_hidden(), "停止後も再生位置が残る"
+    c.check("今すぐ止める → 待機中に戻る", t_stop_immediate)
+
+    def t_run_once_ignores_loops():
+        """「1回実行」は周回欄に何が残っていても1回だけ実行する。
+
+        周回系の手順のあとに単発の手順を実行すると、残っていた周回数で
+        何周も走ってしまう事故があったため、ボタンを分けた。
+        """
+        wait_state(page, "待機中")
+        page.wait_for_timeout(400)
+        page.fill("#loops", "50")     # 前の手順の周回数が残っている想定
+        page.click("#run1")
+        wait_state(page, "実行中")
+        page.wait_for_timeout(600)
+        tp = text(page, "#tlprog")
+        assert "/ 1 周" in tp, f"1回になっていない: {tp!r}"
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.fill("#loops", "1")
+        page.wait_for_timeout(400)
+    c.check("「1回実行」は周回欄を無視して1回だけ", t_run_once_ignores_loops)
+
+    def t_loop_zero_runs_until_stopped():
+        """周回 0 は「止めるまでくり返す」。表示は「N 周目(止めるまで)」。"""
+        wait_state(page, "待機中")
+        page.fill("#loops", "0")
+        page.click("#run")
+        wait_state(page, "実行中")
+        page.wait_for_timeout(900)
+        tp = text(page, "#tlprog")
+        assert "止めるまで" in tp, f"無限実行の表示になっていない: {tp!r}"
+        assert "/" not in tp.split("フレーム")[0], f"周回の分母が出ている: {tp!r}"
+        page.click("#stopi")
+        wait_state(page, "待機中")
+    c.check("周回 0 = 止めるまでくり返す", t_loop_zero_runs_until_stopped)
+
+    def t_now_playing():
+        """実行中の手順名が実行パネルに出て、一覧の行にも印が付くこと。
+
+        一覧では実行中でない手順も選べるので、「いま動いているのはどれか」を
+        選択とは別に示す必要がある。
+        """
+        wait_state(page, "待機中")
+        names = page.locator("#procs .proc b").all_inner_texts()
+        running = names[1].split("▶")[0]
+        page.locator("#procs .proc").nth(1).click()
+        page.wait_for_timeout(300)
+        page.fill("#loops", "50")
+        page.click("#run")
+        wait_state(page, "実行中")
+        page.wait_for_timeout(500)
+        st = text(page, "#status")
+        assert running in st and "実行中" in st, st
+        # 別の手順を選んでも、実行中の表示は動いている方を指したまま
+        page.locator("#procs .proc").nth(0).click()
+        page.wait_for_timeout(700)
+        assert running in text(page, "#status"), text(page, "#status")
+        marked = page.locator("#procs .proc", has_text=running).inner_text()
+        assert "▶" in marked, marked
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.wait_for_timeout(400)
+        assert running not in text(page, "#status"), text(page, "#status")
+        page.fill("#loops", "1")
+        page.locator("#procs .proc").nth(1).click()   # 選択を元に戻す
+        page.wait_for_timeout(400)
+    c.check("実行中の手順名と一覧の印", t_now_playing)
+
+    def t_logs_panel():
+        """ログが日時つきで溜まり、注意すべき行に色が付き、消せること。"""
+        page.wait_for_timeout(1200)
+        lines = page.locator("#logs .logline")
+        n0 = lines.count()
+        assert n0 > 0, "ログが1行も出ていない"
+        first = page.locator("#logs .logline .lt").first.inner_text()
+        # 「起動から N 秒」ではなく日時であること(年が入る)
+        assert "/" in first and ":" in first, f"日時になっていない: {first!r}"
+        # 実行して行が増える(消えずに溜まる)
+        page.click("#run1")
+        wait_state(page, "実行中")
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.wait_for_timeout(1500)
+        assert lines.count() > n0, "実行してもログが増えない"
+        # 中断は注意色(warn)が付く
+        aborted = page.locator("#logs .logline.warn", has_text="中断")
+        assert aborted.count() > 0, "中断のログに色が付いていない"
+        # 消せる
+        page.click("#logclear")
+        page.wait_for_timeout(900)
+        assert "消しました" in text(page, "#logmsg"), text(page, "#logmsg")
+    c.check("ログが溜まり、日時・色・消去が効く", t_logs_panel)
+
+    def t_theme_switch():
+        """右上のアイコンから配色を選べ、再読込しても残ること。"""
+        # 再読込で手順の選択が初期化されるので、元に戻せるよう控えておく
+        sel_before = page.locator("#procs .proc.sel b").inner_text()
+        sel_before = sel_before.split("▶")[0].strip()
+        assert page.locator("#themelist").is_hidden(), "最初からメニューが開いている"
+        page.click("#themebtn")
+        page.wait_for_timeout(200)
+        assert page.locator("#themelist").is_visible(), "メニューが開かない"
+        page.locator('#themelist button[data-t="sumi-dark"]').click()
+        page.wait_for_timeout(250)
+        assert page.locator("#themelist").is_hidden(), "選んでも閉じない"
+        assert page.evaluate(
+            "() => document.documentElement.dataset.theme") == "sumi-dark"
+        page.reload()
+        page.wait_for_timeout(1400)
+        assert page.evaluate(
+            "() => document.documentElement.dataset.theme") == "sumi-dark", \
+            "選択が残っていない"
+        page.click("#themebtn")
+        page.wait_for_timeout(200)
+        assert "on" in (page.locator('#themelist button[data-t="sumi-dark"]')
+                        .get_attribute("class") or ""), "今の配色に印が無い"
+        page.locator('#themelist button[data-t="auto"]').click()
+        page.wait_for_timeout(250)
+        assert page.evaluate(
+            "() => document.documentElement.dataset.theme").startswith("ai-")
+        page.locator("#procs .proc", has_text=sel_before).click()
+        page.wait_for_timeout(600)
+    c.check("配色を切り替えられ、選択が残る", t_theme_switch)
+
+    def t_stopg_armed():
+        """「今の周で止める」を押すと、予約中だと分かる見た目になること。"""
+        page.fill("#loops", "50")
+        page.click("#run")
+        wait_state(page, "実行中")
+        page.wait_for_timeout(400)
+        sg = page.locator("#stopg")
+        assert "armed" not in (sg.get_attribute("class") or "")
+        sg.click()
+        page.wait_for_timeout(1400)
+        assert "armed" in (sg.get_attribute("class") or ""), \
+            "予約したのに見た目が変わらない"
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.fill("#loops", "1")
+        page.wait_for_timeout(300)
+    c.check("「今の周で止める」の予約が見て分かる", t_stopg_armed)
+
+    def t_stopg_cancel():
+        """予約中に同じボタンをもう一度押すと、予約を取り消せること。"""
+        page.fill("#loops", "50")
+        page.click("#run")
+        wait_state(page, "実行中")
+        page.wait_for_timeout(400)
+        sg = page.locator("#stopg")
+        sg.click()                       # 予約(間違えて押したという想定)
+        # 押した直後に取り消しの形へ変わる(次の状態取得を待たせない)
+        assert "armed" in (sg.get_attribute("class") or ""), \
+            "押した直後に予約中の見た目にならない"
+        assert "取り消" in sg.inner_text(), sg.inner_text()
+        sg.click()                       # もう一度押して予約を破棄
+        page.wait_for_timeout(1400)      # 状態取得1回ぶん待って実状を確認
+        assert "armed" not in (sg.get_attribute("class") or ""), \
+            "取り消したのに予約中のまま"
+        assert text(page, "#devchip") == "実行中", \
+            f"取り消しただけなのに実行が止まった: {text(page, '#devchip')}"
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.fill("#loops", "1")
+        page.wait_for_timeout(300)
+    c.check("止める予約を、もう一度押して取り消せる", t_stopg_cancel)
+
+    def t_graceful():
+        # 終了は文字で知らせない(ボタンの復帰と再生位置の消滅で分かる。
+        # 2026-08-02 ユーザー指示)。ここでは「全周待たずに止まる」ことと、
+        # 終了後に古い知らせが残っていないことを見る
+        page.fill("#loops", "50")
+        page.click("#run")
+        wait_state(page, "実行中")
+        page.click("#stopg")
+        wait_state(page, "待機中", timeout_ms=15000)
+        page.wait_for_timeout(400)
+        assert "終わりました" not in text(page, "#tlmsg") \
+            and "予約どおり" not in text(page, "#tlmsg"), \
+            f"終了メッセージは廃止したはずが出ている: {text(page, '#tlmsg')!r}"
+        assert not page.locator("#run").is_disabled(), \
+            "終了したのに実行ボタンが戻らない"
+        # ログに「どの手順を何周指定で始め、何周で終えたか」が残ること(2026-08-04)
+        page.wait_for_timeout(1500)      # ログ取得(毎秒)を1回待つ
+        starts = page.locator("#logs .logline", has_text="実行を開始")
+        assert starts.count() > 0, "開始のログが出ない"
+        last_start = starts.last.inner_text()
+        assert "50 周" in last_start and "実行を開始: " in last_start, \
+            f"開始ログに手順名か周回数が無い: {last_start!r}"
+        aborts = page.locator("#logs .logline", has_text="周完了")
+        assert aborts.count() > 0, "中断ログに周数が出ない"
+        assert "/50 周完了" in aborts.last.inner_text(), \
+            aborts.last.inner_text()
+    c.check("今の周で止める → 全周待たずに止まる(終了は表示で分かる)", t_graceful)
+
+    def t_manual_auto_off_on_run():
+        """手動操作したまま実行を押したら、自動で手動操作を終えてから実行する。
+
+        以前は「操作中の見た目のまま入力は届かず、終了ボタンも押せない」という
+        中途半端な状態になっていた(2026-08-02 ユーザー指摘)。
+        """
+        page.click("#manual")
+        page.wait_for_timeout(600)
+        assert "操作中" in text(page, "#manualchip"), "手動操作が始まらない"
+        page.fill("#loops", "1")
+        page.click("#run1")
+        page.wait_for_timeout(900)
+        assert "停止中" in text(page, "#manualchip"), \
+            f"実行時に手動操作が終わっていない: {text(page, '#manualchip')!r}"
+        assert text(page, "#manual") == "手動操作を開始", "ボタンの文言が戻らない"
+        wait_state(page, "待機中", timeout_ms=15000)
+    c.check("実行を押すと手動操作は自動で終わる", t_manual_auto_off_on_run)
+
+    def t_manual_stop_never_locked():
+        """手動操作が続いている限り「終了」は押せること(詰みを作らない)。
+
+        実機が実行中で、かつ手動操作が残っている状態は、画面から実行を押す限り
+        起こらない(上の検査のとおり自動で終わるため)。CLI など外から実行を
+        始めた場合にだけ起こりうる。その状況を画面から作ろうとすると、手動操作の
+        毎秒30回の送信と実行要求が1本の接続を奪い合って不安定になるので、
+        ここでは「手動操作中はどんな状態でも終了ボタンを塞がない」という
+        規則そのものを、状態を差し替えて確かめる。
+        """
+        page.click("#manual")
+        page.wait_for_timeout(600)
+        assert "操作中" in text(page, "#manualchip"), "手動操作が始まらない"
+        locked = page.evaluate("""() => {
+            const saved = JSON.parse(JSON.stringify(state.device));
+            state.device.state = 'RUNNING';    // 実機が実行中だと画面に思わせる
+            state.device.running = true;
+            renderStatus();
+            const disabled = document.getElementById('manual').disabled;
+            state.device = saved;              // 元に戻す
+            renderStatus();
+            return disabled;
+        }""")
+        assert not locked, "実行中に手動操作を終了できない(詰みの状態)"
+        page.click("#manual")
+        page.wait_for_timeout(500)
+        assert "停止中" in text(page, "#manualchip")
+    c.check("手動操作は実行中でも終了できる", t_manual_stop_never_locked)
+
+    def t_prenote_above_buttons():
+        """前提条件は実行ボタンより上に出る(押す前に読むものなので)。"""
+        pre = page.locator("#prenote")
+        assert pre.is_visible(), "前提条件が出ていない"
+        assert "実行前に" in pre.inner_text()
+        boxes = (pre.bounding_box(), page.locator("#run1").bounding_box())
+        assert boxes[0]["y"] < boxes[1]["y"], "前提条件が実行ボタンより下にある"
+        assert "前提条件" not in text(page, "#tlmsg"), \
+            "タイムライン下にも前提条件が残っている"
+    c.check("前提条件は実行ボタンの上に出る", t_prenote_above_buttons)
+
+    def t_resume_hint_when_no_labels():
+        """ラベルが無い手順では開始位置を押せなくし、使い方を添える。"""
+        page.locator("#procs .proc", has_text="選んで進む").click()
+        page.wait_for_timeout(800)
+        sel = page.locator("#resume")
+        n = sel.evaluate("s => s.options.length")
+        if n <= 1:
+            assert sel.is_disabled(), "選べないのに押せる状態のままになっている"
+            assert "ラベル" in (sel.get_attribute("title") or ""), \
+                "どうすれば使えるようになるかの説明がない"
+        page.locator("#procs .proc", has_text="素材周回").click()
+        page.wait_for_timeout(800)
+        assert not page.locator("#resume").is_disabled(), \
+            "ラベルのある手順で開始位置が選べない"
+    c.check("開始位置: 選べないときは理由が分かる", t_resume_hint_when_no_labels)
+
+    def t_msg_close():
+        """メッセージに × があり、押すと消えて高さを返すこと。"""
+        page.click("#finddev")
+        page.wait_for_timeout(1500)
+        assert text(page, "#connmsg") != "", "探すの結果が出ていない"
+        page.locator("#connmsg .msgclose").click()
+        page.wait_for_timeout(100)
+        assert text(page, "#connmsg") == "", "× で消えない"
+    c.check("メッセージは × で閉じられる", t_msg_close)
+
+    def t_other_selected_no_overlay():
+        """実行中に別の手順を選ぶと、その図には周回・再生位置が重ならないこと。"""
+        page.fill("#loops", "50")
+        page.click("#run")
+        wait_state(page, "実行中")
+        page.wait_for_timeout(1200)
+        assert text(page, "#tlprog") != "", "実行中の手順なのに進み具合が出ない"
+        other = page.locator("#procs .proc", has_text="選んで進む")
+        other.click()
+        page.wait_for_timeout(1200)
+        assert text(page, "#tlprog") == "", \
+            f"別の手順の図に周回・フレーム数が重なっている: {text(page, '#tlprog')!r}"
+        assert page.evaluate(
+            "() => document.getElementById('play').style.display") == "none", \
+            "別の手順の図に再生位置が重なっている"
+        page.locator("#procs .proc", has_text="素材周回").click()
+        page.wait_for_timeout(1200)
+        assert text(page, "#tlprog") != "", "実行中の手順へ戻したのに進み具合が出ない"
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.fill("#loops", "1")
+    c.check("実行中に別手順を選ぶと進行表示が重ならない", t_other_selected_no_overlay)
+
+    def t_resume_from():
+        # 「戦闘」はくり返しの直前のラベル(再開点がカウンタ初期化を指す位置)
+        page.select_option("#resume", "戦闘")
+        page.fill("#loops", "1")
+        page.click("#run")
+        page.wait_for_timeout(700)
+        msg = text(page, "#actmsg")
+        assert "から実行" in msg, f"再開実行が受け付けられていない: {msg!r}"
+        wait_state(page, "実行中")
+        page.click("#stopi")
+        wait_state(page, "待機中")
+    c.check("くり返し直前のラベルから実行できる", t_resume_from)
+
+    def t_resume_starts_immediately():
+        """途中から実行したら、飛ばした前半ぶんを待たずに終わること。
+
+        画面が持っている経過フレームは1秒ごとの取得なので、読む時刻によっては
+        古い値を見てしまう(それで落ちる作りだった)。ここでは
+        ①予定量が「後半だけ」になっていること ②実際の所要時間が後半ぶんで
+        収まること、という取得周期に左右されない2点で見る。
+        """
+        page.select_option("#resume", "回収")
+        page.fill("#loops", "1")
+        started = time.time()
+        page.click("#run")
+        wait_state(page, "実行中")
+        # 予定量: 手順全体(309F ≒ 5.2秒)ではなく後半だけ(95F ≒ 1.6秒)
+        total = page.evaluate("() => state.device.total_frames")
+        assert total and total < 200, \
+            f"予定量が手順全体のまま(前半を飛ばせていない): {total}"
+        wait_state(page, "待機中", timeout_ms=8000)
+        took = time.time() - started
+        assert took < 3.5, f"前半ぶん空走している疑い: 完了まで {took:.1f} 秒"
+        page.select_option("#resume", "先頭")
+    c.check("部分実行はすぐ動き出す(前半ぶん待たされない)",
+            t_resume_starts_immediately)
+
+    def t_trial():
+        page.click("#trialok")
+        page.wait_for_timeout(300)
+        page.click("#trialok")
+        page.wait_for_timeout(300)
+        page.click("#trialng")
+        page.wait_for_timeout(400)
+        chip = text(page, "#trialchip")
+        assert "2 / 3" in chip and "66.7%" in chip, chip
+        page.click("#trialreset")
+        page.wait_for_timeout(300)
+        assert text(page, "#trialchip") == "未実施", text(page, "#trialchip")
+    c.check("反復テスト: 成功率の集計とクリア", t_trial)
+
+    def t_manual():
+        page.click("#manual")
+        page.wait_for_timeout(700)
+        assert "終了" in text(page, "#manual"), text(page, "#manual")
+        assert dev.manual is not None, "デバイスに手動操作が伝わっていない"
+        page.click("#manual")
+        page.wait_for_timeout(600)
+        assert dev.manual is None, "手動操作を終えても解除されていない"
+    c.check("手動操作: 開始と終了がデバイスに届く", t_manual)
+
+    def t_pad_figure():
+        """コントローラー図: 手動操作中だけ出て、クリック中だけ入力される。"""
+        assert page.locator("#padfig").is_hidden(), "停止中に図が見えている"
+        page.click("#manual")
+        page.wait_for_timeout(500)
+        assert page.locator("#padfig").is_visible(), "手動操作中に図が出ない"
+        page.locator('[data-b="A"]').dispatch_event("pointerdown")
+        page.locator('[data-s="ly,2047"]').dispatch_event("pointerdown")
+        page.wait_for_timeout(250)
+        st = dev.manual
+        assert st and (st["buttons"] & 1) and st["ly"] == 2047, st
+        page.locator('[data-b="A"]').dispatch_event("pointerup")
+        page.locator('[data-s="ly,2047"]').dispatch_event("pointerup")
+        page.wait_for_timeout(250)
+        st = dev.manual
+        assert st and st["buttons"] == 0 and st["ly"] == 0, st
+        # ビット8以降(表示順とビット順が食い違っていた領域)も正しい
+        # ビットで届くこと(DU=14, HOME=10。以前は DU が PLUS になっていた)
+        for name, bit in (("DU", 14), ("HOME", 10)):
+            page.locator(f'[data-b="{name}"]').dispatch_event("pointerdown")
+            page.wait_for_timeout(250)
+            st = dev.manual
+            assert st and st["buttons"] == (1 << bit), (name, st)
+            page.locator(f'[data-b="{name}"]').dispatch_event("pointerup")
+            page.wait_for_timeout(250)
+        page.click("#manual")
+        page.wait_for_timeout(400)
+        assert page.locator("#padfig").is_hidden(), "終了しても図が残っている"
+    c.check("コントローラー図のクリックが入力になる", t_pad_figure)
+
+    def t_manual_highlight():
+        """手動操作中はカードが強調される(終い忘れ防止)。"""
+        assert "on" not in (page.locator("#manualcard")
+                            .get_attribute("class") or "")
+        page.click("#manual")
+        page.wait_for_timeout(500)
+        assert "on" in page.locator("#manualcard").get_attribute("class")
+        page.click("#manual")
+        page.wait_for_timeout(400)
+        assert "on" not in page.locator("#manualcard").get_attribute("class")
+    c.check("手動操作中はパネルが強調される", t_manual_highlight)
+
+    def t_record_empty():
+        # 保存名はこの検査が自分で決める。他の検査が使う名前を見ていると、
+        # 同じ出力先で二度目を走らせたときに前回の部品へ引っかかって
+        # 「空の記録が保存された」と誤判定する
+        prompt_value[0] = "空の記録"
+        page.click("#manual")
+        page.wait_for_timeout(500)
+        page.click("#rec")
+        page.wait_for_timeout(900)
+        page.click("#rec")               # 記録を停止
+        page.wait_for_timeout(800)
+        prompt_value[0] = "自動テスト"
+        msg = text(page, "#manualmsg")
+        assert "記録されていません" in msg, \
+            f"無操作だったことが伝わらない: {msg!r}"
+        assert page.locator("#recsave").is_hidden(), \
+            "何も記録していないのに保存ボタンが出ている"
+        assert "空の記録" not in proj.part_names(), "空の記録が部品になった"
+    c.check("無操作だけの記録は保存されず理由が出る", t_record_empty)
+
+    def t_record_needs_manual():
+        """手動操作を始めていない間は、記録ボタン自体が押せず理由が出ること。"""
+        page.click("#manual")            # いったん手動操作を終える
+        page.wait_for_timeout(1400)      # 毎秒の再描画で無効化が反映されるのを待つ
+        rec = page.locator("#rec")
+        assert rec.is_disabled(), "手動操作なしで記録が押せてしまう"
+        assert "手動操作を開始" in (rec.get_attribute("title") or ""), \
+            f"押せない理由が書かれていない: {rec.get_attribute('title')!r}"
+        page.click("#manual")            # 元に戻す
+        page.wait_for_timeout(500)
+    c.check("手動操作なしでは記録ボタンが押せない", t_record_needs_manual)
+
+    def t_manual_then_run_is_allowed():
+        """手動操作中でも実行は押せる(押したら手動操作は自動で終わる)。
+
+        以前は塞いでいたが、押した意図は「実行したい」なので断らない方針に
+        変更した(2026-08-02 ユーザー指示)。塞ぐと、操作中の見た目のまま
+        入力も届かず終了もできない中途半端な状態を招いていた。
+        """
+        page.wait_for_timeout(1400)      # 手動操作の再開が状態に映るのを待つ
+        assert not page.locator("#run1").is_disabled(), \
+            "手動操作中に実行が押せない(自動で終わらせる方針にしたはず)"
+    c.check("手動操作中でも実行は押せる(自動で終わる)", t_manual_then_run_is_allowed)
+
+    def t_record():
+        """開始 → 操作 → 停止 →(件数が出て)保存、の順で残せること。"""
+        page.click("#rec")               # 記録を開始
+        page.wait_for_timeout(400)
+        assert "停止" in text(page, "#rec"), \
+            f"記録が始まっていない: {text(page, '#rec')!r}"
+        page.click("h1")                 # キーボード入力を拾わせる
+        page.wait_for_timeout(300)
+        for _ in range(4):               # L = A ボタン
+            page.keyboard.down("l")
+            page.wait_for_timeout(230)
+            page.keyboard.up("l")
+            page.wait_for_timeout(230)
+        page.click("#rec")               # 記録を停止
+        page.wait_for_timeout(700)
+        msg = text(page, "#manualmsg")
+        assert "フレーム記録しました" in msg, f"件数が出ていない: {msg!r}"
+        assert page.locator("#recsave").is_visible(), "保存ボタンが出ていない"
+        prompt_value[0] = "記録テスト"
+        page.click("#recsave")
+        page.wait_for_timeout(800)
+        page.click("#manual")            # 手動操作を終える
+        page.wait_for_timeout(600)
+        prompt_value[0] = "自動テスト"
+        # 保存は手動操作の連射と同じ列で処理される。待たされても数秒で通ること
+        for _ in range(20):
+            if "記録テスト" in proj.part_names():
+                break
+            page.wait_for_timeout(300)
+        assert "記録テスト" in proj.part_names(), \
+            f"{proj.part_names()} / {text(page, '#manualmsg')}"
+        assert "として保存しました" in text(page, "#manualmsg"), \
+            f"保存の完了が視線の先(手動操作カード)に出ない: "\
+            f"{text(page, '#manualmsg')!r}"
+        tbl = proj.load_part_table("記録テスト")
+        assert "A" in tbl["header"], f"A の列が無い: {tbl['header']}"
+        col = tbl["header"].index("A")
+        assert any(r[col] == "1" for r in tbl["rows"]), "押した記録が入っていない"
+    c.check("手動操作を記録 → 部品として保存される", t_record)
+
+    def t_wait_branch():
+        page.locator("#procs .proc").nth(2).click()   # 選んで進む
+        page.wait_for_timeout(500)
+        page.fill("#loops", "1")
+        page.click("#run")
+        wait_state(page, "選択待ち", timeout_ms=12000)
+        btns = page.locator("#awaitmsg button").all_inner_texts()
+        assert btns == ["出た", "出ない"], btns
+        page.locator("#awaitmsg button").first.click()
+        page.wait_for_timeout(900)
+        assert "選択待ち" not in text(page, "#devchip"), text(page, "#devchip")
+    c.check("待機分岐: 選択待ち → 腕を選んで続行", t_wait_branch)
+
+    def t_error_state():
+        dev.inject_fault()
+        wait_state(page, "異常")
+        btns = page.locator("#msg button").all_inner_texts()
+        assert "異常を解除" in btns, btns
+        page.locator("#msg button", has_text="異常を解除").click()
+        wait_state(page, "待機中")
+    c.check("異常 → 解除できる", t_error_state)
+
+    def t_trial_run_once():
+        page.click("[data-view=home]")
+        page.wait_for_timeout(600)
+        page.locator("#procs .proc").nth(1).click()   # 素材周回
+        page.wait_for_timeout(500)
+        page.click("#trialrun")
+        wait_state(page, "実行中")
+        page.click("#stopi")
+        wait_state(page, "待機中")
+    c.check("反復テスト: 1回実行して判定 が実行される", t_trial_run_once)
+
+    def t_branch_timeline():
+        """分岐を含む手順でもタイムラインが描ける(空にならない)。"""
+        for i, name in ((2, "選んで進む"), (0, "周回で変える")):
+            page.locator("#procs .proc").nth(i).click()
+            page.wait_for_timeout(700)
+            rows = page.locator("#tl .tlrow .nm").all_inner_texts()
+            assert rows, f"{name} のタイムラインが空"
+            assert text(page, "#tlmsg") == "" or "エラー" not in text(page, "#tlmsg"),                 f"{name}: {text(page, '#tlmsg')}"
+    c.check("分岐入りの手順もタイムラインが出る", t_branch_timeline)
+
+    def t_call_block():
+        """別の手順を呼ぶブロックが選べて、コンパイルが通ること。"""
+        page.click("[data-view=flow]")
+        page.wait_for_timeout(600)
+        page.locator("#flowlist .proc", has_text="周回で変える").click()
+        page.wait_for_timeout(700)
+        page.locator("#flowbody .blk").last.click()
+        page.locator("#palette .pal", has_text="別の手順").click()
+        page.wait_for_timeout(400)
+        opts = page.locator("#props select option").all_inner_texts()
+        assert "素材周回" in opts and "周回で変える" not in opts,             f"呼べる手順の候補がおかしい(自分自身は除くべき): {opts}"
+        page.select_option("#props select", "素材周回")
+        page.wait_for_timeout(300)
+        page.click("#saveflow")
+        page.wait_for_timeout(1000)
+        msg = text(page, "#flowmsg")
+        assert "変換できません" not in msg, msg
+        # 保存成功は文で知らせない(バッジが「保存済み」に変わる)
+        assert text(page, "#flowinfo") == "保存済み", text(page, "#flowinfo")
+        # 元に戻す(ブロック右端の × で消す)
+        n = page.locator("#flowbody .blk").count()
+        blk_icon(page, n - 1, "del").click()
+        page.wait_for_timeout(250)
+        page.click("#saveflow")
+        page.wait_for_timeout(900)
+    c.check("別の手順を呼ぶブロックが使える", t_call_block)
+
+    def t_host_field_shows_current():
+        """今どこに繋ごうとしているかが欄に見えること(placeholder ではなく値)。"""
+        page.click("[data-view=home]")
+        page.wait_for_timeout(600)
+        val = page.locator("#host").input_value()
+        assert val == "127.0.0.1", f"接続先が欄に出ていない: {val!r}"
+    c.check("接続先が欄に見える", t_host_field_shows_current)
+
+    def t_empty_host_is_refused():
+        """空欄で保存しても接続先を壊さないこと。"""
+        page.fill("#host", "")
+        page.click("#sethost")
+        page.wait_for_timeout(800)
+        msg = text(page, "#connmsg")
+        assert "入力" in msg, f"空欄が受け付けられてしまう: {msg!r}"
+        assert "探す" in msg, f"どうすればよいか書かれていない: {msg!r}"
+        page.wait_for_timeout(1500)
+        assert text(page, "#devchip") == "待機中", \
+            f"空欄の保存で接続が壊れた: {text(page, '#devchip')}"
+    c.check("接続先を空で保存しようとすると断られる", t_empty_host_is_refused)
+
+    def t_find_device():
+        """「探す」でマイコンを見つけて接続先にできること。"""
+        page.fill("#host", "10.255.255.1")
+        page.click("#sethost")
+        wait_state(page, "未接続", timeout_ms=12000)
+        assert "探す" in text(page, "#msg"), \
+            f"未接続のときの案内がない: {text(page, '#msg')!r}"
+        page.click("#finddev")
+        # 応答しない相手への状態取得(3秒)の後ろに並ぶので少し待つ
+        for _ in range(30):
+            page.wait_for_timeout(500)
+            if text(page, "#connmsg"):
+                break
+        msg = text(page, "#connmsg")
+        assert "見つけました" in msg, f"探索が失敗した: {msg!r}"
+        got = page.locator("#host").input_value()
+        assert got and got != "10.255.255.1", f"接続先が置き換わっていない: {got!r}"
+        wait_state(page, "待機中", timeout_ms=15000)
+    c.check("「探す」でマイコンを見つけて繋がる", t_find_device)
+
+    def t_bad_host():
+        page.click("[data-view=home]")
+        page.wait_for_timeout(600)
+        page.fill("#host", "10.255.255.1")
+        page.click("#sethost")
+        wait_state(page, "未接続", timeout_ms=12000)
+        # 応答しない相手に定期取得を投げ続けても、操作がその後ろで詰まらないこと
+        page.fill("#host", "127.0.0.1")
+        page.click("#sethost")
+        wait_state(page, "待機中", timeout_ms=12000)
+    c.check("接続先を変えると反映される(応答なしでも詰まらない)", t_bad_host)
+
+    # ================= 手順を編集 =================
+    print("[手順を編集]", flush=True)
+
+    def t_open_editor():
+        page.click("[data-view=flow]")
+        page.wait_for_timeout(500)
+        procs = page.locator("#flowlist .proc b").all_inner_texts()
+        assert procs == ["周回で変える", "素材周回", "選んで進む"], procs
+        page.locator("#flowlist .proc").nth(1).click()   # 素材周回
+        page.wait_for_timeout(700)
+        sel = "#flowbody .blk, #flowbody .nest > .head"
+        texts = page.locator(sel).all_inner_texts()
+        assert any("スティック L 上 100%" in t for t in texts), texts
+        assert any("くり返し ×3" in t for t in texts), texts
+        assert any("120F(2.0秒)" in t for t in texts), texts
+    c.check("編集画面: ブロックが読める形で並ぶ", t_open_editor)
+
+    def t_select_and_edit():
+        page.locator("#flowbody .blk").nth(2).click()    # 待つ 120F
+        page.wait_for_timeout(300)
+        props = text(page, "#props")
+        assert "長さ" in props, props
+        page.fill("#props input[type=number]", "150")
+        page.wait_for_timeout(300)
+        texts = page.locator("#flowbody .blk").all_inner_texts()
+        assert any("150F" in t for t in texts), texts
+        assert text(page, "#flowinfo") == "未保存", text(page, "#flowinfo")
+    c.check("ブロックを選んで値を変えると反映+未保存が出る", t_select_and_edit)
+
+    def t_undo():
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+        texts = page.locator("#flowbody .blk").all_inner_texts()
+        assert any("120F" in t for t in texts), f"取り消しできていない: {texts}"
+    c.check("値の編集を Ctrl+Z で取り消せる", t_undo)
+
+    def t_typing_keeps_focus():
+        page.locator("#flowbody .blk").nth(2).click()
+        page.wait_for_timeout(250)
+        inp = page.locator("#props input[type=number]")
+        inp.click()
+        page.keyboard.press("Control+a")
+        page.keyboard.type("240", delay=90)
+        page.wait_for_timeout(250)
+        assert inp.input_value() == "240", \
+            f"打った値が入らない(焦点が飛んでいる): {inp.input_value()!r}"
+        focused = page.evaluate(
+            "() => document.activeElement.tagName + ':'"
+            " + (document.activeElement.type || '')")
+        assert focused == "INPUT:number", f"焦点が入力欄から外れた: {focused}"
+        texts = page.locator("#flowbody .blk").all_inner_texts()
+        assert any("240F" in t for t in texts), texts
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+        texts = page.locator("#flowbody .blk").all_inner_texts()
+        assert any("120F" in t for t in texts), f"連続入力が1回で戻らない: {texts}"
+    c.check("値を1文字ずつ打っても焦点が外れない", t_typing_keeps_focus)
+
+    def t_label_text_typing():
+        page.locator("#flowbody .blk").first.click()
+        page.wait_for_timeout(250)
+        inp = page.locator("#props input").first
+        inp.click()
+        page.keyboard.press("Control+a")
+        page.keyboard.type("出発", delay=90)
+        page.wait_for_timeout(300)
+        assert inp.input_value() == "出発", inp.input_value()
+        texts = page.locator("#flowbody .blk").all_inner_texts()
+        assert any("出発" in t for t in texts), texts
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+    c.check("ラベル名も1文字ずつ打てる", t_label_text_typing)
+
+    def t_added_block_is_selected():
+        page.locator("#flowbody .blk").first.click()
+        page.locator("#palette .pal", has_text="押して離す").click()
+        page.wait_for_timeout(350)
+        props = text(page, "#props")
+        assert "ボタン" in props and "長さ" in props, \
+            f"追加したブロックが選択されていない: {props!r}"
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(250)
+    c.check("追加したブロックがそのまま選択される", t_added_block_is_selected)
+
+    def t_add_each_block():
+        page.locator("#flowbody .blk").first.click()
+        for label in ["押して離す", "押したまま", "離す", "待つ", "スティック",
+                      "部品", "くり返し", "周回で分岐", "待って選ぶ",
+                      "別の手順", "ラベル"]:
+            before = page.locator("#flowbody .blk, #flowbody .nest").count()
+            # 「離す」は「押して離す」にも含まれるので完全一致で選ぶ
+            page.locator("#palette .pal").filter(
+                has_text=re.compile(rf"^{re.escape(label)}$")).click()
+            page.wait_for_timeout(150)
+            after = page.locator("#flowbody .blk, #flowbody .nest").count()
+            assert after > before, f"{label} を追加しても増えない"
+            page.keyboard.press("Control+z")
+            page.wait_for_timeout(150)
+    c.check("パレットの全ブロックが追加できる", t_add_each_block)
+
+    def t_move_dup_delete():
+        """並べ替え(Alt+↑↓)・複製 ⧉・削除 × が効くこと。"""
+        page.locator("#flowbody .blk").nth(1).click()
+        first_before = page.locator("#flowbody .blk").nth(0).inner_text()
+        page.keyboard.press("Alt+ArrowUp")
+        page.wait_for_timeout(250)
+        assert page.locator("#flowbody .blk").nth(1).inner_text() == first_before, \
+            "上へ移動できていない"
+        page.keyboard.press("Alt+ArrowDown")
+        page.wait_for_timeout(250)
+        n = page.locator("#flowbody .blk").count()
+        blk_icon(page, 1, "cpy").click()
+        page.wait_for_timeout(250)
+        assert page.locator("#flowbody .blk").count() == n + 1, "複製できていない"
+        blk_icon(page, 1, "del").click()
+        page.wait_for_timeout(250)
+        assert page.locator("#flowbody .blk").count() == n, "削除できていない"
+    c.check("並べ替え(Alt+↑↓)・複製・削除", t_move_dup_delete)
+
+    def t_block_drag_into_loop():
+        """ブロックをドラッグでくり返しの中へ入れ、外へも出せること。"""
+        def shape():
+            return page.evaluate(
+                "() => flowDoc.body.map(n => n.type === 'loop'"
+                " ? 'loop[' + n.body.map(m => m.type).join(',') + ']'"
+                " : n.type)")
+        before = shape()
+        g = page.locator("#flowbody .blk .bgrab").first
+        inner = page.locator("#flowbody .nest .blocks .blk").last.bounding_box()
+        drag(page, g.bounding_box(), inner["x"] + 60,
+             inner["y"] + inner["height"] - 2)
+        after = shape()
+        assert len(after) == len(before) - 1, f"{before} -> {after}"
+        assert "label]" in after[[i for i, x in enumerate(after)
+                                 if x.startswith("loop[")][0]], after
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+        assert shape() == before, f"Ctrl+Z で戻らない: {shape()}"
+    c.check("ブロックをドラッグでくり返しの中へ入れられる",
+            t_block_drag_into_loop)
+
+    def t_palette_drag_insert():
+        """パレットからドラッグして任意の位置へ挿入できること。"""
+        n = page.locator("#flowbody .blk").count()
+        pal = page.locator("#palette .pal", has_text="待つ").first
+        first = page.locator("#flowbody .blk").first.bounding_box()
+        drag(page, pal.bounding_box(), first["x"] + 60, first["y"] + 2)
+        assert page.locator("#flowbody .blk").count() == n + 1, "増えていない"
+        assert page.evaluate("() => flowDoc.body[0].type") == "wait", \
+            page.evaluate("() => flowDoc.body[0]")
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+        assert page.locator("#flowbody .blk").count() == n
+    c.check("パレットからドラッグして挿入できる", t_palette_drag_insert)
+
+    def t_list_reorder_shared():
+        """一覧の並べ替えが保存され、実行・監視の一覧とも共有されること。"""
+        before = page.locator("#flowlist .proc b").all_inner_texts()
+        g = page.locator("#flowlist .proc .grab").first
+        last = page.locator("#flowlist .proc").last.bounding_box()
+        drag(page, g.bounding_box(), last["x"] + 40,
+             last["y"] + last["height"] - 2)
+        page.wait_for_timeout(600)
+        after = page.locator("#flowlist .proc b").all_inner_texts()
+        assert after[-1] == before[0], f"末尾へ動いていない: {before} -> {after}"
+        assert sorted(after) == sorted(before), after
+        assert proj.procedure_names() == after, \
+            f"保存されていない: {proj.procedure_names()} != {after}"
+        page.click("[data-view=home]")
+        page.wait_for_timeout(900)
+        home = [t.split("▶")[0] for t in
+                page.locator("#procs .proc b").all_inner_texts()]
+        assert home == after, f"実行・監視と並びが違う: {home} != {after}"
+        page.click("[data-view=flow]")
+        page.wait_for_timeout(600)
+        # 並びを元に戻す(この後の検査は一覧の順番(nth)で手順を選ぶため)
+        g2 = page.locator("#flowlist .proc", has_text=before[0])                  .locator(".grab")
+        top = page.locator("#flowlist .proc").first.bounding_box()
+        drag(page, g2.bounding_box(), top["x"] + 40, top["y"] + 2)
+        page.wait_for_timeout(600)
+        assert page.locator("#flowlist .proc b").all_inner_texts() == before,             page.locator("#flowlist .proc b").all_inner_texts()
+    c.check("一覧の並べ替えが保存され両画面で共有される", t_list_reorder_shared)
+
+    def t_row_icons_rename():
+        """一覧の行アイコンから名前を変えられること(開いていない手順でも)。"""
+        target = page.locator("#flowlist .proc b").last.inner_text()
+        prompt_value[0] = target + "改"
+        row_icon(page, "#flowlist", target, 0).click()   # ✎
+        page.wait_for_timeout(1000)
+        prompt_value[0] = "自動テスト"
+        names = page.locator("#flowlist .proc b").all_inner_texts()
+        assert target + "改" in names, names
+        # 戻す
+        prompt_value[0] = target
+        row_icon(page, "#flowlist", target + "改", 0).click()
+        page.wait_for_timeout(1000)
+        prompt_value[0] = "自動テスト"
+        assert target in page.locator("#flowlist .proc b").all_inner_texts()
+    c.check("一覧の行アイコンで名前を変えられる", t_row_icons_rename)
+
+    def t_gyro_block_duration_field():
+        page.locator("#flowbody .blk").first.click()
+        page.locator("#palette .pal", has_text="ジャイロ").click()
+        page.wait_for_timeout(350)
+        props = text(page, "#props")
+        assert "長さ" in props, f"ジャイロに長さの欄が無い: {props!r}"
+        assert "0 = 次に変えるまで" in props, props
+        # ゆらぎは入れるか否かだけ(幅・間隔は既定に固定。2026-08-02 変更)
+        assert "ゆらぎを入れる" in props, f"ゆらぎの入切が無い: {props!r}"
+        assert "ゆらぎ幅" not in props, f"細かい欄が残っている: {props!r}"
+        assert "ゆらぎ1回の長さ" not in props, f"細かい欄が残っている: {props!r}"
+        assert "ゆらぎ間隔" not in props, f"細かい欄が残っている: {props!r}"
+        # 新規ブロックはゆらぎ既定オン(チェックが入っている)
+        assert page.locator("#props input[type=checkbox]").first.is_checked(), \
+            "ゆらぎが既定でオンになっていない"
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(250)
+    c.check("ジャイロブロックに長さとゆらぎを指定できる",
+            t_gyro_block_duration_field)
+
+    def t_stick_block_duration_field():
+        """スティックにも長さを指定でき、軸の表記が統一されていること。"""
+        page.locator("#flowbody .blk").first.click()
+        page.locator("#palette .pal").filter(
+            has_text=re.compile(r"^スティック$")).click()
+        page.wait_for_timeout(350)
+        props = text(page, "#props")
+        assert "長さ" in props, f"スティックに長さの欄が無い: {props!r}"
+        assert "0 = 次に変えるまで倒したまま" in props, props
+        # 軸の表記は <軸> <最小>〜<最大>(<最小の向き>〜<最大の向き>)で統一
+        assert "横 -2048〜2047(左〜右)" in props, f"横の表記が違う: {props!r}"
+        assert "縦 -2048〜2047(下〜上)" in props, f"縦の表記が違う: {props!r}"
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(250)
+    c.check("スティックブロックに長さを指定できる(軸の表記も統一)",
+            t_stick_block_duration_field)
+
+    def t_block_delete_button():
+        before = page.locator("#flowbody .blk").count()
+        blk = page.locator("#flowbody .blk").first
+        blk.hover()
+        blk.locator(".delx:not(.cpy)").click()   # 複製 ⧉ と区別する
+        page.wait_for_timeout(300)
+        after = page.locator("#flowbody .blk").count()
+        assert after == before - 1, f"×で消えない: {before} -> {after}"
+        page.keyboard.press("Control+z")
+        page.wait_for_timeout(300)
+        assert page.locator("#flowbody .blk").count() == before,             "×の削除が Ctrl+Z で戻らない"
+    c.check("ブロック右端の×で削除できる(戻せる)", t_block_delete_button)
+
+    def t_move_at_edge_is_noop():
+        # 履歴を空にしてから試す(読み込み直すと履歴は消える)
+        page.locator("#flowlist .proc").nth(0).click()
+        page.wait_for_timeout(600)
+        page.locator("#flowlist .proc").nth(1).click()
+        page.wait_for_timeout(700)
+        page.locator("#flowbody .blk").first.click()
+        before = page.locator("#flowbody .blk").all_inner_texts()
+        page.keyboard.press("Alt+ArrowUp")   # 先頭でこれ以上は上がれない
+        page.wait_for_timeout(250)
+        page.keyboard.press("Control+z")  # 履歴が積まれていたら別の形に戻る
+        page.wait_for_timeout(250)
+        after = page.locator("#flowbody .blk").all_inner_texts()
+        assert after == before, f"端での移動が履歴を汚している\n{before}\n{after}"
+    c.check("端での移動は何も起きない(履歴も汚さない)", t_move_at_edge_is_noop)
+
+    def t_block_can_be_disabled():
+        """ブロックの右端のチェックを外すと、丸ごと飛ばされること。
+
+        フレーム数は保存後の再コンパイル結果(プロジェクト側)で確かめる。
+        以前は保存メッセージの「(N フレーム)」を読んでいたが、正常系の
+        保存メッセージは廃止された(2026-08-04)ため、データ源を直接見る。
+        """
+        def total_frames():
+            r = proj.build_safe("素材周回")[0]
+            assert r is not None
+            return r.total_frames
+
+        page.locator("#flowlist .proc", has_text="素材周回").click()
+        page.wait_for_timeout(700)
+        page.click("#saveflow")
+        page.wait_for_timeout(900)
+        before = total_frames()
+        # 「待つ 120F」を無効にする
+        blk = page.locator("#flowbody .blk", has_text="待つ 120F").first
+        blk.locator(".en input").uncheck()
+        page.wait_for_timeout(300)
+        assert "off" in (blk.get_attribute("class") or ""),             "無効にしたのに見た目が変わらない"
+        page.click("#saveflow")
+        page.wait_for_timeout(1000)
+        after = total_frames()
+        assert after == before - 120, \
+            f"120F ぶん減っていない: {before} -> {after}"
+        # 戻す
+        blk = page.locator("#flowbody .blk", has_text="待つ 120F").first
+        blk.locator(".en input").check()
+        page.wait_for_timeout(300)
+        page.click("#saveflow")
+        page.wait_for_timeout(1000)
+        assert total_frames() == before, total_frames()
+    c.check("ブロックを丸ごと飛ばせる(戻せる)", t_block_can_be_disabled)
+
+    def t_save_and_warn():
+        page.locator("#flowbody .blk").first.click()
+        page.locator("#palette .pal", has_text="押して離す").click()
+        page.wait_for_timeout(300)
+        page.fill("#props input[type=number]", "1")   # 1フレーム押下 → 警告対象
+        page.wait_for_timeout(300)
+        page.click("#saveflow")
+        page.wait_for_timeout(1000)
+        msg = text(page, "#flowmsg")
+        assert "A-1" in msg or "警告" in msg or "1 フレーム" in msg, msg
+        assert text(page, "#flowinfo") == "保存済み", text(page, "#flowinfo")
+    c.check("保存すると再コンパイルされ警告が出る", t_save_and_warn)
+
+    def t_allow_flag_silences_warning():
+        """1フレーム押下は「意図的」の印を付けると警告が消えること。
+
+        1フレーム精度の検証はこのシステムの主用途なので、画面から印を
+        付けられなければ毎回警告が出続けてしまう。
+        """
+        msg = text(page, "#flowmsg")
+        assert "A-1" in msg or "フレーム" in msg, f"警告が出ていない: {msg!r}"
+        # 直前に追加した「押す 1F」を選び直して印を付ける
+        blk = page.locator("#flowbody .blk", has_text="押して離す").first
+        blk.click()
+        page.wait_for_timeout(300)
+        cb = page.locator("#props input[type=checkbox]").last
+        assert "意図的" in text(page, "#props"), text(page, "#props")
+        cb.check()
+        page.wait_for_timeout(300)
+        page.click("#saveflow")
+        page.wait_for_timeout(1000)
+        msg2 = text(page, "#flowmsg")
+        assert "A-1" not in msg2, f"印を付けても警告が残る: {msg2!r}"
+        assert text(page, "#flowinfo") == "保存済み", text(page, "#flowinfo")
+        # 保存した内容にも印が残っていること
+        doc = proj.load_flow_doc("素材周回")
+        assert any(isinstance(x, dict) and "1f" in (x.get("allow") or [])
+                   for x in doc["body"]), doc["body"]
+    c.check("1フレーム押下の警告を「意図的」で消せる", t_allow_flag_silences_warning)
+
+    def t_dirty_guard():
+        blk_icon(page, 0, "del").click()
+        page.wait_for_timeout(250)
+        assert text(page, "#flowinfo") == "未保存"
+        page.locator("#flowlist .proc").nth(2).click()   # 別の手順へ(確認が出る)
+        page.wait_for_timeout(800)
+        assert "選んで進む" in text(page, "#flowlist .proc.sel"), \
+            text(page, "#flowlist")
+    c.check("未保存で別手順へ移ると確認が出る", t_dirty_guard)
+
+    def t_wait_branch_editor():
+        page.wait_for_timeout(400)
+        heads = page.locator("#flowbody .nest > .head").all_inner_texts()
+        assert any("待って選ぶ" in h for h in heads), \
+            f"待機分岐が入れ子として展開されていない: {heads}"
+        arms = page.locator("#flowbody .arm > .t").all_inner_texts()
+        assert any("出た" in a for a in arms), arms
+        page.locator("#flowbody .nest > .head", has_text="待って選ぶ").click()
+        page.wait_for_timeout(350)
+        props = text(page, "#props")
+        assert "枝の名前" in props, props
+    c.check("待機分岐が腕ごとに表示・編集できる", t_wait_branch_editor)
+
+    def t_edit_inside_wait_branch_arm():
+        page.locator("#flowbody .arm .blk").first.click()
+        page.wait_for_timeout(350)
+        props = text(page, "#props")
+        assert "ボタン" in props or "長さ" in props, props
+        before = page.locator("#flowbody .arm .blk").count()
+        arm0 = page.locator("#flowbody .arm .blk").first
+        arm0.hover()
+        arm0.locator(".delx.cpy").click()
+        page.wait_for_timeout(300)
+        assert page.locator("#flowbody .arm .blk").count() == before + 1, \
+            "腕の中で複製できない"
+        arm0 = page.locator("#flowbody .arm .blk").first
+        arm0.hover()
+        arm0.locator(".delx:not(.cpy)").click()
+        page.wait_for_timeout(300)
+        assert page.locator("#flowbody .arm .blk").count() == before
+    c.check("待機分岐の腕の中を編集できる", t_edit_inside_wait_branch_arm)
+
+    def t_counter_branch_editor():
+        page.locator("#flowlist .proc").nth(0).click()   # 周回で変える
+        page.wait_for_timeout(700)
+        arms = page.locator("#flowbody .arm > .t").all_inner_texts()
+        assert any("1 周目ごと" in a for a in arms), arms
+        page.locator("#flowbody .nest > .head", has_text="周回で分岐").click()
+        page.wait_for_timeout(350)
+        assert "腕の数" in text(page, "#props"), text(page, "#props")
+    c.check("周回分岐が腕ごとに表示・編集できる", t_counter_branch_editor)
+
+    def t_add_into_loop():
+        page.locator("#flowbody .nest > .head", has_text="くり返し").first.click()
+        page.wait_for_timeout(250)
+        inner_before = page.locator("#flowbody .nest .blk").count()
+        page.locator("#palette .pal", has_text="待つ").click()
+        page.wait_for_timeout(350)
+        inner_after = page.locator("#flowbody .nest .blk").count()
+        assert inner_after > inner_before, "くり返しの中に追加されない"
+        assert "長さ" in text(page, "#props"), \
+            f"中に追加したブロックが選択されていない: {text(page, '#props')!r}"
+    c.check("くり返しを選ぶとその中に追加される", t_add_into_loop)
+
+    def t_new_and_delete_flow():
+        prompt_value[0] = "新手順"
+        page.click("#newflow")
+        page.wait_for_timeout(1000)
+        procs = page.locator("#flowlist .proc b").all_inner_texts()
+        assert "新手順" in procs, f"{procs} / {text(page, '#flowmsg')}"
+        page.locator("#flowlist .proc", has_text="新手順").click()
+        page.wait_for_timeout(600)
+        row_icon(page, "#flowlist", "新手順", 2).click()   # 🗑
+        page.wait_for_timeout(1000)
+        procs = page.locator("#flowlist .proc b").all_inner_texts()
+        assert "新手順" not in procs, procs
+        assert "素材周回" in procs, "関係ない手順まで消えた"
+    c.check("手順の新規作成と削除", t_new_and_delete_flow)
+
+    # ================= 部品を編集 =================
+    print("[部品を編集]", flush=True)
+
+    def t_open_part():
+        page.click("[data-view=part]")
+        page.wait_for_timeout(1200)
+        head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
+        assert head[0] == "フレーム", head
+        for c in ("A", "B", "ZL", "DU", "PLUS", "LX", "RY", "rep"):
+            assert c in head, f"{c} の列が最初から出ていない: {head}"
+        assert "F" not in head, f"行番号の列が二重に出ている: {head}"
+        assert "GP" in head, "ジャイロの列が最初から出ていない"
+        rows = page.locator("#parttable tr").count() - 2   # 見出し2行
+        assert rows == 5, rows
+    c.check("部品を開くと全ての入力の列が出る", t_open_part)
+
+    def t_toggle_buttons_by_click():
+        """ボタンはクリックだけで切り替わり、押した所だけが目に入ること。"""
+        # 最後の行は何も押していない(サンプル部品の作り)
+        cell = page.locator("#parttable tr").last.locator("td.b .tg").first
+        assert cell.inner_text() == "", f"押していないのに文字がある: {cell.inner_text()!r}"
+        cell.click()
+        page.wait_for_timeout(200)
+        assert cell.inner_text() == "ON", "クリックで ON にならない"
+        assert "on" in (cell.get_attribute("class") or ""), "見た目が変わらない"
+        assert text(page, "#partinfo") == "未保存", text(page, "#partinfo")
+        cell.click()
+        page.wait_for_timeout(200)
+        assert cell.inner_text() == "", "もう一度クリックで戻らない"
+    c.check("ボタンはクリックで ON/OFF が切り替わる", t_toggle_buttons_by_click)
+
+    def t_off_cells_are_blank():
+        """OFF のセルに文字を並べないこと(並ぶと形が読めない)。"""
+        texts = page.locator("#parttable td.b .tg").all_inner_texts()
+        assert all(t in ("", "ON") for t in texts), set(texts)
+        assert "OFF" not in texts, "OFF の文字が並んでいる"
+        on_count = sum(1 for t in texts if t == "ON")
+        assert 0 < on_count < len(texts) / 2, \
+            f"ON が {on_count}/{len(texts)}。押した所だけが目立つ状態ではない"
+    c.check("押していないセルは空欄", t_off_cells_are_blank)
+
+    def t_drag_paints_cells():
+        """押したままドラッグでまとめて塗れること。"""
+        row = page.locator("#parttable tr").last     # 何も押していない行
+        cells = row.locator("td.b .tg")
+        before = [cells.nth(k).inner_text() for k in range(4)]
+        assert before == ["", "", "", ""], f"前提が崩れた: {before}"
+        b0 = cells.nth(0).bounding_box()
+        page.mouse.move(b0["x"] + b0["width"] / 2, b0["y"] + b0["height"] / 2)
+        page.mouse.down()
+        for k in range(1, 4):
+            bb = cells.nth(k).bounding_box()
+            page.mouse.move(bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2)
+            page.wait_for_timeout(60)
+        page.mouse.up()
+        page.wait_for_timeout(250)
+        after = [cells.nth(k).inner_text() for k in range(4)]
+        assert after == ["ON"] * 4, f"起点を含めて塗れていない: {after}"
+        # 元に戻す
+        page.mouse.move(b0["x"] + b0["width"] / 2, b0["y"] + b0["height"] / 2)
+        page.mouse.down()
+        for k in range(1, 4):
+            bb = cells.nth(k).bounding_box()
+            page.mouse.move(bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2)
+            page.wait_for_timeout(60)
+        page.mouse.up()
+        page.wait_for_timeout(250)
+    c.check("押したままドラッグでまとめて塗れる", t_drag_paints_cells)
+
+    def t_save_writes_every_column():
+        """保存すると全ての列が書かれること(書かない列=直前のまま を無くす)。"""
+        page.click("#savepart")
+        page.wait_for_timeout(1000)
+        # 保存成功は文で知らせない(2026-08-04)。バッジが「保存済み」になり、
+        # 一瞬光る(flash クラス)ことが「ちゃんと押せた」の合図
+        assert text(page, "#partmsg") == "", text(page, "#partmsg")
+        assert text(page, "#partinfo") == "保存済み", text(page, "#partinfo")
+        assert "flash" in (page.locator("#partinfo").get_attribute("class") or ""), \
+            "保存してもバッジが光らない"
+        tbl = proj.load_part_table("コンボ")
+        assert tbl["header"][0] == "F", tbl["header"]
+        for c2 in ("A", "ZR", "DR", "CAPTURE", "RS", "LX", "RY",
+                   "GP", "AZ", "rep"):
+            assert c2 in tbl["header"], f"{c2} が保存されていない: {tbl['header']}"
+        assert [r[0] for r in tbl["rows"]] == \
+            [str(k + 1) for k in range(len(tbl["rows"]))]
+    c.check("保存すると全ての入力が明示される", t_save_writes_every_column)
+
+    def t_motion_columns_toggle():
+        page.uncheck("#showmotion")
+        page.wait_for_timeout(400)
+        head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
+        assert "GP" not in head, head
+        page.check("#showmotion")
+        page.wait_for_timeout(400)
+        head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
+        assert "GP" in head and "AZ" in head, head
+    c.check("ジャイロ・加速度の列は畳める(既定は展開)", t_motion_columns_toggle)
+
+    def t_number_shows_range_on_hover():
+        head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
+        lx = head.index("LX") - 1 - 18
+        cell = page.locator("#parttable tr").nth(2).locator("td.ax input").nth(lx)
+        tip = cell.get_attribute("title") or ""
+        assert "-2048" in tip and "2047" in tip, f"上下限が出ていない: {tip!r}"
+        gp = head.index("GP") - 1 - 18
+        tip2 = (page.locator("#parttable tr").nth(2)
+                .locator("td.ax input").nth(gp).get_attribute("title") or "")
+        assert "-32768" in tip2 and "32767" in tip2, f"上下限が出ていない: {tip2!r}"
+    c.check("数値の欄にホバーすると入れられる範囲が出る",
+            t_number_shows_range_on_hover)
+
+    def t_number_inputs_have_spinners():
+        """数値セルが標準の number 入力(右端に上下ボタン)であること。"""
+        i = page.locator("#parttable td.ax input").first
+        assert i.get_attribute("type") == "number", i.get_attribute("type")
+        assert i.get_attribute("min") is not None, "min が無い"
+        assert i.get_attribute("max") is not None, "max が無い"
+    c.check("部品の数値欄が上下ボタン付きの数値入力", t_number_inputs_have_spinners)
+
+    def t_number_is_validated():
+        head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
+        lx = head.index("LX") - 1 - 18
+        cell = page.locator("#parttable tr").nth(2).locator("td.ax input").nth(lx)
+        cell.fill("99999")
+        page.locator("#parttable tr").nth(3).locator("td.ax input").nth(lx).click()
+        page.wait_for_timeout(300)
+        assert cell.input_value() == "2047", \
+            f"上限に丸められていない: {cell.input_value()!r}"
+        assert "範囲外" in text(page, "#partmsg"), text(page, "#partmsg")
+        cell.fill("-99999")
+        page.locator("#parttable tr").nth(3).locator("td.ax input").nth(lx).click()
+        page.wait_for_timeout(300)
+        assert cell.input_value() == "-2048", \
+            f"下限に丸められていない: {cell.input_value()!r}"
+        # 数値でない文字は number 入力がその場で拒否する(ブラウザ標準の保護)。
+        # 万一入る実装に戻った場合は、離れた時点で空に直されること
+        try:
+            cell.fill("あいう")
+            entered = True
+        except Exception:   # noqa: BLE001  Playwright が型不一致で拒否
+            entered = False
+        if entered:
+            page.locator("#parttable tr").nth(3) \
+                .locator("td.ax input").nth(lx).click()
+            page.wait_for_timeout(300)
+            assert cell.input_value() == "", \
+                f"数値でない入力が残っている: {cell.input_value()!r}"
+    c.check("範囲外・数値でない入力は直される", t_number_is_validated)
+
+    def t_bulk_add_and_delete():
+        n = page.locator("#parttable tr").count() - 2
+        page.fill("#bulkn", "50")
+        page.click("#addrow")
+        page.wait_for_timeout(900)
+        after = page.locator("#parttable tr").count() - 2
+        assert after == n + 50, f"まとめて足せない: {n} -> {after}"
+        assert "50 フレーム" in text(page, "#partmsg"), text(page, "#partmsg")
+        page.click("#delrow")
+        page.wait_for_timeout(900)
+        assert page.locator("#parttable tr").count() - 2 == n, "まとめて減らせない"
+        page.fill("#bulkn", "1")
+    c.check("フレームをまとめて追加・削除できる", t_bulk_add_and_delete)
+
+    def t_insert_row_then_save():
+        n = page.locator("#parttable tr").count() - 2
+        page.locator("#parttable tr").nth(3).locator("button", has_text="＋").click()
+        page.wait_for_timeout(250)
+        page.click("#savepart")
+        page.wait_for_timeout(1000)
+        msg = text(page, "#partmsg")
+        assert "連番" not in msg and "エラー" not in msg, msg
+        assert text(page, "#partinfo") == "保存済み", text(page, "#partinfo")
+        tbl = proj.load_part_table("コンボ")
+        assert len(tbl["rows"]) == n + 1, len(tbl["rows"])
+        assert [r[0] for r in tbl["rows"]] == \
+            [str(k + 1) for k in range(n + 1)]
+    c.check("途中に行を挿しても保存できる(番号は自動)", t_insert_row_then_save)
+
+    def t_row_can_be_disabled():
+        """行の右端のチェックを外すと、その行が丸ごと飛ぶこと。"""
+        n = len(proj.load_part_table("コンボ")["rows"])
+        cb = page.locator("#parttable td.ops input[type=checkbox]").nth(1)
+        cb.uncheck()
+        page.wait_for_timeout(300)
+        fn = page.locator("#parttable tr").nth(3).locator("td.fn").first
+        assert fn.inner_text().strip() == "—",             f"飛ばした行がフレームを消費している: {fn.inner_text()!r}"
+        page.click("#savepart")
+        page.wait_for_timeout(900)
+        tbl = proj.load_part_table("コンボ")
+        assert len(tbl["rows"]) == n, "行そのものは残る(消さずに飛ばすだけ)"
+        assert "off" in tbl["header"], tbl["header"]
+        cb.check()
+        page.wait_for_timeout(300)
+        page.click("#savepart")
+        page.wait_for_timeout(900)
+    c.check("行を丸ごと飛ばせる(戻せる)", t_row_can_be_disabled)
+
+    def t_row_ops():
+        n = page.locator("#parttable tr").count()
+        page.locator("#parttable tr").nth(2).locator("button", has_text="＋").click()
+        page.wait_for_timeout(250)
+        assert page.locator("#parttable tr").count() == n + 1, "行を挿入できない"
+        page.locator("#parttable tr").nth(3).locator("button", has_text="×").click()
+        page.wait_for_timeout(250)
+        assert page.locator("#parttable tr").count() == n, "行を削除できない"
+    c.check("行の途中挿入と削除", t_row_ops)
+
+    def t_rep_changes_frame_numbers():
+        """rep を入れると左端が実際のフレーム範囲になること。"""
+        head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
+        rep_at = head.index("rep") - 1        # フレーム列を除いた位置
+        row = page.locator("#parttable tr").nth(2)
+        row.locator("td.ax input").nth(rep_at - 18).fill("5")
+        page.wait_for_timeout(300)
+        first = row.locator("td.fn").first.inner_text()
+        assert "–" in first, f"フレーム範囲が出ていない: {first!r}"
+        row.locator("td.ax input").nth(rep_at - 18).fill("")
+        page.wait_for_timeout(300)
+    c.check("rep を入れるとフレーム範囲が出る", t_rep_changes_frame_numbers)
+
+
+    def t_part_unsaved_guard():
+        page.locator("#parttable td.b .tg").first.click()
+        page.wait_for_timeout(250)
+        assert text(page, "#partinfo") == "未保存"
+        n0 = len(dialogs)
+        page.click("[data-view=home]")   # 確認ダイアログは自動で承諾
+        page.wait_for_timeout(800)
+        assert len(dialogs) == n0 + 1, "未保存なのに確認が出ない"
+        assert page.locator("#procs").is_visible(), "タブが移動していない"
+        page.click("[data-view=part]")
+        page.wait_for_timeout(1200)
+        # 破棄したので編集は残っていない
+        assert text(page, "#partinfo") != "未保存", \
+            "破棄したのに未保存のままになっている"
+        n1 = len(dialogs)
+        page.click("[data-view=home]")   # 何も編集していないので聞かれないはず
+        page.wait_for_timeout(800)
+        assert len(dialogs) == n1, \
+            "何も編集していないのに確認が出る(破棄後に印が下りていない)"
+        page.click("[data-view=part]")
+        page.wait_for_timeout(1000)
+    c.check("未保存の確認は1回だけ出て、破棄すると本当に捨てられる",
+            t_part_unsaved_guard)
+
+    def t_fill_down():
+        """数値の縦コピー3方式(フィルハンドル・Ctrl+D・Alt+ドラッグ)。"""
+        col = page.evaluate("() => PART_COLS.indexOf('LX')")
+
+        def cell(row):
+            return page.locator(
+                f'#parttable tr:nth-child({row + 3}) '
+                f'td[data-ci="{col}"] input')
+
+        def values():
+            return page.evaluate(
+                "ci => partData.rows.map(r => r[ci])", col)
+
+        page.fill("#bulkn", "6")
+        page.click("#addrow")
+        page.wait_for_timeout(500)
+        rows = len(values())
+        # フィルハンドル: 最終行から3つ上へ向けて引く
+        base = rows - 5
+        c0 = cell(base)
+        c0.click(); c0.fill("-1200")
+        page.wait_for_timeout(200)
+        td = page.locator(f'#parttable tr:nth-child({base + 3}) '
+                          f'td[data-ci="{col}"]')
+        td.hover()
+        h = td.locator(".fill")
+        t3 = cell(base + 3).bounding_box()
+        drag(page, h.bounding_box(), t3["x"] + 10, t3["y"] + 8, steps=6)
+        v = values()
+        assert v[base:base + 4] == ["-1200"] * 4, v
+        # Ctrl+D: すぐ上の値を取り込み、下へ送る
+        c = cell(base + 4)
+        c.click()
+        page.keyboard.press("Control+d")
+        page.wait_for_timeout(250)
+        assert values()[base + 4] == "-1200", values()
+        # Alt+ドラッグ: 起点の値で縦に塗る
+        c = cell(base)
+        c.click(); c.fill("777")
+        page.wait_for_timeout(150)
+        b0 = c.bounding_box()
+        b2 = cell(base + 2).bounding_box()
+        page.keyboard.down("Alt")
+        page.mouse.move(b0["x"] + 20, b0["y"] + 8)
+        page.mouse.down()
+        page.mouse.move(b2["x"] + 20, b2["y"] + 8, steps=6)
+        page.wait_for_timeout(150)
+        page.mouse.up()
+        page.keyboard.up("Alt")
+        page.wait_for_timeout(250)
+        v = values()
+        assert v[base:base + 3] == ["777"] * 3, v
+        assert text(page, "#partinfo") == "未保存"
+        # 後始末(足した行を戻す)
+        page.fill("#bulkn", "6")
+        page.click("#delrow")
+        page.wait_for_timeout(400)
+        page.fill("#bulkn", "1")
+    c.check("数値を縦にコピーできる(3方式)", t_fill_down)
+
+    def t_fill_preview_commits_on_release():
+        """縦コピーのドラッグ中は未確定(プレビュー)で、離した範囲だけ確定。
+
+        破線=未確定の見た目どおりに動くこと(Excel のフィルハンドルと同じ)。
+        広げすぎても、縮めてから離せば縮めた範囲しかコピーされない
+        (2026-08-04 ユーザー指摘。以前は動かすそばから確定していた)。
+        """
+        col = page.evaluate("() => PART_COLS.indexOf('LX')")
+
+        def cell(row):
+            return page.locator(
+                f'#parttable tr:nth-child({row + 3}) '
+                f'td[data-ci="{col}"] input')
+
+        def values():
+            return page.evaluate("ci => partData.rows.map(r => r[ci])", col)
+
+        page.fill("#bulkn", "6")
+        page.click("#addrow")
+        page.wait_for_timeout(500)
+        rows = len(values())
+        base = rows - 5
+        c0 = cell(base)
+        c0.click(); c0.fill("-500")
+        page.wait_for_timeout(200)
+        td = page.locator(f'#parttable tr:nth-child({base + 3}) '
+                          f'td[data-ci="{col}"]')
+        td.hover()
+        h = td.locator(".fill").bounding_box()
+        t3 = cell(base + 3).bounding_box()
+        t1 = cell(base + 1).bounding_box()
+        # 3行下まで広げる(まだ離さない)
+        page.mouse.move(h["x"] + 3, h["y"] + 3)
+        page.mouse.down()
+        page.mouse.move(t3["x"] + 10, t3["y"] + 8, steps=6)
+        page.wait_for_timeout(150)
+        v = values()
+        assert v[base + 1:base + 4] == ["", "", ""], \
+            f"ドラッグ中なのに確定している: {v}"
+        assert cell(base + 3).input_value() == "-500", \
+            "ドラッグ中のプレビュー(仮の値)が見えない"
+        # 1行下まで縮めてから離す → 縮めた範囲だけが確定
+        page.mouse.move(t1["x"] + 10, t1["y"] + 8, steps=4)
+        page.wait_for_timeout(150)
+        page.mouse.up()
+        page.wait_for_timeout(250)
+        v = values()
+        assert v[base:base + 2] == ["-500"] * 2, v
+        assert v[base + 2:base + 4] == ["", ""], \
+            f"縮めたのに広げた時の値が残っている: {v}"
+        assert cell(base + 3).input_value() == "", \
+            "プレビューの仮の値が画面に残っている"
+        # 後始末
+        page.fill("#bulkn", "6")
+        page.click("#delrow")
+        page.wait_for_timeout(400)
+        page.fill("#bulkn", "1")
+    c.check("縦コピーは離した範囲だけ確定(ドラッグ中は未確定)",
+            t_fill_preview_commits_on_release)
+
+    def t_keyboard_nav():
+        """Enter/Tab でセルを移動でき、下端では1フレーム増えること。
+
+        Enter=下(下端は行を足して続行)/Shift+Enter=上(上端は動かない)/
+        Tab=右(右端は次行頭。右下角は行を足して次行頭)/Shift+Tab=左
+        (左端は前行末、左上角は動かない)/Esc=グリッドから抜ける。
+        ↑↓(値の±1)と ←→(桁のカーソル)は数値入力の標準のまま。
+        """
+        lx = page.evaluate("() => PART_COLS.indexOf('LX')")
+
+        def pos():
+            return page.evaluate(
+                "() => { const a = document.activeElement;"
+                " const tr = a && a.closest && a.closest('#parttable tr');"
+                " if (!tr) return null;"
+                " const ri = [...document.querySelectorAll('#parttable tr')]"
+                ".indexOf(tr) - 2;"
+                " const td = a.closest('td');"
+                " const cells = [...tr.children]"
+                ".filter(x => x.matches('td.b,td.ax'));"
+                " return {ri, col: cells.indexOf(td), tag: a.tagName}; }")
+
+        def rows():
+            return page.evaluate("() => partData.rows.length")
+
+        n0 = rows()
+        ncols = page.evaluate("() => visibleCols().length")
+        cell = page.locator(f'#parttable tr:nth-child(4) '
+                            f'td[data-ci="{lx}"] input')   # 2行目の LX
+        cell.click()
+        page.keyboard.press("Enter")
+        p = pos()
+        assert p and p["ri"] == 2 and p["tag"] == "INPUT", f"Enter で下へ行かない: {p}"
+        page.keyboard.press("Shift+Enter")
+        page.keyboard.press("Shift+Enter")
+        assert pos()["ri"] == 0, pos()
+        page.keyboard.press("Shift+Enter")            # 上端: 動かない
+        assert pos()["ri"] == 0, pos()
+        # ↑↓ は値の±1 のまま(セル移動に奪っていない)。空欄からだと
+        # ブラウザは min から数え始めるので、値を入れてから確かめる
+        page.keyboard.type("5")
+        page.keyboard.press("ArrowUp")
+        v = page.evaluate(f"() => partData.rows[0][{lx}]")
+        assert v == "6", f"↑ が数値+1 でなくなっている: {v!r}"
+        page.keyboard.press("ArrowDown")
+        assert page.evaluate(f"() => partData.rows[0][{lx}]") == "5"
+        page.evaluate(f"() => setPartCell(0, {lx}, '')")   # 空欄へ戻す
+        # Tab の折り返し: 行末(rep)から次の行の先頭へ。行末の ✓/＋/× は挟まない
+        rep = page.evaluate("() => PART_COLS.indexOf('rep')")
+        page.locator(f'#parttable tr:nth-child(3) td[data-ci="{rep}"] input').click()
+        page.keyboard.press("Tab")
+        p = pos()
+        assert p and p["ri"] == 1 and p["col"] == 0 and p["tag"] == "BUTTON", \
+            f"右端の Tab が次行頭へ行かない: {p}"
+        page.keyboard.press("Shift+Tab")              # 前の行の末尾へ戻る
+        p = pos()
+        assert p and p["ri"] == 0 and p["col"] == ncols - 1, \
+            f"左端の Shift+Tab が前行末へ戻らない: {p}"
+        # 左上角: Shift+Tab しても動かない
+        page.evaluate("() => document.querySelectorAll('#parttable tr')[2]"
+                      ".querySelector('button.tg').focus()")
+        page.keyboard.press("Shift+Tab")
+        p = pos()
+        assert p and p["ri"] == 0 and p["col"] == 0, f"左上角から出てしまう: {p}"
+        # ボタンセルでも Enter=下(値は変えない。切り替えは Space)
+        a_ci = page.evaluate("() => PART_COLS.indexOf('A')")
+        v0 = page.evaluate(f"() => partData.rows[0][{a_ci}]")
+        page.keyboard.press("Enter")
+        p = pos()
+        assert p and p["ri"] == 1 and p["col"] == 0, \
+            f"ボタンセルの Enter で移動しない: {p}"
+        assert page.evaluate(f"() => partData.rows[0][{a_ci}]") == v0, \
+            "移動のつもりの Enter がボタンを切り替えてしまった"
+        # 下端の Enter: 丸め・範囲クランプを通した上で、1フレーム足して同じ列へ
+        cell2 = page.locator(f'#parttable tr:nth-child({n0 + 2}) '
+                             f'td[data-ci="{lx}"] input')
+        cell2.click()
+        page.keyboard.type("99999")     # 範囲外(LX は 2047 まで)
+        page.keyboard.press("Enter")
+        assert rows() == n0 + 1, "下端の Enter で行が増えない"
+        p = pos()
+        assert p and p["ri"] == n0 and p["tag"] == "INPUT", p
+        assert page.evaluate(f"() => partData.rows[{n0 - 1}][{lx}]") == "2047", \
+            "下端の Enter で範囲クランプが走らない"
+        page.evaluate(f"() => setPartCell({n0 - 1}, {lx}, '')")
+        # 右下角の Tab: さらに1フレーム足して次行頭へ
+        page.locator(f'#parttable tr:nth-child({n0 + 3}) '
+                     f'td[data-ci="{rep}"] input').click()
+        page.keyboard.press("Tab")
+        assert rows() == n0 + 2, "右下角の Tab で行が増えない"
+        p = pos()
+        assert p and p["ri"] == n0 + 1 and p["col"] == 0, p
+        # 押しっぱなし(キーリピート)では行が増えない
+        page.evaluate(
+            "() => document.activeElement.dispatchEvent(new KeyboardEvent("
+            "'keydown', {key:'Enter', repeat:true, bubbles:true,"
+            " cancelable:true}))")
+        assert rows() == n0 + 2, "押しっぱなしのリピートで行が増えた"
+        # Esc でグリッドから抜けられる(Tab は中で折り返すため唯一の出口)
+        page.keyboard.press("Escape")
+        assert pos() is None, "Esc でフォーカスが外れない"
+        # 後始末: 足した2行を消して保存
+        page.fill("#bulkn", "2")
+        page.click("#delrow")
+        page.wait_for_timeout(400)
+        page.fill("#bulkn", "1")
+        assert rows() == n0, rows()
+        page.click("#savepart")
+        page.wait_for_timeout(700)
+    c.check("Enter/Tab でセル移動、下端は自動で1フレーム追加",
+            t_keyboard_nav)
+
+    def t_sticky_header():
+        """保存ボタンが上部に貼り付き、下までスクロールしても押せること。"""
+        page.fill("#bulkn", "60")
+        page.click("#addrow")
+        page.wait_for_timeout(700)
+        page.mouse.wheel(0, 2000)
+        page.wait_for_timeout(400)
+        assert page.locator("#savepart").is_visible(), \
+            "スクロールすると保存ボタンが見えなくなる"
+        assert page.locator("#partinfo").is_visible(), "保存状態が見えない"
+        box = page.locator("#savepart").bounding_box()
+        assert box["y"] < 220, f"上部に貼り付いていない: {box}"
+        page.click("#savepart")
+        page.wait_for_timeout(700)
+        assert text(page, "#partinfo") == "保存済み"
+        page.fill("#bulkn", "60")
+        page.click("#delrow")
+        page.wait_for_timeout(500)
+        page.click("#savepart")
+        page.wait_for_timeout(600)
+        page.fill("#bulkn", "1")
+        page.mouse.wheel(0, -3000)
+        page.wait_for_timeout(300)
+    c.check("保存バーが上部に貼り付く", t_sticky_header)
+
+    def t_new_delete_part():
+        prompt_value[0] = "新部品"
+        page.click("#newpart")
+        page.wait_for_timeout(1000)
+        names = page.locator("#partlist .proc b").all_inner_texts()
+        assert "新部品" in names, f"{names} / {text(page, '#partmsg')}"
+        assert "新部品" in text(page, "#partlist .proc.sel"), \
+            text(page, "#partlist")
+        row_icon(page, "#partlist", "新部品", 2).click()   # 🗑
+        page.wait_for_timeout(1000)
+        assert "新部品" not in proj.part_names(), proj.part_names()
+        assert "コンボ" in proj.part_names(), "関係ない部品まで消えた"
+        prompt_value[0] = "自動テスト"
+    c.check("部品の新規作成と削除", t_new_delete_part)
+
+    def t_duplicate_part_name():
+        prompt_value[0] = "コンボ"
+        page.click("#newpart")
+        page.wait_for_timeout(900)
+        assert "同じ名前" in text(page, "#partmsg"), text(page, "#partmsg")
+        prompt_value[0] = "自動テスト"
+    c.check("同じ名前の部品は作れず理由が出る", t_duplicate_part_name)
+
+    def t_bad_part_name():
+        prompt_value[0] = "../逃走"
+        page.click("#newpart")
+        page.wait_for_timeout(900)
+        assert "使えない" in text(page, "#partmsg"), text(page, "#partmsg")
+        assert not (proj.root.parent / "逃走.csv").exists(), \
+            "プロジェクトの外にファイルができた"
+        prompt_value[0] = "自動テスト"
+    c.check("フォルダを跨ぐ名前は弾かれる", t_bad_part_name)
+
+    # ================= 未接続 =================
+    print("[未接続]", flush=True)
+
+    def t_disconnected():
+        dev.stop()
+        page.click("[data-view=home]")
+        page.wait_for_timeout(6000)
+        assert text(page, "#devchip") == "未接続", text(page, "#devchip")
+        assert page.locator("#run").is_disabled(), "未接続でも実行が押せる"
+        assert page.locator("#stopi").is_disabled(), "未接続でも停止が押せる"
+        msg = text(page, "#msg")
+        assert "127.0.0.1" in msg, f"どこに繋げなかったのか分からない: {msg!r}"
+        assert "探す" in msg, f"次に何をすればよいか書かれていない: {msg!r}"
+        assert not any(w in msg for w in ("Errno", "failed", "refused")),             f"生のエラーが出ている: {msg!r}"
+    c.check("未接続: 表示と操作の抑止", t_disconnected)
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    raise SystemExit(main())
