@@ -1,0 +1,29 @@
+menu "padctl"
+
+config PADCTL_WIFI_SSID
+    string "WiFi SSID (NVS 未設定時のフォールバック)"
+    default ""
+
+config PADCTL_WIFI_PASS
+    string "WiFi パスワード (同上)"
+    default ""
+
+config PADCTL_USB_BINTERVAL
+    int "USB IN エンドポイントの bInterval (ms)"
+    range 1 16
+    default 1
+    help
+        1 = 1ms ポーリング(入力反映の不確かさを 5ms から 1ms へ低減)。
+        実在の Pro コントローラーは 8。Switch が 1 を受け入れない場合は
+        8 に戻す(設計文書 7.3-1 / 未検証事項1)。
+
+choice PADCTL_TRANSPORT_DEFAULT
+    prompt "起動時の転送層モード(NVS 未設定時)"
+    default PADCTL_TRANSPORT_PROCON
+    config PADCTL_TRANSPORT_PROCON
+        bool "Pro コントローラー方式(本命・ジャイロ可)"
+    config PADCTL_TRANSPORT_HIDPAD
+        bool "HID ゲームパッド方式(保険・ジャイロ不可)"
+endchoice
+
+endmenu

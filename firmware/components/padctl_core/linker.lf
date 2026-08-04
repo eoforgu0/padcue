@@ -1,0 +1,7 @@
+# 実行エンジンは GPTimer の ISR から呼ばれるため、フラッシュキャッシュが
+# 無効化されている間も動作できるよう IRAM へ配置する
+# (firmware-architecture.md §5 の実装必須設定)。
+[mapping:padctl_core]
+archive: libpadctl_core.a
+entries:
+    padctl_core (noflash)

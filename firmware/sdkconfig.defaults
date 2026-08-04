@@ -1,0 +1,43 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+# フラッシュ 8MB(ESP32-S3FN8)
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# パーティション(OTA A/B + procs)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# OTA ロールバック(起動セルフテスト通過まで新版を確定しない)
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# 1ms tick(タイミング系の分解能)
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# USB-OTG(TinyUSB)。HID デバイス1個
+CONFIG_TINYUSB_HID_COUNT=1
+CONFIG_TINYUSB_CDC_ENABLED=n
+CONFIG_TINYUSB_MSC_ENABLED=n
+# TinyUSB のタスクを自前で回す(イベント処理と送出を1タスクに統合し、
+# 応答キューと転送層状態への並行アクセスを構造的に排除する)
+CONFIG_TINYUSB_NO_DEFAULT_TASK=y
+CONFIG_TINYUSB_INIT_IN_DEFAULT_TASK=n
+
+# GPTimer の ISR をフラッシュキャッシュ無効中も動かす(実行エンジンの必須設定)
+CONFIG_GPTIMER_ISR_IRAM_SAFE=y
+CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM=y
+
+# WiFi 設定を NVS へ書かせない(実行中の暗黙のフラッシュ書き込みを排除)
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+
+# 手順名 32 バイト + "/procs/" + ".bin" が収まるファイル名長(既定 32 では不足)
+CONFIG_SPIFFS_OBJ_NAME_LEN=48
+
+# クラッシュしたときに「どこで落ちたか」をフラッシュへ残す。
+# 2026-08-02 に実行中のパニックを追ったとき、これが無効で逆アセンブル解析が
+# 必要だった。次からは switchctl で吸い出して原因を直接見られるようにする
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
+CONFIG_ESP_COREDUMP_STACK_SIZE=1280
