@@ -8,6 +8,7 @@
 #include <netinet/tcp.h>
 
 #include "app_config.h"
+#include "app_discover.h"
 #include "app_engine.h"
 #include "app_log.h"
 #include "app_runend.h"
@@ -162,6 +163,10 @@ static const char *reset_reason_name(void) {
 static int cmd_hello(int sock) {
     cJSON *j = cJSON_CreateObject();
     cJSON_AddStringToObject(j, "magic", "padctl");
+    // 個体識別子。探索(UDP)と同じ値を TCP でも名乗ることで、PC 側が
+    // 「いま繋がっている相手は登録したあの個体か」を接続のたびに照合できる
+    // (2台運用で IP が入れ替わっても取り違えない。2026-08-04 P1)
+    cJSON_AddStringToObject(j, "id", app_discover_device_id());
     cJSON_AddStringToObject(j, "fw", PADCTL_FW_VERSION);
     cJSON_AddNumberToObject(j, "schema", PADCTL_SCHEMA_VERSION);
     cJSON_AddStringToObject(j, "mode",
@@ -341,6 +346,7 @@ static int cmd_status(int sock) {
     cJSON_AddBoolToObject(j, "stop_graceful",
                           app_engine_stop_graceful_armed());
     cJSON_AddNumberToObject(j, "await_arms", app_engine_await_arm_count());
+    cJSON_AddNumberToObject(j, "await_gen", app_engine_await_gen());
     cJSON_AddNumberToObject(j, "session_loop", p.session_loop);
     cJSON_AddNumberToObject(j, "event_index", p.event_index);
     cJSON_AddNumberToObject(j, "frames_elapsed", (double)p.frames_elapsed);
@@ -557,6 +563,16 @@ static int cmd_select(int sock, cJSON *req) {
     if (!cJSON_IsNumber(arm) || arm->valuedouble < 0
         || arm->valuedouble >= app_engine_await_arm_count()) {
         return send_error(sock, "BAD_ARG", "腕の番号が範囲外です");
+    }
+    // 世代照合(任意): gen は「この実行で何回目の駐機か」。一致しない SELECT は
+    // 別の駐機に宛てた古い指示なので拒否する(2台の自動合流で、遅れて届いた
+    // 選択が次の周回の駐機を誤って進める事故を防ぐ。2026-08-04 P1)。
+    // gen なしの SELECT は従来どおり受ける(1台運用・手動操作の互換)
+    cJSON *gen = cJSON_GetObjectItem(req, "gen");
+    if (cJSON_IsNumber(gen)
+        && (uint32_t)gen->valuedouble != app_engine_await_gen()) {
+        return send_error(sock, "STALE_SELECT",
+                          "その選択は前の駐機に宛てたものです(状態を取り直してください)");
     }
     esp_err_t err = app_engine_select((uint8_t)arm->valuedouble);
     if (err != ESP_OK) return send_error(sock, "SELECT_FAILED", esp_err_to_name(err));

@@ -79,6 +79,8 @@ bool app_engine_stop_pending(void);
 bool app_engine_stop_graceful_armed(void);  // 区切り停止の予約中か
 bool app_engine_is_awaiting(void);
 uint8_t app_engine_await_arm_count(void);
+// この実行で何回目の駐機か(1始まり)。SELECT の宛先照合(古い選択の拒否)に使う
+uint32_t app_engine_await_gen(void);
 // 腕を選んで再開する。待っていた時間ぶん以降の予定時刻がずれる
 esp_err_t app_engine_select(uint8_t arm);
 

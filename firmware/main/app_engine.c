@@ -69,6 +69,8 @@ static bool s_graceful_armed;
 static uint32_t s_graceful_passes;
 // 待機分岐
 static _Atomic bool s_awaiting;
+// この実行で何回目の駐機か(SELECT の宛先照合用。古い選択を弾く)
+static _Atomic uint32_t s_await_gen;
 
 // **IRAM_ATTR は必須**。この関数は割り込み(on_alarm → stop_engine_from_isr)
 // から呼ばれる。タイマー割り込みはフラッシュ操作中も止めない設定
@@ -275,6 +277,7 @@ static bool IRAM_ATTR on_alarm(gptimer_handle_t timer,
             stop_engine_from_isr();
             return false;
         }
+        atomic_fetch_add_explicit(&s_await_gen, 1, memory_order_relaxed);
         atomic_store_explicit(&s_awaiting, true, memory_order_release);
         // カウンタを止める。ここから選択までの時間はエンジンの時計に入らない
         // ので、待った長さは以降のタイミング精度に影響しない
@@ -392,6 +395,7 @@ esp_err_t app_engine_start(const uint8_t *data, size_t len, uint32_t session_loo
     atomic_store(&s_pub_pass, 1);
     atomic_store(&s_pub_index, 0);
     atomic_store(&s_pub_done, 0);
+    atomic_store(&s_await_gen, 0);
     atomic_store(&s_status, APP_ENGINE_RUNNING);
     s_graceful_armed = false;
     s_graceful_passes = 0;
@@ -481,6 +485,10 @@ bool app_engine_is_awaiting(void) {
 
 uint8_t app_engine_await_arm_count(void) {
     return s_engine.await_arm_count;
+}
+
+uint32_t app_engine_await_gen(void) {
+    return atomic_load_explicit(&s_await_gen, memory_order_acquire);
 }
 
 esp_err_t app_engine_select(uint8_t arm) {
