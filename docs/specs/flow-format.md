@@ -39,9 +39,8 @@ Excel を前提とした機能は置かない。CSV/JSON は汎用形式とし�
     {"type": "call", "ref": "共通_メニューを開く"},
     {"type": "counter_branch", "arms": [["…奇数周…"], ["…偶数周…"]]},
     {"type": "wait_branch",
-     "source": {"kind": "manual"},
      "timeout_frames": 3600,
-     "on_timeout": "abort",
+     "on_timeout": 0,
      "arms": {"成功": ["…node…"], "失敗": ["…node…"]}}
   ]
 }

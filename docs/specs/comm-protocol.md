@@ -32,7 +32,7 @@
 | STOP mode=immediate\|graceful\|cancel | 可 | immediate: 即時全ニュートラル+破棄。**冪等**: エンジン停止済みでも状態機械が RUNNING/AWAITING に残っていれば IDLE へ戻す(固着からの復帰口)。graceful: セッション境界で終了処理へ(AWAITING 中は選択待ちを維持)。cancel: graceful の**予約だけを取り消す**(2026-08-04 追加。既に止まっていたら何も起きない=取り消しが間に合わなかった扱い。予約中かは STATUS の stop_graceful で分かる) |
 | CLEAR_ERROR | ERROR のみ | ラッチ解除→IDLE(ログ回収前の自動解除はしない) |
 | STATUS | 可 | 状態機械 / 周回カウンタ / 現在イベント index / 開始からの経過フレーム / **今回の総フレーム(total_frames)と指定周回数(loop_n)** ※進捗表示に必須 / await_gen(何回目の駐機か。SELECT の gen に渡す)/ imu_enabled(HELLO と同じ) |
-| LOGS | 可(送信はコア0) | RAM 保持分の回収。各エントリは `t_ms, kind, a, b, c`(2026-08-04 に c を追加)。RUN_START: a=指定周回数(0=無限)、b/c=手順ハッシュ上位/下位32bit(PC が LIST のハッシュと突き合わせて名前に戻す)。RUN_DONE/RUN_ABORT: a=経過フレーム、b=遅れ回数、c=周回(上位16bit=完了周、下位16bit=指定周、65535で飽和)。ENGINE_FAULT: a=イベント index、b/c は同上 |
+| LOGS | 可(送信はコア0) | RAM 保持分の回収。各エントリは `t_ms, kind, a, b, c`(2026-08-04 に c を追加)。RUN_START: a=指定周回数(0=無限)、b/c=手順ハッシュ上位/下位32bit(PC が LIST のハッシュと突き合わせて名前に戻す)。RUN_DONE/RUN_ABORT: a=経過フレーム、b=遅れ回数、c=周回(上位16bit=完了周、下位16bit=指定周、65535で飽和)。ENGINE_FAULT: a=イベント index、b/c は同上。AWAIT_TIMEOUT(2026-08-06): a=待ったフレーム、b=on_timeout。HOST_INFO(同): a/b=ペアリング(サブコマンド 0x01)引数の先頭8バイト(本体識別子の調査用) |
 | MODE procon\|hidpad | **不可** | 転送層モード切替(NVS 保存、要 USB 再列挙) |
 | CONFIG key,value | **不可** | frame_period_us 等。NVS 保存 |
 | OTA size + データ | **不可** | 検証→再起動。次回 HELLO でロールバック有無を報告 |

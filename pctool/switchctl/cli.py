@@ -391,14 +391,19 @@ def cmd_device(args) -> int:
 
     if a == "add":
         if not args.extra:
-            print("使い方: switchctl device add <IP> [名前]")
+            print("使い方: switchctl device add <IP[:ポート]> [名前]")
             return 1
         # 受け入れモード: 接続して個体IDを確認してから登録する。
         # IDを名乗らない旧ファームは登録できない(照合できない装置を台帳に
         # 入れると誤爆防止が成り立たない)。先に有線か --host 直結で OTA する
+        # ポート指定は模擬デバイス2台での練習用(実機はどれも既定 5555)
+        host = args.extra[0]
+        port = None
+        if ":" in host and host.rsplit(":", 1)[1].isdigit():
+            host, port = host.rsplit(":", 1)
         ok, msg = registry.add_device(
-            p, args.extra[0],
-            args.extra[1] if len(args.extra) > 1 else "")
+            p, host, args.extra[1] if len(args.extra) > 1 else "",
+            port=port)
         print(msg)
         return 0 if ok else 1
 
@@ -484,7 +489,8 @@ def cmd_discover(args) -> int:
 def cmd_mock(args) -> int:
     from .discover import PORT as DISCOVER_PORT
     from .mockdevice import MockDevice
-    d = MockDevice(host="127.0.0.1", port=args.port, speed=args.speed)
+    d = MockDevice(host="127.0.0.1", port=args.port, speed=args.speed,
+                   device_id=args.id)
     # 本体(TCP)の待ち受けに失敗したら偽の成功を表示しない(排他 bind に
     # したため、二重起動はここで確実に失敗する。2026-08-05 レビュー)
     try:
@@ -585,6 +591,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("mock", help="模擬デバイスを起動")
     p.add_argument("--port", type=int, default=5555)
     p.add_argument("--speed", type=float, default=1.0, help="実行の早送り倍率")
+    p.add_argument("--id", default="mock00000000",
+                   help="個体ID(2台の練習では2つ目を別のIDにする。"
+                        "例: mock2p000000)")
     p.set_defaults(func=cmd_mock)
 
     p = sub.add_parser("gui", help="操作画面を開く")
