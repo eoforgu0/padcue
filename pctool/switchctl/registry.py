@@ -1,0 +1,85 @@
+"""装置台帳の操作(登録・改名・控え解除・削除)。CLI と GUI の共通実装。
+
+規則(docs/design/multi-device-plan.md D2):
+- 登録は「接続して個体IDを確認してから」。IDを名乗らない旧ファームは断る
+  (照合できない装置を台帳に入れると誤爆防止が成り立たない)
+- 名前は一意(重複すると指名で取り違える)。改名してもID参照は切れない
+- 控え解除(forget)は装置交換(MACが変わった)ときの正規手順
+"""
+from __future__ import annotations
+
+from .client import DeviceClient, DeviceError
+
+
+def add_device(project, host: str, name: str = "", port=None,
+               client_cls=None) -> tuple[bool, str]:
+    """新しい装置を登録する。戻り値は (成否, 人向けメッセージ)。
+
+    port は普通は省略(実機はどれも既定の 5555)。mock を2台立てる練習では
+    同一 IP の別ポートになるため、そのときだけ指定する。
+    """
+    cfg = project.load_config()
+    devs = cfg.get("devices", [])
+    name = (name or "").strip() or f"{len(devs) + 1}P"
+    if any(d.get("name") == name for d in devs):
+        return False, f"名前「{name}」は使用済みです"
+    port = int(port or cfg.get("port", 5555))
+    cls = client_cls or DeviceClient
+    try:
+        c = cls(host, port, timeout=3.0)
+        c.connect()
+        info = c.hello()
+        c.close()
+    except (OSError, ConnectionError, DeviceError) as e:
+        return False, f"{host} に接続できません: {e}"
+    if not info.device_id:
+        return False, (f"{host} は個体IDを名乗らない古いファームです。"
+                       "先に更新してください: "
+                       f"switchctl --host {host} ota firmware/build/padctl.bin")
+    if any(d.get("id") == info.device_id for d in devs):
+        other = next(d for d in devs if d.get("id") == info.device_id)
+        return False, f"この個体は「{other.get('name')}」として登録済みです"
+    devs.append({"id": info.device_id, "name": name,
+                 "host": host, "port": port})
+    cfg["devices"] = devs
+    project.save_config(cfg)
+    return True, f"登録しました: {name} = {host} (id={info.device_id})"
+
+
+def rename_device(project, old: str, new: str) -> tuple[bool, str]:
+    cfg = project.load_config()
+    devs = cfg.get("devices", [])
+    new = (new or "").strip()
+    if not new:
+        return False, "新名前が空です"
+    if any(d.get("name") == new for d in devs):
+        return False, f"名前「{new}」は使用済みです(重複すると指名で取り違えます)"
+    for d in devs:
+        if d.get("name") == old:
+            d["name"] = new
+            project.save_config(cfg)
+            return True, f"{old} → {new} に変更しました(個体IDでの参照は不変)"
+    return False, f"装置「{old}」は登録されていません"
+
+
+def forget_device(project, name: str) -> tuple[bool, str]:
+    """IDの控えだけを解除する(装置交換=MACが変わったときの正規手順)。"""
+    cfg = project.load_config()
+    for d in cfg.get("devices", []):
+        if d.get("name") == name:
+            d["id"] = ""
+            project.save_config(cfg)
+            return True, (f"{name} のIDの控えを解除しました"
+                          "(次の接続で学習し直します)")
+    return False, f"装置「{name}」は登録されていません"
+
+
+def remove_device(project, name: str) -> tuple[bool, str]:
+    cfg = project.load_config()
+    devs = cfg.get("devices", [])
+    for i, d in enumerate(devs):
+        if d.get("name") == name:
+            devs.pop(i)
+            project.save_config(cfg)
+            return True, f"{name} を台帳から外しました"
+    return False, f"装置「{name}」は登録されていません"

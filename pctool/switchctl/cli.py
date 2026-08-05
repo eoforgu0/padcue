@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .client import DeviceClient, DeviceError, connect_verified
 from .discover import discover
+from . import registry
 from .flowfmt import FlowError
 from .project import Project
 
@@ -392,85 +393,39 @@ def cmd_device(args) -> int:
         if not args.extra:
             print("使い方: switchctl device add <IP> [名前]")
             return 1
-        host = args.extra[0]
-        name = args.extra[1] if len(args.extra) > 1 else f"{len(devs) + 1}P"
-        if any(d.get("name") == name for d in devs):
-            print(f"名前「{name}」は使用済みです")
-            return 1
         # 受け入れモード: 接続して個体IDを確認してから登録する。
         # IDを名乗らない旧ファームは登録できない(照合できない装置を台帳に
         # 入れると誤爆防止が成り立たない)。先に有線か --host 直結で OTA する
-        try:
-            c = DeviceClient(host, int(cfg.get("port", 5555)))
-            c.connect()
-            info = c.hello()
-            c.close()
-        except (OSError, ConnectionError, DeviceError) as e:
-            print(f"{host} に接続できません: {e}")
-            return 1
-        if not info.device_id:
-            print(f"{host} は個体IDを名乗らない古いファームです。先に更新してください:\n"
-                  f"  switchctl --host {host} ota firmware/build/padctl.bin")
-            return 1
-        if any(d.get("id") == info.device_id for d in devs):
-            other = next(d for d in devs if d.get("id") == info.device_id)
-            print(f"この個体は「{other.get('name')}」として登録済みです")
-            return 1
-        devs.append({"id": info.device_id, "name": name,
-                     "host": host, "port": int(cfg.get("port", 5555))})
-        cfg["devices"] = devs
-        p.save_config(cfg)
-        print(f"登録しました: {name} = {host} (id={info.device_id})")
-        return 0
+        ok, msg = registry.add_device(
+            p, args.extra[0],
+            args.extra[1] if len(args.extra) > 1 else "")
+        print(msg)
+        return 0 if ok else 1
 
     if a == "rename":
         if len(args.extra) != 2:
             print("使い方: switchctl device rename <名前> <新名前>")
             return 1
-        old, new = args.extra
-        if not new.strip():
-            print("新名前が空です")
-            return 1
-        if any(d.get("name") == new for d in devs):
-            print(f"名前「{new}」は使用済みです(重複すると指名で取り違えます)")
-            return 1
-        for d in devs:
-            if d.get("name") == old:
-                d["name"] = new
-                p.save_config(cfg)
-                print(f"{old} → {new} に変更しました(個体IDでの参照は不変)")
-                return 0
-        print(f"装置「{old}」は登録されていません")
-        return 1
+        ok, msg = registry.rename_device(p, args.extra[0], args.extra[1])
+        print(msg)
+        return 0 if ok else 1
 
     if a == "forget":
-        # 装置の交換(基板が変わり MAC も変わった)用: IDの控えだけを解除する。
-        # 次の接続で新しい個体のIDを学習し直す
+        # 装置の交換(基板が変わり MAC も変わった)用: IDの控えだけを解除する
         if len(args.extra) != 1:
             print("使い方: switchctl device forget <名前>")
             return 1
-        for d in devs:
-            if d.get("name") == args.extra[0]:
-                d["id"] = ""
-                p.save_config(cfg)
-                print(f"{d['name']} のIDの控えを解除しました"
-                      "(次の接続で学習し直します)")
-                return 0
-        print(f"装置「{args.extra[0]}」は登録されていません")
-        return 1
+        ok, msg = registry.forget_device(p, args.extra[0])
+        print(msg)
+        return 0 if ok else 1
 
     if a == "remove":
         if len(args.extra) != 1:
             print("使い方: switchctl device remove <名前>")
             return 1
-        for i, d in enumerate(devs):
-            if d.get("name") == args.extra[0]:
-                devs.pop(i)
-                p.save_config(cfg)
-                print(f"{d['name']} を台帳から外しました")
-                return 0
-        print(f"装置「{args.extra[0]}」は登録されていません")
-        return 1
+        ok, msg = registry.remove_device(p, args.extra[0])
+        print(msg)
+        return 0 if ok else 1
 
     if a == "auto":
         # 1台目(または --device 指定)の IP を探索で追跡する。

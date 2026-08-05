@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import binfmt, engine
+from . import binfmt, engine, registry
 from .client import DeviceClient, DeviceError
 from .devicepool import DevicePool
 from .discover import discover
@@ -286,6 +286,72 @@ class _Handler(BaseHTTPRequestHandler):
                              "いるかを確認してください。"
                              "練習中(模擬デバイス)の場合は "
                              "switchctl mock を起動してから押してください"}
+        # ---- 装置台帳(登録・改名・削除は CLI と共通の registry を使う) ----
+        if path == "/api/device_scan":
+            # 追加登録の候補: LAN で見つかった「台帳にいない実機」だけ。
+            # mock は候補にしない(練習用の明示登録 device 127.0.0.1 のみ)
+            cfg = self.project.load_config()
+            known = {d.get("id") for d in cfg.get("devices", [])}
+            found = discover(timeout=float(body.get("timeout", 1.5)))
+            cand = [{"host": f.host, "port": f.port, "id": f.device_id,
+                     "fw": f.fw}
+                    for f in found
+                    if f.device_id and not f.device_id.startswith("mock")
+                    and f.device_id not in known]
+            return {"ok": True, "found": cand}
+        if path == "/api/device_add":
+            host = (body.get("host") or "").strip()
+            if not host:
+                return {"error": "接続先(IP)を入力してください"}
+            ok, msg = registry.add_device(self.project, host,
+                                          body.get("name") or "",
+                                          port=body.get("port"))
+            if ok:
+                self._pool().refresh()
+            return {"ok": True, "message": msg} if ok else {"error": msg}
+        if path == "/api/device_rename":
+            ok, msg = registry.rename_device(self.project,
+                                             body.get("old") or "",
+                                             body.get("new") or "")
+            if ok:
+                self._pool().refresh()
+            return {"ok": True, "message": msg} if ok else {"error": msg}
+        if path == "/api/device_remove":
+            name = body.get("name") or ""
+            # 実行中の装置を外すと、実機は動き続けるのに止める手段が画面から
+            # 消える。先に停止してもらう(未接続・異常の装置は外せる)
+            for l in self._pool().links():
+                if l.cfg.get("name") == name and not l.error \
+                        and l.status.get("state") in ("RUNNING", "AWAITING"):
+                    return {"error": f"{name} は実行中です。"
+                                     "先に停止してから外してください"}
+            ok, msg = registry.remove_device(self.project, name)
+            if ok:
+                self._pool().refresh()
+            return {"ok": True, "message": msg} if ok else {"error": msg}
+        if path == "/api/identify":
+            # どの Switch がどの装置につながっているかを目で確かめる:
+            # その装置だけに左スティック半分の左右ゆらしを約1秒送る。
+            # 半分なのはメニューのカーソル送りを起こしにくくするため。
+            # 待機中のみ(実行・手動操作と混ざる入力は事故のもと)
+            link = self._pool().get(body.get("dev", ""))
+
+            def _ident(c):
+                if c.status().get("state") != "IDLE":
+                    raise DeviceError(
+                        "BUSY", "識別は待機中の装置にだけ送れます"
+                                "(実行中・手動操作中は入力が混ざるため)")
+                try:
+                    for _ in range(4):
+                        c.passthrough(True, lx=-1024)
+                        time.sleep(0.16)
+                        c.passthrough(True, lx=1024)
+                        time.sleep(0.16)
+                finally:
+                    c.passthrough(False)
+                return c.status()
+            link.write_through(status=link.call(_ident))
+            return {"ok": True}
         if path == "/api/push":
             name = body.get("name", "")
             r, err = self.project.build_safe(name)
@@ -678,6 +744,23 @@ header { position:relative; }
   cursor:pointer; font-size:12.5px; }
 .tab.on { background:var(--accent-soft); color:var(--accent); font-weight:700;
   border-color:transparent; }
+/* ヘッダの装置チップ(装置2台以上のときだけ)。どのタブにいても実行状態が
+   見える。1台のときは従来どおり接続カードの表示だけ(見た目を変えない) */
+.devchips { display:flex; gap:6px; flex-wrap:wrap; }
+.hchip { display:inline-flex; align-items:center; gap:6px;
+  border:1px solid var(--line); border-radius:99px; padding:2px 10px;
+  font-size:11.5px; color:var(--muted); }
+.hchip b { color:var(--ink); font-weight:700; font-size:11.5px; }
+/* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常・未接続専用。
+   ふだんの実行中・待機中を黄や赤にしない(色が警告の意味を失う) */
+.dot { width:9px; height:9px; border-radius:50%; background:var(--muted);
+  display:inline-block; flex:none; }
+.dot.ok { background:var(--ok); }
+.dot.warn { background:var(--warn); }
+.dot.err { background:var(--err); }
+/* 装置カードの行。手順一覧の .proc の形を借りるが、行は選択対象ではない */
+.devrow b, .devrow .meta { cursor:default; }
+.devrow .meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 main { display:grid; gap:14px; padding:14px; align-items:start;
   flex:1; min-height:0; overflow:auto; }
 /* 中身が広いとき、列そのものを広げずに中で横スクロールさせる
@@ -972,6 +1055,7 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   border:1px solid var(--line); border-radius:8px; padding:6px 8px;
   font-size:11.5px; line-height:1.65;
   font-family:"Consolas","Courier New",monospace; }
+.logline .ldev { color:var(--accent); flex:none; min-width:2em; }
 .logline { display:flex; gap:10px; padding:1px 2px; border-radius:4px;
   white-space:pre-wrap; }
 .logline .lt { color:var(--muted); flex:none; }
@@ -1004,6 +1088,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <span class="tab" data-view="flow">手順を編集</span>
     <span class="tab" data-view="part">部品を編集</span>
   </div>
+  <!-- 装置が2台以上のときだけ、どのタブでも実行状態が見えるチップを出す
+       (1台のときは従来どおり=接続カードの表示だけ) -->
+  <span id="devchips" class="devchips"></span>
   <div class="thememenu">
     <button id="themebtn" class="iconbtn" title="画面の配色を選ぶ"
             aria-haspopup="true" aria-expanded="false">◐</button>
@@ -1020,10 +1107,26 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 </header>
 
 <main id="main" class="home">
-  <!-- ホーム -->
-  <div class="card v-home">
-    <h2>手順を選ぶ</h2>
-    <div id="procs"></div>
+  <!-- ホーム(左ペイン: 手順の一覧と装置の台帳) -->
+  <div class="stack v-home">
+    <div class="card">
+      <h2>手順を選ぶ</h2>
+      <div id="procs"></div>
+    </div>
+    <div class="card">
+      <h2>装置</h2>
+      <div id="devlist"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" id="devadd"
+                title="LAN からマイコンを探して、まだ登録していない実機を登録します">
+          ＋ 装置を追加</button>
+      </div>
+      <div id="devaddbox" style="display:none"></div>
+      <!-- devmsg = このカードの操作(追加/識別/改名/外す)の結果。次の操作まで残す -->
+      <div id="devmsg"></div>
+      <div class="hint" id="devhint" style="display:none">2台目を作ったら、
+        「＋ 装置を追加」で登録します(受け入れの全手順は docs/runbook.md)</div>
+    </div>
   </div>
   <div class="stack v-home">
     <div class="card">
@@ -1169,6 +1272,11 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div class="row" style="margin-bottom:7px">
         <label class="hint" style="display:flex;gap:5px;align-items:center">
           <input type="checkbox" id="logfollow" checked>新しい行に追従
+        </label>
+        <!-- 装置が2台以上のときだけ出る絞り込み(1台なら区別する意味がない) -->
+        <label class="hint" id="logdevwrap"
+               style="display:none;gap:5px;align-items:center">装置
+          <select id="logdev"><option value="">すべて</option></select>
         </label>
         <button class="small" id="logclear"
                 title="保存しているログをすべて消します(元に戻せません)">
@@ -1616,20 +1724,186 @@ function logRow(e) {
           text: f ? f(e.a, e.b, e.c, e) : `${e.kind} a=${e.a} b=${e.b}`};
 }
 
+// 直近のログを控えておき、絞り込みを変えた瞬間に描き直せるようにする
+// (次の取得を待つと、選んでから1秒近く画面が変わらない)
+let lastLogs = [];
+
 function renderLogs(entries) {
+  lastLogs = entries;
   const box = document.getElementById('logs');
   const follow = document.getElementById('logfollow').checked;
   const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  const devs = state.devices || [];
+  const multi = devs.length >= 2;
+  const names = {};
+  for (const d of devs) if (d.id) names[d.id] = d.name;
+  const flt = document.getElementById('logdev').value;
+  const list = flt ? entries.filter(e => e.dev === flt) : entries;
   box.textContent = '';
-  if (!entries.length) { box.textContent = '(なし)'; return; }
-  for (const e of entries) {
+  if (!list.length) { box.textContent = '(なし)'; return; }
+  for (const e of list) {
     const r = logRow(e);
     const line = el('div', 'logline' + (r.level ? ' ' + r.level : ''));
-    line.append(el('span', 'lt', r.time), el('span', 'lm', r.text));
+    line.append(el('span', 'lt', r.time));
+    // どの装置の記録かは2台以上のときだけ意味を持つ。保存キーは id なので
+    // 改名しても過去の行が正しい名前で出る。台帳から外した装置の行は
+    // ID の下4桁で残す(誰の記録か消さない)
+    if (multi) line.append(el('span', 'ldev',
+      e.dev ? (names[e.dev] || e.dev.slice(-4).toUpperCase()) : 'ー'));
+    line.append(el('span', 'lm', r.text));
     box.append(line);
   }
   if (follow && atEnd) box.scrollTop = box.scrollHeight;
 }
+document.getElementById('logdev').onchange = () => renderLogs(lastLogs);
+
+// ============ 装置の台帳(登録・識別・改名)とヘッダの状態チップ ============
+// 丸印の色分け: 黄=選択待ち(人の操作が要る)だけ、赤=異常・未接続だけ。
+// 実行中・待機中はどちらも「正常」なので緑(色を警告の意味に取っておく)
+function devDot(d) {
+  if (d.error || d.state === 'ERROR') return 'err';
+  if (d.state === 'AWAITING') return 'warn';
+  return 'ok';
+}
+function devStateJa(d) { return d.error ? '未接続' : stateJa(d.state); }
+function devIdJa(id) { return id ? 'ID ' + id.slice(-4).toUpperCase() : 'ID 未学習'; }
+
+// 一覧・チップは毎秒の状態取得のたびに呼ばれるが、作り直すのは中身が
+// 変わったときだけ(ボタンへのフォーカスやホバーを毎秒切らない)
+let devsKey = '';
+
+function renderDevices() {
+  const devs = state.devices || [];
+  const multi = devs.length >= 2;
+  document.getElementById('logdevwrap').style.display =
+    multi ? 'inline-flex' : 'none';
+  document.getElementById('devhint').style.display = multi ? 'none' : '';
+  const key = JSON.stringify(devs.map(d => [d.name, d.id, d.host, d.state,
+                                            d.error || '', d.proc || '']));
+  if (key === devsKey) return;
+  devsKey = key;
+  // ヘッダのチップ(2台以上のときだけ。1台なら従来どおり接続カードで足りる)
+  const chips = document.getElementById('devchips');
+  chips.textContent = '';
+  if (multi) {
+    for (const d of devs) {
+      const c = el('span', 'hchip');
+      c.title = d.error || `${d.host} ・ ${devIdJa(d.id)}`;
+      c.append(el('span', 'dot ' + devDot(d)), el('b', null, d.name),
+               document.createTextNode(devStateJa(d)));
+      chips.append(c);
+    }
+  }
+  // ログの絞り込みの選択肢を台帳に追従させる(選んでいたものは保つ)
+  const sel = document.getElementById('logdev');
+  const cur = sel.value;
+  sel.textContent = '';
+  sel.append(new Option('すべて', ''));
+  for (const d of devs) if (d.id) sel.append(new Option(d.name, d.id));
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  // 台帳カードの行
+  const box = document.getElementById('devlist');
+  box.textContent = '';
+  for (const d of devs) {
+    const row = el('div', 'proc devrow');
+    const dot = el('span', 'dot ' + devDot(d));
+    dot.title = d.error || devStateJa(d);
+    row.append(dot, el('b', null, d.name), el('span', 'rowops'));
+    const meta = el('div', 'meta');
+    meta.append(el('span', null, devStateJa(d)
+      + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`));
+    const ident = el('button', 'small', '識別');
+    if (d.error) {
+      ident.disabled = true;
+      ident.title = 'つながっていないので送れません';
+    } else {
+      ident.title = 'この装置だけに小さな入力(左スティック半分の左右ゆらし)を'
+        + '送ります。Switch のコントローラー画面で反応した本体が、この装置の'
+        + 'つながっている先です';
+    }
+    ident.onclick = async () => {
+      const r = await api('/api/identify', 'POST', {dev: d.name});
+      show('devmsg', r.error ? 'err' : 'ok', r.error
+           || `${d.name} へ識別の入力を送りました。Switch 側の反応を確かめてください`);
+    };
+    meta.append(ident);
+    const ren = el('button', 'small', '改名');
+    ren.title = '表示名を変えます(個体IDでの照合は変わりません)';
+    ren.onclick = async () => {
+      const nv = prompt(`「${d.name}」の新しい名前`, d.name);
+      if (nv == null || nv === d.name) return;
+      const r = await api('/api/device_rename', 'POST', {old: d.name, new: nv});
+      show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
+      refresh();
+    };
+    meta.append(ren);
+    if (multi) {
+      // 1台だけのときは出さない(従来の1台運用で誤って台帳を空にしない。
+      // どうしても外すときは CLI の device remove)
+      const rm = el('button', 'small', '外す');
+      rm.title = '台帳から外します(装置は消えません。あとで再登録できます)';
+      rm.onclick = async () => {
+        if (!confirm(`「${d.name}」を台帳から外します。よろしいですか?`)) return;
+        const r = await api('/api/device_remove', 'POST', {name: d.name});
+        show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
+        refresh();
+      };
+      meta.append(rm);
+    }
+    row.append(meta);
+    box.append(row);
+  }
+}
+
+// 装置の追加: LAN を探し、台帳にいない実機だけを候補に出す。
+// 探索が届かないネットワーク(AP 分離など)のために IP 直接指定も添える
+document.getElementById('devadd').onclick = async () => {
+  const btn = document.getElementById('devadd');
+  const box = document.getElementById('devaddbox');
+  btn.disabled = true;
+  show('devmsg', '', 'LAN から探しています…');
+  const r = await api('/api/device_scan', 'POST', {});
+  btn.disabled = false;
+  show('devmsg', '', '');
+  box.style.display = '';
+  box.textContent = '';
+  const registerHost = async (host, port) => {
+    const body = port ? {host, port} : {host};
+    const rr = await api('/api/device_add', 'POST', body);
+    show('devmsg', rr.error ? 'err' : 'ok', rr.error || rr.message);
+    if (!rr.error) { box.style.display = 'none'; refresh(); }
+  };
+  for (const f of (r.found || [])) {
+    const row = el('div', 'proc devrow');
+    row.append(el('span', 'dot'), el('b', null, f.host),
+               el('span', 'rowops'));
+    const meta = el('div', 'meta');
+    meta.append(el('span', null,
+      `${devIdJa(f.id)} ・ fw ${f.fw || '不明'}`));
+    const add = el('button', 'small', '登録');
+    add.title = 'この装置を台帳に登録します(名前はあとから改名できます)';
+    add.onclick = () => registerHost(f.host, f.port);
+    meta.append(add);
+    row.append(meta);
+    box.append(row);
+  }
+  if (!(r.found || []).length) {
+    box.append(el('div', 'hint', r.error
+      || '新しい装置は見つかりませんでした。電源と WiFi を確認するか、IP を直接指定してください'));
+  }
+  const man = el('div', 'row');
+  const ip = document.createElement('input');
+  ip.type = 'text';
+  ip.size = 14;
+  ip.placeholder = 'IP を直接指定';
+  const go = el('button', 'small', '登録');
+  go.onclick = () => registerHost(ip.value.trim());
+  ip.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) go.click();
+  });
+  man.append(ip, go);
+  box.append(man);
+};
 
 function shortErr(msg) {
   const m = String(msg).split(': ');
@@ -3713,6 +3987,7 @@ async function refresh() {
   // 何も変えていないのに押せる「接続」は、押しても何も起きず戸惑うだけ
   document.getElementById('sethost').disabled =
     hostBox.value.trim() === (state.host || '').trim();
+  renderDevices();
   if (view === 'home') {
     renderProcs();
     renderStatus();
@@ -3735,15 +4010,16 @@ setInterval(() => {
   polling = true;
   refresh().finally(() => { polling = false; });
 }, 1000);
-// 手順・部品タブにいる間や、ブラウザのタブが裏に回っている間は上の取得が
-// 止まる(ブラウザが setInterval を間引く)。無通信が続くとマイコン側が
-// 接続を切ってしまうので、ゆっくりでよいので叩き続けて維持する
+// 手順・部品タブにいる間も状態は取り続ける。ヘッダの装置チップ(2台以上の
+// とき)をどのタブでも新鮮に保つため。実機への負担はない(接続の維持と
+// 収集はサーバ側のプールが毎秒行っていて、/api/state はキャッシュ即答)
 setInterval(() => {
   if (view === 'home' || polling) return;
   polling = true;
-  api('/api/state').then(st => { if (st && !st.error) state = st; })
+  api('/api/state')
+    .then(st => { if (st && !st.error) { state = st; renderDevices(); } })
     .finally(() => { polling = false; });
-}, 15000);
+}, 5000);
 </script>
 </body>
 </html>
