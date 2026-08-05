@@ -440,8 +440,16 @@ class _Handler(BaseHTTPRequestHandler):
             if enable and self.recorder is not None \
                     and not getattr(self.recorder, "paused", False):
                 self.recorder.add(time.monotonic(), st)
-            self._call(lambda c: c.passthrough(enable, **st),
-                       body.get("dev", ""))
+            link = self._pool().get(body.get("dev", ""))
+            if enable:
+                link.call(lambda c: c.passthrough(True, **st))
+            else:
+                # 終了時は状態をキャッシュへ書き戻す。書き戻さないと、次の
+                # 収集(最大1秒後)まで画面が「手動操作中」のままになる。
+                # 毎回書き戻さないのは、操作中は毎秒30回この経路が呼ばれ、
+                # STATUS の往復を挟むと入力の遅延になるため
+                link.write_through(status=link.call(
+                    lambda c: (c.passthrough(False), c.status())[1]))
             return {"ok": True}
         if path == "/api/trial":
             # 反復統計: 同じ手順を繰り返し、成功/失敗を人が記録して分布を見る
@@ -1823,7 +1831,7 @@ function devIdJa(id) { return id ? 'ID ' + id.slice(-4).toUpperCase() : 'ID 未�
 let devsKey = '';
 
 // 装置id → レーン(2台以上のときの実行・監視画面。実体は loadTimeline の後)
-const laneMap = new Map();
+const laneMap = new Map();   // キーは装置名(一意)。id は未学習だと空で衝突する
 
 function renderDevices() {
   const devs = state.devices || [];
@@ -2401,9 +2409,9 @@ function updatePlayhead() {
     updatePlayhead();
     // レーンの再生位置(レーンの図は常に「その装置の手順」なので、
     // 実行中の手順と図が一致しているときだけ重ねる)
-    for (const [id, lane] of laneMap) {
+    for (const [nm, lane] of laneMap) {
       if (!lane.play) continue;
-      const d = (state && state.devices || []).find(x => x.id === id);
+      const d = (state && state.devices || []).find(x => x.name === nm);
       const runName = d && (d.running || d.awaiting) ? (d.proc || '') : '';
       const on = d && !d.error && runName && lane.tlName === runName;
       setPlay(lane.play,
@@ -2466,6 +2474,7 @@ function buildLane(d) {
   lane.devbar = bar;
   lane.chip = el('span', 'chip', '確認中…');
   lane.host = document.createElement('input');
+  lane.host.className = 'lhost';   // クラス名は検査(uicheck)の足がかり
   lane.host.type = 'text';
   lane.host.size = 14;
   lane.host.placeholder = 'IP か padctl-xxxx.local';
@@ -2494,6 +2503,7 @@ function buildLane(d) {
   const procLab = el('label', null, '手順 ');
   procLab.title = 'この装置で実行する手順(実行中は変えられません)';
   lane.proc = document.createElement('select');
+  lane.proc.className = 'lproc';
   procLab.append(lane.proc);
   lane.pushWarn = el('span', 'chip warn', '未転送の変更');
   lane.pushWarn.title = 'この手順は実機の中身と違います(未転送か編集ずみ)。'
@@ -2501,6 +2511,7 @@ function buildLane(d) {
   lane.pushWarn.style.display = 'none';
   const loopsLab = el('label', null, '周回 ');
   lane.loops = document.createElement('input');
+  lane.loops.className = 'lloops';
   lane.loops.type = 'number';
   lane.loops.value = '0';
   lane.loops.min = '0';
@@ -2511,6 +2522,7 @@ function buildLane(d) {
   const resLab = el('label', null, '開始位置 ');
   resLab.title = '次に開始するときに使います。選択肢は手順の「ラベル」ブロック';
   lane.resume = document.createElement('select');
+  lane.resume.className = 'lresume';
   resLab.append(lane.resume);
   row1.append(procLab, lane.pushWarn, loopsLab, resLab);
   card.append(row1);
@@ -2525,14 +2537,14 @@ function buildLane(d) {
   card.append(row2);
   lane.nowplaying = el('div');
   lane.actmsg = el('div');
-  lane.awaitbox = el('div');
+  lane.awaitbox = el('div', 'lawait');
   card.append(lane.nowplaying, lane.actmsg, lane.awaitbox);
   lane.kv = el('dl', 'kv');
   lane.kv.style.marginTop = '9px';
   card.append(lane.kv);
   lane.tlhead = el('div', 'subh', 'タイムライン');
   card.append(lane.tlhead);
-  lane.tlbox = el('div', 'tl');
+  lane.tlbox = el('div', 'tl ltl');
   const wrap = el('div', 'tl-wrap');
   wrap.append(lane.tlbox);
   card.append(wrap);
@@ -2842,25 +2854,20 @@ function renderLanes() {
   }
   const seen = new Set();
   for (const d of devs) {
-    let lane = laneMap.get(d.id);
-    if (lane && lane.name !== d.name) {   // 改名は作り直し(ボタンの文言に名前が入る)
-      lane.card.remove();
-      laneMap.delete(d.id);
-      lane = null;
-    }
-    if (!lane) {
+    let lane = laneMap.get(d.name);
+    if (!lane) {   // 改名は seen に残らず片づく=作り直し(文言に名前が入る)
       lane = buildLane(d);
-      laneMap.set(d.id, lane);
+      laneMap.set(d.name, lane);
     }
-    seen.add(d.id);
+    seen.add(d.name);
     updateLane(lane, d);
   }
-  for (const [id, lane] of [...laneMap]) {
-    if (!seen.has(id)) { lane.card.remove(); laneMap.delete(id); }
+  for (const [nm, lane] of [...laneMap]) {
+    if (!seen.has(nm)) { lane.card.remove(); laneMap.delete(nm); }
   }
   // DOM の並びを台帳順に(必要なときだけ動かす。毎回動かすとフォーカスが切れる)
   devs.forEach((d, i) => {
-    const card = laneMap.get(d.id).card;
+    const card = laneMap.get(d.name).card;
     if (box.children[i] !== card) box.insertBefore(card, box.children[i] || null);
   });
   // 共有カード(反復テスト・手動操作)のボタン抑止は「対象」装置の状態で決める
@@ -2868,7 +2875,7 @@ function renderLanes() {
   const t = devs.find(x => x.name === tsel.value) || devs[0];
   const tBusy = !!t && !t.error && (t.running || t.awaiting
     || t.state === 'RUNNING' || t.state === 'AWAITING');
-  const tLane = t && laneMap.get(t.id);
+  const tLane = t && laneMap.get(t.name);
   document.getElementById('trialrun').disabled =
     !t || !!t.error || tBusy || !(tLane && tLane.proc.value);
   const msel = document.getElementById('manualdev');
@@ -4476,7 +4483,7 @@ document.getElementById('trialrun').onclick = async () => {
   if (devs.length >= 2) {
     const name = document.getElementById('trialdev').value;
     const d = devs.find(x => x.name === name) || devs[0];
-    const lane = d && laneMap.get(d.id);
+    const lane = d && laneMap.get(d.name);
     if (!lane) return;
     await laneRun(lane, 1);
     return;

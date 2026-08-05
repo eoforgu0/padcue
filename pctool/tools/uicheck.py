@@ -226,6 +226,7 @@ def main() -> int:
 
         c = Checker(page, out)
         run_all(c, page, proj, dev, prompt_value, dialogs)
+        run_multi(c, page, proj, dev, prompt_value, dialogs)
         print()
         if errors:
             print("=== ブラウザ側のエラー ===")
@@ -425,8 +426,11 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         wait_state(page, "実行中")
         page.click("#stopi")
         wait_state(page, "待機中")
-        page.wait_for_timeout(1500)
-        assert lines.count() > n0, "実行してもログが増えない"
+        # 行が増えるまで待つ(装置からの回収1秒+画面の取得1秒が重なると
+        # 固定待ちでは取りこぼす)
+        page.wait_for_function(
+            f"() => document.querySelectorAll('#logs .logline').length > {n0}",
+            timeout=8000)
         # 中断は注意色(warn)が付く
         aborted = page.locator("#logs .logline.warn", has_text="中断")
         assert aborted.count() > 0, "中断のログに色が付いていない"
@@ -1926,6 +1930,295 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert "探す" in msg, f"次に何をすればよいか書かれていない: {msg!r}"
         assert not any(w in msg for w in ("Errno", "failed", "refused")),             f"生のエラーが出ている: {msg!r}"
     c.check("未接続: 表示と操作の抑止", t_disconnected)
+
+
+
+def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
+              prompt_value: list, dialogs: list):
+    """装置2台のレーン画面(案C・P2-2b)。
+
+    装置は台帳へ直接書いて登録する(GUI の「＋装置を追加」は LAN 探索が
+    要るが、検査では探索を mock 1台に固定しているため通らない。登録 API の
+    正しさは tests/test_gui_devices.py が見ている)。id は両方とも未学習の
+    まま = 「登録直後にまだ一度も繋いでいない」いちばん厳しい形で検査する。
+    直前の「未接続」検査が元の mock を止めているので、ここでは新しい
+    mock を2台立て、1P も差し替える。
+    """
+    print("[装置2台(レーン)]", flush=True)
+    m1 = MockDevice(speed=1.0, device_id="mock1p000000")
+    d2 = MockDevice(speed=1.0, device_id="mock2p000000")
+    m1.start()
+    d2.start()
+
+    def lane(i: int):
+        return page.locator("#lanes .lane").nth(i)
+
+    def lane_chip(i: int) -> str:
+        return lane(i).locator(".devbar .chip").first.inner_text()
+
+    def wait_lane_state(i: int, want: str, timeout_ms: int = 12000):
+        page.wait_for_function(
+            "([i, want]) => {"
+            "  const ch = document.querySelectorAll("
+            "    '#lanes .lane .devbar .chip')[i];"
+            "  return ch && ch.textContent === want; }",
+            arg=[i, want], timeout=timeout_ms)
+
+    def t_register_switches_to_lanes():
+        page.click(".tab[data-view='home']")
+        cfg = proj.load_config()
+        cfg["devices"] = [{"id": "", "name": "1P",
+                           "host": "127.0.0.1", "port": m1.port},
+                          {"id": "", "name": "2P",
+                           "host": "127.0.0.1", "port": d2.port}]
+        proj.save_config(cfg)
+        page.wait_for_function(
+            "() => document.querySelectorAll('#lanes .lane').length === 2"
+            " && document.querySelector('#lanes').style.display !== 'none'",
+            timeout=10000)
+        assert not page.locator("#conncard").is_visible(), \
+            "2台なのに従来の接続カードが見えている"
+        assert not page.locator("#runcard").is_visible()
+        assert not page.locator("#tlcard").is_visible()
+        assert page.locator("#devchips .hchip").count() == 2, "ヘッダチップが2つない"
+        assert page.locator("#trialdevwrap").is_visible(), "反復テストの対象が出ない"
+        assert page.locator("#manualdevwrap").is_visible(), "手動操作の対象が出ない"
+        rows = page.locator("#devlist .devrow")
+        assert rows.count() == 2, "装置カードが2行にならない"
+    c.check("2台目を登録するとレーン2本の画面に切り替わる",
+            t_register_switches_to_lanes)
+
+    def t_lane_layout():
+        h1 = lane(0).locator("h2").inner_text()
+        h2 = lane(1).locator("h2").inner_text()
+        assert "1P" in h1 and "2P" in h2, (h1, h2)
+        for name, i in (("1P", 0), ("2P", 1)):
+            btns = lane(i).locator("button").all_inner_texts()
+            assert any(f"{name} だけ1回実行" in b for b in btns), btns
+            assert any(f"{name} を今の周で止める" in b for b in btns), btns
+            assert any(f"{name} を今すぐ止める" in b for b in btns), btns
+            assert lane(i).locator(".lproc").count() == 1, "手順の選択が無い"
+            assert lane(i).locator(".lloops").count() == 1, "周回の欄が無い"
+            subhs = lane(i).locator(".subh").all_inner_texts()
+            assert any("実行" in s for s in subhs), subhs
+            assert any("タイムライン" in s for s in subhs), subhs
+    c.check("レーンは装置名入りのボタンと実行一式を持つ", t_lane_layout)
+
+    def t_untransferred_chip_then_push():
+        # 登録したての 2P は何も転送していない → 未転送の変更が出る。
+        # 「転送のみ」で消える
+        lane(1).locator(".lproc").select_option("素材周回")
+        page.wait_for_timeout(1500)
+        assert lane(1).locator(".chip.warn", has_text="未転送").is_visible(), \
+            "未転送の装置にチップが出ない"
+        lane(1).locator("button", has_text="転送のみ").click()
+        page.wait_for_function(
+            "() => {"
+            "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
+            "  const ch = [...l2.querySelectorAll('.chip.warn')]"
+            "    .find(x => x.textContent.includes('未転送'));"
+            "  return ch && ch.style.display === 'none'; }", timeout=8000)
+    c.check("未転送の変更チップ: 登録直後は出て、転送すると消える",
+            t_untransferred_chip_then_push)
+
+    def t_lane_procs_independent():
+        lane(0).locator(".lproc").select_option("素材周回")
+        lane(1).locator(".lproc").select_option("周回で変える")
+        page.wait_for_timeout(1500)
+        assert lane(0).locator(".lproc").input_value() == "素材周回"
+        assert lane(1).locator(".lproc").input_value() == "周回で変える"
+        heads = [lane(i).locator(".subh", has_text="タイムライン").inner_text()
+                 for i in (0, 1)]
+        assert "素材周回" in heads[0] and "周回で変える" in heads[1], heads
+    c.check("レーンごとに別の手順を選べて図も追従する", t_lane_procs_independent)
+
+    def t_run_2p_only():
+        lane(1).locator(".lloops").fill("50")
+        lane(1).locator("button", has_text="2P だけ周回実行").click()
+        wait_lane_state(1, "実行中")
+        assert lane_chip(0) == "待機中", "2P の実行が 1P に波及した"
+        assert lane(0).locator("button", has_text="1P だけ1回実行").is_enabled(), \
+            "2P 実行中に 1P の実行が押せない(非干渉が壊れている)"
+        page.wait_for_timeout(1500)
+        tp = lane(1).locator(".tlprog").inner_text()
+        assert "周" in tp and "フレーム" in tp, f"2P の進捗が出ない: {tp!r}"
+        assert lane(0).locator(".tlprog").inner_text() == "", \
+            "1P に進捗が出ている"
+        assert lane(1).locator(".play").is_visible(), "2P の再生位置が出ない"
+        assert not lane(0).locator(".play").is_visible(), "1P に再生位置が出ている"
+        assert lane(1).locator(".lproc").is_disabled(), \
+            "実行中に手順を変えられる"
+    c.check("2P だけ周回実行 → 進捗・再生位置・抑止が 2P だけに出る",
+            t_run_2p_only)
+
+    def t_header_chips_follow():
+        chips = page.locator("#devchips .hchip").all_inner_texts()
+        assert any("2P" in x and "実行中" in x for x in chips), chips
+        assert any("1P" in x and "待機中" in x for x in chips), chips
+        page.click(".tab[data-view='flow']")
+        page.wait_for_timeout(400)
+        assert page.locator("#devchips .hchip").first.is_visible(), \
+            "編集タブでヘッダチップが消える"
+        page.click(".tab[data-view='home']")
+        page.wait_for_timeout(400)
+    c.check("ヘッダチップが実行状態を映し、全タブで見える", t_header_chips_follow)
+
+    def t_both_run_independently():
+        lane(0).locator(".lloops").fill("50")
+        lane(0).locator("button", has_text="1P だけ周回実行").click()
+        wait_lane_state(0, "実行中")
+        assert lane_chip(1) == "実行中", "1P の開始で 2P が止まった"
+        tps = [lane(i).locator(".tlprog").inner_text() for i in (0, 1)]
+        assert all("周" in x for x in tps), tps
+    c.check("2台を同時に別の手順で走らせられる", t_both_run_independently)
+
+    def t_stopg_armed_per_lane():
+        lane(1).locator("button", has_text="2P を今の周で止める").click()
+        page.wait_for_timeout(600)
+        b2 = lane(1).locator("button", has_text="止める予約を取り消す")
+        assert b2.count() == 1, "2P の停止予約が armed 表示にならない"
+        assert lane(0).locator("button", has_text="止める予約を取り消す") \
+            .count() == 0, "1P まで予約表示になった"
+        b2.click()                       # 取り消し
+        page.wait_for_timeout(900)
+        assert lane(1).locator("button", has_text="2P を今の周で止める") \
+            .count() == 1, "予約の取り消しが効かない"
+        assert lane_chip(1) == "実行中", "取り消したのに止まった"
+    c.check("停止予約と取り消しはそのレーンだけに効く", t_stopg_armed_per_lane)
+
+    def t_stop_2p_keeps_1p():
+        lane(1).locator("button", has_text="2P を今すぐ止める").click()
+        wait_lane_state(1, "待機中")
+        assert lane_chip(0) == "実行中", "2P を止めたら 1P まで止まった"
+        lane(0).locator("button", has_text="1P を今すぐ止める").click()
+        wait_lane_state(0, "待機中")
+    c.check("今すぐ止めるは押したレーンだけ(相方は継続)", t_stop_2p_keeps_1p)
+
+    def t_identify_idle_and_busy():
+        lane(1).locator("button", has_text="識別").click()
+        page.wait_for_function(
+            "() => {"
+            "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
+            "  return l2 && l2.textContent.includes('識別の入力を送りました'); }",
+            timeout=8000)
+        wait_lane_state(1, "待機中")     # 識別のあと手動操作状態が残らない
+        lane(1).locator(".lloops").fill("50")
+        lane(1).locator("button", has_text="2P だけ周回実行").click()
+        wait_lane_state(1, "実行中")
+        lane(1).locator("button", has_text="識別").click()
+        page.wait_for_function(
+            "() => {"
+            "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
+            "  return l2 && l2.textContent.includes('待機中の装置にだけ'); }",
+            timeout=8000)
+        lane(1).locator("button", has_text="2P を今すぐ止める").click()
+        wait_lane_state(1, "待機中")
+    c.check("識別は待機中だけ(実行中は理由が出て断られる)",
+            t_identify_idle_and_busy)
+
+    def t_wait_branch_in_lane():
+        lane(1).locator(".lproc").select_option("選んで進む")
+        lane(1).locator(".lloops").fill("1")
+        lane(1).locator("button", has_text="2P だけ周回実行").click()
+        wait_lane_state(1, "選択待ち")
+        assert lane_chip(0) == "待機中", "2P の選択待ちが 1P に波及"
+        btns = lane(1).locator(".lawait button").all_inner_texts()
+        assert btns == ["出た(2P へ)", "出ない(2P へ)"], btns
+        lane(1).locator(".lawait button").first.click()
+        wait_lane_state(1, "実行中")
+        wait_lane_state(1, "待機中")     # 1周で完走する
+    c.check("待機分岐はレーン内で選ぶ(腕ボタンに宛先の装置名)",
+            t_wait_branch_in_lane)
+
+    def t_logs_have_device_column():
+        page.wait_for_function(
+            "() => document.querySelectorAll('#logs .logline .ldev').length > 0",
+            timeout=8000)
+        assert page.locator("#logdevwrap").is_visible(), \
+            "ログの絞り込みが出ていない"
+    c.check("ログに装置の列が出る(2台のとき)", t_logs_have_device_column)
+
+    def t_manual_targets_selected_device():
+        page.select_option("#manualdev", "2P")
+        page.click("#manual")
+        page.wait_for_function(
+            "() => state.devices && state.devices[1]"
+            " && state.devices[1].state === 'PASSTHRU'", timeout=8000)
+        assert page.evaluate("state.devices[0].state") == "IDLE", \
+            "対象でない 1P まで手動操作になった"
+        assert page.locator("#manualdev").is_disabled(), \
+            "手動操作中に対象を替えられる"
+        page.click("#manual")            # 終了
+        page.wait_for_function(
+            "() => state.devices[1].state === 'IDLE'", timeout=8000)
+    c.check("手動操作は選んだ装置だけに届き、操作中は対象を固定",
+            t_manual_targets_selected_device)
+
+    def t_trial_targets_selected_device():
+        lane(1).locator(".lproc").select_option("素材周回")
+        page.wait_for_timeout(1200)
+        page.select_option("#trialdev", "2P")
+        page.wait_for_timeout(200)
+        page.click("#trialrun")
+        wait_lane_state(1, "実行中")
+        assert lane_chip(0) == "待機中", "対象でない 1P まで実行された"
+        tp = lane(1).locator(".tlprog").inner_text()
+        assert "/ 1 周" in tp, f"1回になっていない: {tp!r}"
+        lane(1).locator("button", has_text="2P を今すぐ止める").click()
+        wait_lane_state(1, "待機中")
+    c.check("反復テストの1回実行は対象の装置のレーンで走る",
+            t_trial_targets_selected_device)
+
+    def t_rename_follows_everywhere():
+        prompt_value[0] = "サブ"
+        row = page.locator("#devlist .devrow").nth(1)
+        row.locator("button", has_text="改名").click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('#lanes .lane h2')[1]"
+            "      .textContent.includes('サブ')", timeout=8000)
+        chips = page.locator("#devchips .hchip").all_inner_texts()
+        assert any("サブ" in x for x in chips), chips
+        btns = lane(1).locator("button").all_inner_texts()
+        assert any("サブ を今すぐ止める" in b for b in btns), \
+            f"レーンのボタン文言が旧名のまま: {btns}"
+        prompt_value[0] = "2P"
+        page.locator("#devlist .devrow").nth(1) \
+            .locator("button", has_text="改名").click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('#lanes .lane h2')[1]"
+            "      .textContent.includes('2P')", timeout=8000)
+        prompt_value[0] = "自動テスト"
+    c.check("改名がレーン・チップ・ボタン文言まで追従する",
+            t_rename_follows_everywhere)
+
+    def t_unreachable_lane_isolated():
+        d2.stop()
+        wait_lane_state(1, "未接続", timeout_ms=15000)
+        assert "見つけられます" in lane(1).inner_text(), \
+            "未接続の復旧導線(探す誘導)が出ない"
+        assert lane(1).locator("button", has_text="2P だけ1回実行") \
+            .is_disabled(), "未接続なのに実行が押せる"
+        assert lane_chip(0) == "待機中", "2P の未接続が 1P に波及"
+        assert lane(0).locator("button", has_text="1P だけ1回実行") \
+            .is_enabled(), "2P 未接続で 1P の操作まで塞がった"
+    c.check("未接続のレーンだけが赤くなり、相方は無傷",
+            t_unreachable_lane_isolated)
+
+    def t_remove_returns_to_solo():
+        row = page.locator("#devlist .devrow").nth(1)
+        row.locator("button", has_text="外す").click()
+        page.wait_for_function(
+            "() => document.querySelector('#conncard').style.display !== 'none'",
+            timeout=10000)
+        assert page.locator("#lanes .lane").count() == 0, "レーンが残っている"
+        assert page.locator("#devchips .hchip").count() == 0, \
+            "1台に戻ったのにヘッダチップが残る"
+        assert not page.locator("#trialdevwrap").is_visible(), \
+            "1台に戻ったのに対象選択が残る"
+        assert text(page, "#devchip") == "待機中", "従来の接続カードが戻らない"
+    c.check("2台目を外すと従来の1台の画面に戻る", t_remove_returns_to_solo)
+
+    m1.stop()
 
 
 if __name__ == "__main__":
