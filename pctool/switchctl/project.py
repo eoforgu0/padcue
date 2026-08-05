@@ -290,6 +290,43 @@ class Project:
             return []
         return self._apply_order([p.stem for p in d.glob("*.csv")], "parts")
 
+    # ---- 編成(連結実行の盤面スナップショット。sets/<名前>.json) ----
+    # 利用者の資産(手順・部品と同格)なのでプロジェクト直下に置く。
+    # 保存キーは装置の個体ID(改名しても編成が切れないように。計画 D6)
+
+    def formation_names(self) -> list[str]:
+        d = self.root / "sets"
+        if not d.is_dir():
+            return []
+        return sorted(p.stem for p in d.glob("*.json"))
+
+    def _formation_path(self, name: str) -> Path:
+        return self.root / "sets" / f"{validate_name(name)}.json"
+
+    def save_formation(self, name: str, data: dict) -> None:
+        d = self.root / "sets"
+        d.mkdir(exist_ok=True)
+        payload = {"schema": 1, "name": validate_name(name),
+                   "linked": bool(data.get("linked", True)),
+                   "auto_join": bool(data.get("auto_join", True)),
+                   "arm": int(data.get("arm", 0)),
+                   "devices": [
+                       {"id": str(x.get("id", "")),
+                        "proc": str(x.get("proc", "")),
+                        "loops": max(0, int(x.get("loops", 0))),
+                        "resume": str(x.get("resume", ""))}
+                       for x in data.get("devices", [])]}
+        self._formation_path(name).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+
+    def load_formation(self, name: str) -> dict:
+        return json.loads(
+            self._formation_path(name).read_text(encoding="utf-8"))
+
+    def delete_formation(self, name: str) -> None:
+        self._formation_path(name).unlink(missing_ok=True)
+
     def build(self, name: str) -> BuildResult:
         c = compile_flow(self.root, name)
         blob = binfmt.encode(c.name, c.events, c.total_frames)

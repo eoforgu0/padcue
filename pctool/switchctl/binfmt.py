@@ -228,6 +228,20 @@ def _encode_record(ev: Event) -> bytes:
     raise TypeError(f"unknown event: {ev!r}")
 
 
+def uses_imu(blob: bytes) -> bool:
+    """手順がジャイロ/加速度を使うか。
+
+    hidpad 方式にはセンサーが無く、これらの入力は本体に届かない。
+    連結実行の事前検査(方式との照合)が使う。判定は復号した State の
+    ジャイロ非ゼロ、または加速度が静止姿勢(REST_A*)以外。
+    """
+    _name, events, _total = decode(blob)
+    return any(isinstance(ev, State)
+               and (ev.gx or ev.gy or ev.gz
+                    or (ev.ax, ev.ay, ev.az) != (REST_AX, REST_AY, REST_AZ))
+               for ev in events)
+
+
 def decode(data: bytes) -> tuple[str, list[Event], int]:
     """バイナリを (name, events, total_frames) に復元する。CRC・整合性を検証する。"""
     if len(data) < HEADER_SIZE:

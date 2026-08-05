@@ -19,7 +19,12 @@ switchctl.json.bak
 
 # 実行時生成物
 logs.jsonl
+runstate.json
 uicheck/
+runbook_walk/
+
+# 利用者の個人データ(連結実行の編成)。ソフトウェア本体ではない
+/sets/
 
 # 利用者の個人データ(作った手順・部品・並び順)。ソフトウェア本体ではない
 /procedures/

@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import binfmt, engine, registry
 from .client import DeviceClient, DeviceError
+from .coupler import Coupler
 from .devicepool import DevicePool
 from .discover import discover
 from .project import Project, validate_name
@@ -75,6 +76,7 @@ class _Handler(BaseHTTPRequestHandler):
     project: Project = None      # type: ignore[assignment]
     lock = threading.Lock()      # 記録(recorder)・反復統計など PC 側共有物の直列化
     pool = None                  # DevicePool(装置への接続・収集の唯一の窓口)
+    coupler = None               # Coupler(連結・セット実行・自動合流の持ち主)
     recorder: Recorder | None = None   # 手動操作の記録中だけ存在する
     trials: list = []                  # 反復統計の成否記録
 
@@ -113,11 +115,28 @@ class _Handler(BaseHTTPRequestHandler):
         if cls.pool is not None and cls.pool.project is not cls.project:
             cls.pool.close()
             cls.pool = None
+            if cls.coupler is not None:
+                cls.coupler.close()
+                cls.coupler = None
         if cls.pool is None:
             # DeviceClient をモジュール名で渡すのはテストの差し替えを生かすため
             cls.pool = DevicePool(cls.project, client_cls=DeviceClient)
             cls.pool.refresh()
         return cls.pool
+
+    @classmethod
+    def _coupler(cls):
+        pool = cls._pool()
+        # プール・プロジェクトが差し替わっていたら作り直す(テストは pool を
+        # 直接入れ替えるため、_pool の同一性チェックだけでは足りない)
+        if cls.coupler is not None and (cls.coupler.pool is not pool
+                                        or cls.coupler.project
+                                        is not cls.project):
+            cls.coupler.close()
+            cls.coupler = None
+        if cls.coupler is None:
+            cls.coupler = Coupler(cls.project, pool)
+        return cls.coupler
 
     def _call(self, fn, dev: str = ""):
         """装置への操作。dev = 装置の名前(省略時は台帳の1台目)。
@@ -419,6 +438,13 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/stop":
             mode = body.get("mode", "immediate")
             link = self._pool().get(body.get("dev", ""))
+            # 人が押した停止の印。連結実行中でも「人為停止は連動しない」
+            # (§0.1)ため、監視係が異常停止と区別できるように記す。
+            # 予約の取り消しは印も取り消す(走り続けるので)
+            if mode == "cancel":
+                self._coupler().note_manual_cancel(link.cfg.get("name", ""))
+            else:
+                self._coupler().note_manual_stop(link.cfg.get("name", ""))
             link.write_through(
                 status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             return {"ok": True}
@@ -450,6 +476,53 @@ class _Handler(BaseHTTPRequestHandler):
                 # STATUS の往復を挟むと入力の遅延になるため
                 link.write_through(status=link.call(
                     lambda c: (c.passthrough(False), c.status())[1]))
+            return {"ok": True}
+        # ---- 連結(2台をまとめて動かす。実体は coupler.py) ----
+        if path == "/api/couple":
+            return {"ok": True,
+                    "coupling": self._coupler().set_coupling(
+                        on=body.get("on"),
+                        auto_join=body.get("auto_join"),
+                        arm=body.get("arm"),
+                        oneshot_manual=body.get("oneshot_manual"))}
+        if path == "/api/couple_run":
+            r = self._coupler().couple_run(
+                [{"dev": str(p.get("dev", "")),
+                  "name": str(p.get("name", "")),
+                  "loops": max(0, int(p.get("loops", 0))),
+                  "resume_from": str(p.get("resume_from", ""))}
+                 for p in body.get("plan", [])],
+                formation=str(body.get("formation", "")))
+            return r
+        if path == "/api/couple_again":
+            snap = self._coupler().snapshot()
+            run = snap.get("run")
+            if not run:
+                return {"error": "直前の連結実行の記録がありません"}
+            if run.get("active"):
+                return {"error": "まだ実行中です"}
+            return self._coupler().couple_run(
+                run["plan"], formation=run.get("formation", ""))
+        if path == "/api/couple_resume":
+            return self._coupler().couple_resume()
+        if path == "/api/stop_both":
+            return self._coupler().stop_both(body.get("mode", "graceful"))
+        if path == "/api/select_both":
+            return self._coupler().select_both(int(body.get("arm", 0)))
+        # ---- 編成(盤面のスナップショット。sets/<名前>.json) ----
+        if path == "/api/formation_save":
+            self.project.save_formation(body.get("name", ""),
+                                        body.get("data") or {})
+            return {"ok": True}
+        if path == "/api/formation_load":
+            try:
+                return {"ok": True,
+                        "data": self.project.load_formation(
+                            body.get("name", ""))}
+            except (OSError, ValueError) as e:
+                return {"error": f"編成を読めません: {e}"}
+        if path == "/api/formation_delete":
+            self.project.delete_formation(body.get("name", ""))
             return {"ok": True}
         if path == "/api/trial":
             # 反復統計: 同じ手順を繰り返し、成功/失敗を人が記録して分布を見る
@@ -610,6 +683,10 @@ class _Handler(BaseHTTPRequestHandler):
                         d["arm_names"] = r.wait_branch_arms[0]
             devices.append(d)
         out["devices"] = devices
+        # 連結の状態(2台以上のときだけ。1台の応答は従来と同じ形を保つ)
+        if len(devices) >= 2:
+            out["coupling"] = self._coupler().snapshot()
+            out["formations"] = self.project.formation_names()
         # 互換: 従来の1台形は devices[0] の写し(P2-2 の画面切替まで
         # 既存 JS を支える)
         if devices:
@@ -4652,6 +4729,8 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
               "または本体ボタンを1.5秒長押し)")
     finally:
         srv.server_close()
+        if _Handler.coupler is not None:
+            _Handler.coupler.close()
         if _Handler.pool is not None:
             _Handler.pool.close()
     return 0
