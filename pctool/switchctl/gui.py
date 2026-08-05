@@ -1934,6 +1934,15 @@ const LOG_JA = {
   WIFI_UP:       () => 'WiFi につながりました',
   STATE:         (a, b) => `状態: ${STATE_NAMES[a] || a} → ${STATE_NAMES[b] || b}`,
   OTA:           (a, b) => `ファームウェアを更新しました(${b} バイト)`,
+  HOST_INFO:     (a, b) => {
+    const hex = v => (v >>> 0).toString(16).padStart(8, '0');
+    return `本体からの接続時データ: ${hex(a)} ${hex(b)}`
+      + '(調査用。同じ本体なら毎回同じ値になるかを見ます)';
+  },
+  AWAIT_TIMEOUT: (a, b) => b
+    ? `待機分岐の待ちが上限に達したので、腕${b}へ自動で進みました`
+      + `(${a} フレーム待った)`
+    : `⚠ 待機分岐の待ちが上限に達したので中断しました(${a} フレーム待った)`,
   // ---- PC 側の合成ログ(連結。ms は装置間のズレ、装置内の µs とは別物) ----
   PC_SET_START:  (a, b, c, e) => '連結でまとめて開始'
     + (e && e.name ? `: ${e.name}` : '')
@@ -1958,7 +1967,7 @@ const LOG_LEVEL = {
   ENGINE_FAULT: 'err', USB_UMOUNT: 'err', WIFI_LOST: 'err',
   LATE_EVENT: 'warn', REPLY_DROPPED: 'warn', USB_SUSPEND: 'warn',
   RUN_ABORT: 'warn', TX_LATE: 'warn', TX_LOST: 'err',
-  PC_LINK_STOP: 'err', PC_WAIT_LATE: 'warn',
+  PC_LINK_STOP: 'err', PC_WAIT_LATE: 'warn', AWAIT_TIMEOUT: 'warn',
 };
 
 // ログ1件を「時刻・重み・本文」に開く。重みは色分けに使う
@@ -4106,9 +4115,19 @@ function renderProps() {
       to.value = n.timeout_frames || 0;
       bindInput(to, () => { n.timeout_frames = parseInt(to.value, 10) || 0; });
       box.append(field('待つ上限(フレーム。0 = 無期限)', to));
+      // 上限に達したときの動き(0=中断、1..n=その腕へ)。放置運転の保険
+      const ot = document.createElement('select');
+      ot.append(new Option('中断する', '0'));
+      Object.keys(n.arms || {}).forEach((l, i) =>
+        ot.append(new Option(`「${l}」へ自動で進む`, String(i + 1))));
+      ot.value = String(n.on_timeout || 0);
+      if (![...ot.options].some(o => o.value === ot.value)) ot.value = '0';
+      bindChange(ot, () => { n.on_timeout = parseInt(ot.value, 10) || 0; });
+      box.append(field('上限に達したら', ot));
       box.append(el('div', 'hint',
         'ここで止まり、画面で枝を選ぶと続きが走ります'
-        + '(くり返しの中には置けません)'));
+        + '(くり返しの中には置けません)。上限は放置運転で永久に'
+        + '待ち続けないための保険です'));
       break;
     }
     case 'counter_branch': {

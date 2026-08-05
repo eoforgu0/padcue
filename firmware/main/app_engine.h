@@ -84,6 +84,9 @@ uint8_t app_engine_await_arm_count(void);
 uint32_t app_engine_await_gen(void);
 // 腕を選んで再開する。待っていた時間ぶん以降の予定時刻がずれる
 esp_err_t app_engine_select(uint8_t arm);
+// 駐機タイムアウトの監視(supervisor から 100ms ごとに呼ぶ)。
+// timeout_frames を超えたら on_timeout に従う(0=中断、1..n=その腕へ)
+void app_engine_poll_await_timeout(void);
 
 #ifdef __cplusplus
 }

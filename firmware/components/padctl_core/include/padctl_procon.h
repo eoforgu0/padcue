@@ -49,6 +49,13 @@ typedef struct {
     bool handshake_done;         // 0x80 0x02 受信済み
     uint32_t breadcrumb;         // padctl_procon_bc_t の OR
     uint32_t out_reports;        // 受信した出力レポート数
+    // サブコマンド 0x01(ペアリング)の引数先頭。本体(ホスト)の識別子が
+    // 入っていないかの調査用(計画 §0.1: 取れたら常時表示、取れなければ
+    // 物理記名で確定)。BT なら相手 MAC が入る場所だが、有線 USB では
+    // 何が来るかを実機で一度確かめる
+    uint8_t host_info[8];
+    uint8_t host_info_len;
+    bool host_info_seen;
     padctl_procon_cb_t cb;
 } padctl_procon_t;
 

@@ -41,6 +41,8 @@ app_usb_mode_t app_usb_get_mode(void);
 bool app_usb_is_mounted(void);
 uint32_t app_usb_get_breadcrumb(void);      // プロコン方式の到達段階
 bool app_usb_imu_enabled(void);             // 本体が IMU を有効にしたか
+// ペアリング引数の先頭を1回だけ取り出す(本体識別子の調査。無ければ false)
+bool app_usb_take_host_info(uint8_t out[8], uint8_t *len);
 uint32_t app_usb_get_dropped_replies(void); // 送出キュー溢れ(正常時 0)
 
 // 送出まわりの実測値。「割り込みは定刻だったが実際の出力は遅れた」を

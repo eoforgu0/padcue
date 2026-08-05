@@ -3,6 +3,7 @@
 #include <stdatomic.h>
 #include <string.h>
 
+#include "app_log.h"
 #include "driver/gptimer.h"
 #include "esp_attr.h"
 #include "esp_log.h"
@@ -498,6 +499,13 @@ esp_err_t app_engine_select(uint8_t arm) {
     if (!app_engine_is_awaiting()) {   // 停止済みの残留 awaiting は受けない
         return ESP_ERR_INVALID_STATE;
     }
+    // 入場券: awaiting の取り下げを先に行う。PC からの SELECT(ctrl タスク)
+    // と駐機タイムアウト(supervisor タスク)が同瞬に入っても、通るのは
+    // 片方だけになる。失敗時は下で戻す(取りっぱなしだと駐機が迷子になる)
+    if (!atomic_exchange_explicit(&s_awaiting, false,
+                                  memory_order_acq_rel)) {
+        return ESP_ERR_INVALID_STATE;
+    }
     // 駐機中はアラームが鳴らないため、区切り停止の取り消し(cancel)をしても
     // ISR の else 分岐(控えの破棄)が走っていない。ここで捨てないと、
     // 「予約→取り消し→選択で再開→再予約」のとき古い控えの周回数と比較して
@@ -514,7 +522,12 @@ esp_err_t app_engine_select(uint8_t arm) {
     // カウンタが止まっている以上その値は必ず 0 で、動いていなかった。
     // 「測っているつもりで測っていない」コードは残さない(2026-08-04)
     padctl_err_t perr = padctl_engine_select(&s_engine, arm, 0);
-    if (perr != PADCTL_OK) return ESP_ERR_INVALID_ARG;
+    if (perr != PADCTL_OK) {
+        // 腕が不正など。入場券(awaiting)を戻さないと、エンジンは駐機した
+        // ままなのに選択待ちが見えなくなり、誰も選べなくなる
+        atomic_store_explicit(&s_awaiting, true, memory_order_release);
+        return ESP_ERR_INVALID_ARG;
+    }
 
     if (!advance_to_next_emission()) {
         atomic_store_explicit(&s_awaiting, false, memory_order_release);
@@ -531,6 +544,49 @@ esp_err_t app_engine_select(uint8_t arm) {
     esp_err_t err = gptimer_set_alarm_action(s_timer, &alarm);
     if (err != ESP_OK) return err;
     return gptimer_start(s_timer);
+}
+
+// ---- 駐機タイムアウト(procedure-format v3 の timeout_frames/on_timeout) ----
+// 駐機中は精度タイマー(gptimer)を止めてあるため、経過は esp_timer の
+// 実時間で数える(秒スケールの保険なので µs 精度は要らない)。
+// supervisor(100ms 周期)から呼ばれる。駐機中は gptimer が止まっていて
+// ISR と競合しないので、s_engine を直接読んでよい
+
+static uint32_t s_await_seen_gen;     // 経過を測り始めた駐機の世代
+static int64_t s_await_seen_us;       // その駐機を最初に見た時刻
+
+void app_engine_poll_await_timeout(void) {
+    if (!app_engine_is_awaiting()) {
+        return;
+    }
+    uint32_t gen = atomic_load_explicit(&s_await_gen, memory_order_acquire);
+    if (gen != s_await_seen_gen) {
+        // 新しい駐機。ここから数え始める(公開の 100ms 後から数え始まる
+        // ことになるが、タイムアウトは秒スケールの保険なので誤差の内)
+        s_await_seen_gen = gen;
+        s_await_seen_us = esp_timer_get_time();
+        return;
+    }
+    uint32_t tf = s_engine.await_timeout_frames;
+    if (tf == 0) {
+        return;                       // 0 = 無期限に待つ(既定)
+    }
+    int64_t waited_us = esp_timer_get_time() - s_await_seen_us;
+    if (waited_us < (int64_t)tf * s_period_ns / 1000) {
+        return;
+    }
+    uint8_t on_to = s_engine.await_on_timeout;
+    uint32_t waited_frames =
+        (uint32_t)((uint64_t)waited_us * 1000 / s_period_ns);
+    app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,
+                waited_frames, on_to);
+    if (on_to == 0) {
+        // 中断: 即時停止と同じ着地(supervisor が RUN_ABORT として記録する)
+        app_engine_stop(false);
+    } else {
+        // 指定の腕へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)
+        app_engine_select((uint8_t)(on_to - 1));
+    }
 }
 
 void app_engine_get_progress(app_engine_progress_t *out) {

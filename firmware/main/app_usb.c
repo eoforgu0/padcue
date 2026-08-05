@@ -339,4 +339,18 @@ uint32_t app_usb_get_breadcrumb(void) { return s_procon.breadcrumb; }
 // 本体がサブコマンド 0x40 で IMU を有効にしたか。
 // ジャイロが効かないときの切り分け用(false なら本体が読んでいない)
 bool app_usb_imu_enabled(void) { return s_procon.imu_enabled; }
+
+// ペアリング(サブコマンド 0x01)の引数先頭を1回だけ取り出す(本体識別子の
+// 調査用)。取り出したら控えは消える(同じ内容を毎周期ログに積まないため)
+bool app_usb_take_host_info(uint8_t out[8], uint8_t *len) {
+    if (!s_procon.host_info_seen) {
+        return false;
+    }
+    for (int i = 0; i < 8; i++) {
+        out[i] = s_procon.host_info[i];
+    }
+    *len = s_procon.host_info_len;
+    s_procon.host_info_seen = false;
+    return true;
+}
 uint32_t app_usb_get_dropped_replies(void) { return s_tx.dropped_replies; }

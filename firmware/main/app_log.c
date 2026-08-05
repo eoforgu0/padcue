@@ -94,7 +94,7 @@ static const char *KIND_NAMES[APP_LOG_KIND_MAX] = {
     "BOOT", "RUN_START", "RUN_DONE", "RUN_ABORT", "ENGINE_FAULT",
     "LATE_EVENT", "USB_MOUNT", "USB_UMOUNT", "USB_SUSPEND",
     "REPLY_DROPPED", "WIFI_LOST", "WIFI_UP", "STATE", "OTA",
-    "TX_LATE", "TX_LOST",
+    "TX_LATE", "TX_LOST", "AWAIT_TIMEOUT", "HOST_INFO",
 };
 
 const char *app_log_kind_name(uint8_t kind) {

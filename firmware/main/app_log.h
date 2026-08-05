@@ -32,6 +32,8 @@ typedef enum {
     APP_LOG_OTA,
     APP_LOG_TX_LATE,     // 状態が変わってから実際に送るまでが遅れた(a=件数, b=最大µs)
     APP_LOG_TX_LOST,     // 送出そのものに失敗した(a=応答, b=定期入力)
+    APP_LOG_AWAIT_TIMEOUT, // 駐機タイムアウト(a=待ったフレーム, b=on_timeout)
+    APP_LOG_HOST_INFO,   // ペアリング引数の先頭8バイト(本体識別子の調査用)
     APP_LOG_KIND_MAX,
 } app_log_kind_t;
 

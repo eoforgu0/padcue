@@ -42,7 +42,8 @@ def _first_await(events, start_index: int, start_base: int,
             return None, 0
         ev = events[idx]
         if isinstance(ev, binfmt.Await):
-            return base + ev.frame - skip, len(ev.targets)
+            return (base + ev.frame - skip, len(ev.targets),
+                    ev.timeout_frames, ev.on_timeout)
         if isinstance(ev, binfmt.SetCnt):
             counters[ev.counter] = ev.value
             idx += 1
@@ -53,10 +54,10 @@ def _first_await(events, start_index: int, start_base: int,
         elif isinstance(ev, binfmt.Jmp):
             idx = ev.target
         elif isinstance(ev, binfmt.End):
-            return None, 0
+            return None, 0, 0, 0
         else:
             idx += 1
-    return None, 0
+    return None, 0, 0, 0
 
 
 @dataclass
@@ -249,6 +250,20 @@ class MockDevice:
                 self._finish("RUN_ABORT")
                 return
             if r.get("awaiting"):
+                # 駐機タイムアウト(実機は supervisor が 100ms ごとに見る)。
+                # 経過は実時間×speed をフレームに直して数える
+                tf = r.get("await_timeout", 0)
+                if tf:
+                    waited = ((time.monotonic() - r["await_since"])
+                              * self.speed * 1e9 / self.frame_period_ns)
+                    if waited >= tf:
+                        self._log("AWAIT_TIMEOUT", int(waited),
+                                  r.get("await_on_timeout", 0))
+                        if r.get("await_on_timeout", 0) == 0:
+                            self._finish("RUN_ABORT")   # 中断
+                        else:
+                            self._resume_from_await(
+                                r, r["await_on_timeout"] - 1)
                 return   # 選択待ちの間は時間を刻まない
             elapsed = (time.monotonic() - r["t0"]) * self.speed
             frames = int(elapsed * 1e9 / self.frame_period_ns)
@@ -263,6 +278,7 @@ class MockDevice:
                 r["awaiting"] = True
                 self._await_gen += 1
                 r["frames"] = r["await_at"]
+                r["await_since"] = time.monotonic()
                 self._set_state("AWAITING")
                 return
             pass_now = r["frames"] // max(1, r["loop_frames"])
@@ -277,6 +293,22 @@ class MockDevice:
                 # で止まる。戻さないと a と完了周がポーリング依存の嘘になる)
                 r["frames"] = (r["graceful_pass"] + 1) * r["loop_frames"]
                 self._finish("RUN_ABORT")
+
+    def _resume_from_await(self, r: dict, arm: int) -> None:
+        """駐機からの再開(SELECT とタイムアウトの腕進みが共用)。
+        呼び出し元が self._lock を握っていること。"""
+        del arm   # どの腕でも所要時間は同じ扱い(時間モデルの簡略化)
+        r["awaiting"] = False
+        r["t0"] = time.monotonic()   # 待っていた時間ぶんずらす
+        r["frames_at_await"] = r["frames"]
+        # 次の周回の駐機点(実機は周回のたびに毎回駐機する)。
+        # 全周ぶん終わる位置なら駐機はもう無い
+        nxt = r["await_at"] + r["loop_frames"]
+        if r["total_frames"] and nxt >= r["total_frames"]:
+            r["await_at"] = None
+        else:
+            r["await_at"] = nxt
+        self._set_state("RUNNING")
 
     def _finish(self, kind: str) -> None:
         r = self._run
@@ -398,17 +430,7 @@ class MockDevice:
                     return self._err("STALE_SELECT",
                                      "その選択は前の駐機に宛てたものです"
                                      "(状態を取り直してください)")
-                r["awaiting"] = False
-                r["t0"] = time.monotonic()   # 待っていた時間ぶんずらす
-                r["frames_at_await"] = r["frames"]
-                # 次の周回の駐機点(実機は周回のたびに毎回駐機する)。
-                # 全周ぶん終わる位置なら駐機はもう無い
-                nxt = r["await_at"] + r["loop_frames"]
-                if r["total_frames"] and nxt >= r["total_frames"]:
-                    r["await_at"] = None
-                else:
-                    r["await_at"] = nxt
-                self._set_state("RUNNING")
+                self._resume_from_await(r, arm)
             return Message(proto.T_SELECT | proto.T_RESP, {})
         if t == proto.T_PASSTHRU:
             if self._state not in ("IDLE", "PASSTHRU"):
@@ -489,8 +511,9 @@ class MockDevice:
         # Await.frame はセグメント相対なので、ループ(Djnz が base を進める)の
         # 後ろにある待機分岐を e.frame のまま使うと「開始直後に選択待ち」に
         # 化けてしまう
-        await_rel, await_arms = _first_await(events, start_index, start_base,
-                                             skip)
+        (await_rel, await_arms,
+         await_timeout, await_on_timeout) = _first_await(
+            events, start_index, start_base, skip)
         with self._lock:
             self._run = {
                 "name": name, "t0": time.monotonic(), "frames": 0,
@@ -501,6 +524,10 @@ class MockDevice:
                 # 待機分岐があれば、そのフレームに達したら選択待ちで止まる
                 "await_at": await_rel,
                 "await_arms": await_arms,
+                # 駐機タイムアウト(procedure-format v3)。0 = 無期限
+                "await_timeout": await_timeout,
+                "await_on_timeout": await_on_timeout,
+                "await_since": 0.0,
                 "awaiting": False, "frames_at_await": 0,
             }
             self._set_state("RUNNING")

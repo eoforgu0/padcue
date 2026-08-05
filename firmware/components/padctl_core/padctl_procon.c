@@ -146,6 +146,12 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
 
     switch (sub) {
     case 0x01: {  // ペアリング(有線でも送られてくる)
+        // 引数の先頭を控える(本体識別子の調査用。padctl_procon.h 参照)
+        pc->host_info_len = (uint8_t)(arglen > 8 ? 8 : arglen);
+        for (uint8_t k = 0; k < pc->host_info_len; k++) {
+            pc->host_info[k] = arg[k];
+        }
+        pc->host_info_seen = true;
         fill_subcmd_header(pc, r, 0x81, sub);
         r[15] = 0x03;
         return PADCTL_PROCON_REPORT_SIZE;

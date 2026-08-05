@@ -132,6 +132,22 @@ static void supervisor_task(void *arg)
         if (awaiting && st == APP_STATE_RUNNING) {
             app_state_set(APP_STATE_AWAITING);   // 待機分岐で選択待ちになった
         }
+        // 駐機タイムアウト(手順に書いてあれば)。永久駐機の保険
+        app_engine_poll_await_timeout();
+        // ペアリング引数の控えがあれば記録する(本体識別子の調査。§0.1:
+        // 同じ本体で毎回同じ値が出るなら、どの Switch に繋がっているかの
+        // 自動識別に昇格できる。違えば物理記名で確定)
+        {
+            uint8_t hi[8];
+            uint8_t hilen;
+            if (app_usb_take_host_info(hi, &hilen)) {
+                app_log_put(APP_LOG_RING_CORE0, APP_LOG_HOST_INFO,
+                            ((uint32_t)hi[0] << 24) | ((uint32_t)hi[1] << 16)
+                            | ((uint32_t)hi[2] << 8) | hi[3],
+                            ((uint32_t)hi[4] << 24) | ((uint32_t)hi[5] << 16)
+                            | ((uint32_t)hi[6] << 8) | hi[7]);
+            }
+        }
         // RUN_START の記録は cmd_run(app_ctrl)が行う。ここでの running の
         // 立ち上がり検出だと、100ms より短い実行を取りこぼすうえ、手順名や
         // 周回数(RUN コマンドしか知らない情報)を載せられない
