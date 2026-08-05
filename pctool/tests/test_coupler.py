@@ -274,8 +274,10 @@ def test_couple_again_and_formations(env):
                          "resume": ""}]}
     assert post(base, "/api/formation_save",
                 {"name": "検証A", "data": data}).get("ok")
-    assert "検証A" in get(base, "/api/state")["formations"]
+    names = [f["name"] for f in get(base, "/api/state")["formations"]]
+    assert "検証A" in names, names
     r = post(base, "/api/formation_load", {"name": "検証A"})
     assert r["data"]["devices"][0]["loops"] == 5
     assert post(base, "/api/formation_delete", {"name": "検証A"}).get("ok")
-    assert "検証A" not in get(base, "/api/state")["formations"]
+    names = [f["name"] for f in get(base, "/api/state")["formations"]]
+    assert "検証A" not in names, names

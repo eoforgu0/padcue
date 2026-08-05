@@ -533,9 +533,15 @@ class _Handler(BaseHTTPRequestHandler):
                 return {"ok": True, "trials": []}
             if action == "mark":
                 ok = bool(body.get("success"))
-                _Handler.trials = list(self.trials) + [ok]
+                # ○×に「何を試したか」を添える(ペア反復では手順の版と
+                # 開始ズレも成功率の文脈になる。計画 §2c)
+                entry = {"ok": ok,
+                         "target": str(body.get("target", "")),
+                         "skew_ms": body.get("skew_ms"),
+                         "hash": str(body.get("hash", ""))}
+                _Handler.trials = list(self.trials) + [entry]
                 n = len(self.trials)
-                s = sum(1 for x in self.trials if x)
+                s = sum(1 for x in self.trials if x["ok"])
                 return {"ok": True, "count": n, "success": s,
                         "rate": round(100 * s / n, 1) if n else 0.0,
                         "trials": self.trials}
@@ -650,6 +656,9 @@ class _Handler(BaseHTTPRequestHandler):
                     "name": name, "frames": r.total_frames,
                     "seconds": round(r.seconds, 1), "hash": r.hash,
                     "warnings": len(r.warnings), "pre": r.pre,
+                    # 最初の待機分岐の腕の名前(連結バーの「進む腕」の表示用)
+                    "arms": (r.wait_branch_arms[0]
+                             if r.wait_branch_arms else []),
                 })
         cfg = self.project.load_config()
         out = {"procedures": procs, "host": cfg.get("host", ""),
@@ -686,7 +695,13 @@ class _Handler(BaseHTTPRequestHandler):
         # 連結の状態(2台以上のときだけ。1台の応答は従来と同じ形を保つ)
         if len(devices) >= 2:
             out["coupling"] = self._coupler().snapshot()
-            out["formations"] = self.project.formation_names()
+            fmts = []
+            for fname in self.project.formation_names():
+                try:
+                    fmts.append(self.project.load_formation(fname))
+                except (OSError, ValueError):
+                    fmts.append({"name": fname, "error": "読めません"})
+            out["formations"] = fmts
         # 互換: 従来の1台形は devices[0] の写し(P2-2 の画面切替まで
         # 既存 JS を支える)
         if devices:
@@ -882,6 +897,22 @@ header { position:relative; }
 .subh { font-size:11.5px; letter-spacing:.1em; color:var(--muted);
   font-weight:700; margin:12px 0 7px; padding-top:10px;
   border-top:1px solid var(--line); }
+/* 連結バー(連結中にだけ存在する)。左の帯で「まとめる場所」を示す */
+.coupler { border-left:4px solid var(--accent); }
+.coupler .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em;
+  font-weight:700; }
+.chip.link { color:var(--accent); border-color:var(--accent);
+  font-weight:700; }
+/* 相方待ち(連結中の正常な待ち)は藍。黄色は「人の操作が要る」専用、
+   赤は装置の異常専用(計画 §2b の三態色) */
+.chip.wait { color:var(--accent); border-color:var(--accent); }
+.msg.wait { background:var(--accent-soft); color:var(--accent); }
+.lane h2 .runchip { font-size:10.5px; padding:1px 8px; }
+/* 連結中のレーン単独 SELECT は畳んでおく(合流の対応がずれる操作なので、
+   ワンクリックでは押させない) */
+details.soloadv summary { cursor:pointer; font-size:12px;
+  color:var(--muted); }
+details.soloadv { margin-top:6px; }
 main { display:grid; gap:14px; padding:14px; align-items:start;
   flex:1; min-height:0; overflow:auto; }
 /* 中身が広いとき、列そのものを広げずに中で横スクロールさせる
@@ -1248,8 +1279,72 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div class="hint" id="devhint" style="display:none">2台目を作ったら、
         「＋ 装置を追加」で登録します(受け入れの全手順は docs/runbook.md)</div>
     </div>
+    <!-- 編成 = 盤面(連結・装置×手順×周回×開始位置・合流の腕)のスナップ
+         ショット。2台以上のときだけ出る -->
+    <div class="card" id="formcard" style="display:none">
+      <h2>編成(残した組み合わせ)</h2>
+      <div id="formlist"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" id="formsave"
+                title="いまの盤面(連結・手順・周回・開始位置・合流の腕)に名前を付けて残します">
+          今の盤面を保存</button>
+      </div>
+      <div id="formmsg"></div>
+      <div class="hint">呼び出す → 右の盤面で全容を確かめる → 連結バーの
+        ▶ で開始。呼び出したあとに盤面を触ると、連結バーの編成名に * が付きます</div>
+    </div>
   </div>
   <div class="stack v-home">
+    <!-- 連結バー: 2台をまとめる唯一の場所。連結中にだけ存在し、外すと
+         語彙ごと消える(案C の中核。モードや状態を覚えさせない) -->
+    <div class="card coupler" id="coupler" style="display:none">
+      <div class="row">
+        <span class="lbl">⧉ 連結</span>
+        <span class="chip link">連結中</span>
+        <span class="chip" id="cformation" style="display:none"
+              title="呼び出した編成。盤面(手順・周回・合流)を編成から変えると * が付きます"></span>
+        <span class="sep-v"></span>
+        <button class="primary" id="crun1"
+                title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
+        <button class="primary" id="crun"
+                title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
+        <button id="cagain"
+                title="直前と同じ条件(手順・周回・開始位置)でもう一度まとめて開始します。検証の反復用">⟲ もう一回(同じ条件)</button>
+        <span class="sep-v"></span>
+        <button id="cstopg"
+                title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
+        <button class="danger" id="cstopi"
+                title="どちらも、その場で全ボタンを離して止まります">⏹ 両方を今すぐ止める</button>
+        <span class="sep-v"></span>
+        <button class="small" id="cunlink"
+                title="連結を外しても、いま走っている組の連動は変わりません(連動は開始のされ方で決まります)。次の開始から独立になります">連結を外す</button>
+      </div>
+      <div class="row" style="margin-top:7px">
+        <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0"
+               title="両方が待機分岐に着いたら、右の腕を自動で選んで同時に進めます。片方の異常(装置の異常報告・約5秒見えない)では相方も止めます">
+          <input type="checkbox" id="cauto">自動合流</label>
+        <label title="自動合流が選ぶ側。編成にも保存されます">進む腕
+          <select id="carm"></select></label>
+        <button id="coneshot"
+                title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">✋ 次の合流は自分で選ぶ(1回だけ)</button>
+        <span class="sep-v"></span>
+        <span class="lbl">両方へ同時に選ぶ</span>
+        <span id="cbotharms" class="row" style="margin:0;gap:6px"></span>
+      </div>
+      <!-- cmsg = 連動停止の理由と再開、ワンショットの案内(状態から毎秒作る) -->
+      <div id="cmsg"></div>
+      <!-- cactmsg = 連結バーの操作(開始/停止/選択)の結果。次の操作まで残す -->
+      <div id="cactmsg"></div>
+      <div class="hint" id="chint"></div>
+    </div>
+    <!-- 連結していないとき(2台以上)は、これだけが残る -->
+    <div class="card" id="couplecta" style="display:none">
+      <div class="row">
+        <button id="clink"
+                title="まとめて開始・自動合流・連動停止・両方へ同時に選ぶ、は連結したときにだけ現れます">◇ 連結する</button>
+        <span class="hint" style="margin:0">いま 2 台は無関係です。それぞれのレーンから別々に動かせます</span>
+      </div>
+    </div>
     <!-- 装置が2台以上のときは、下の3カード(接続・実行・タイムライン)を
          隠して、装置ごとのレーンをここに並べる(案C。1台なら従来のまま) -->
     <div class="lanes" id="lanes" style="display:none"></div>
@@ -1839,6 +1934,21 @@ const LOG_JA = {
   WIFI_UP:       () => 'WiFi につながりました',
   STATE:         (a, b) => `状態: ${STATE_NAMES[a] || a} → ${STATE_NAMES[b] || b}`,
   OTA:           (a, b) => `ファームウェアを更新しました(${b} バイト)`,
+  // ---- PC 側の合成ログ(連結。ms は装置間のズレ、装置内の µs とは別物) ----
+  PC_SET_START:  (a, b, c, e) => '連結でまとめて開始'
+    + (e && e.name ? `: ${e.name}` : '')
+    + `(${a === 0 ? '止めるまで' : `${a} 周`}`
+    + (b ? `・開始ズレ ${b}ms` : '') + ')',
+  PC_AUTO_JOIN:  (a, b, c) => c
+    ? '自動合流(ソロ進行): 相方は手で止められているので、待たずに進みました'
+    : `自動合流: 両方そろったので「${armLabels()[a] || `腕${a + 1}`}」を`
+      + `選びました(ズレ ${b}ms)`,
+  PC_SELECT_BOTH: (a, b) => `両方へ同時に選択: 「${armLabels()[a]
+    || `腕${a + 1}`}」(ズレ ${b}ms)`,
+  PC_LINK_STOP:  (a, b, c, e) => '連動停止: '
+    + ((e && e.why) || '相方の異常') + `(${a ? 'その場で' : '今の周で'})`,
+  PC_WAIT_LATE:  (a) => `⚠ 相方待ちが ${a} 秒続いています`
+    + '(この編成のいつもの待ちを超えました)',
 };
 // app_state_t の並び(firmware/main/app_state.h)
 const STATE_NAMES = ['起動中', 'WiFi 接続中', '待機中', '実行中', '選択待ち',
@@ -1848,6 +1958,7 @@ const LOG_LEVEL = {
   ENGINE_FAULT: 'err', USB_UMOUNT: 'err', WIFI_LOST: 'err',
   LATE_EVENT: 'warn', REPLY_DROPPED: 'warn', USB_SUSPEND: 'warn',
   RUN_ABORT: 'warn', TX_LATE: 'warn', TX_LOST: 'err',
+  PC_LINK_STOP: 'err', PC_WAIT_LATE: 'warn',
 };
 
 // ログ1件を「時刻・重み・本文」に開く。重みは色分けに使う
@@ -2543,8 +2654,10 @@ function buildLane(d) {
   lane.card = card;
   const h2 = el('h2');
   lane.dot = el('span', 'dot');
+  lane.badge = el('span', 'chip runchip');   // ⧉連結して開始 / 単独で実行中
+  lane.badge.style.display = 'none';
   lane.tlprog = el('span', 'tlprog');
-  h2.append(lane.dot, el('b', null, d.name), lane.tlprog);
+  h2.append(lane.dot, el('b', null, d.name), lane.badge, lane.tlprog);
   card.append(h2);
   // 接続(1台時の「マイコンとの接続」カードに相当)
   const bar = el('div', 'devbar');
@@ -2883,13 +2996,78 @@ function updateLane(lane, d) {
   } else {
     lane.tlprog.textContent = '';
   }
-  // 待機分岐の選択(単独実行なので、この装置だけが進むことを明記)
+  // 実行のされ方のバッジ(積極表示。連結して開始した組は片方異常で連動停止)
+  const c = cpl();
+  const inRun = !!(c && c.run && c.run.active
+                   && (c.run.members || []).includes(lane.name));
+  if (inRun) {
+    lane.badge.style.display = '';
+    lane.badge.className = 'chip link runchip';
+    lane.badge.textContent = '⧉ 連結して開始';
+    lane.badge.title = '連結して開始した組。相方の異常時は両方止まります。'
+      + '手で止めた場合は連動しません';
+  } else if (running || awaiting) {
+    lane.badge.style.display = '';
+    lane.badge.className = 'chip runchip';
+    lane.badge.textContent = '単独で実行中';
+    lane.badge.title = '単独で開始した実行。相方の状態に影響されません';
+  } else {
+    lane.badge.style.display = 'none';
+  }
+  // 待機分岐の表示。三態色(計画 §2b): 青=相方待ち(自動で進む予定)/
+  // 緑=そろって進んだ直後/黄=人の操作が要る・相方が来ない。赤は装置異常専用
   lane.awaitbox.textContent = '';
+  const autoJoinLive = inRun && c.auto_join && !c.oneshot_manual;
   if (awaiting) {
-    lane.awaitbox.append(
-      el('div', 'msg warn', '待機分岐で止まっています。進む先を選んで'
-         + `ください(${lane.name} だけが進みます)`),
-      armRow(d, lane.name, lane.awaitbox));
+    if (lane.parkedGenSeen !== d.await_gen) {
+      lane.parkedGenSeen = d.await_gen;
+      lane.parkedAt = Date.now();
+    }
+    if (autoJoinLive) {
+      lane.chip.className = 'chip wait';
+      lane.chip.textContent = '相方待ち';
+      const late = c.run.late && c.run.late.dev === lane.name;
+      const sec = Math.max(0, Math.round(
+        (Date.now() - (lane.parkedAt || Date.now())) / 1000));
+      if (late) {
+        lane.awaitbox.append(el('div', 'msg warn',
+          `相方(${c.run.late.partner})が来ません`
+          + '(この編成のいつもの待ちを超えました)。相方のレーンの状態を'
+          + '確かめてください'));
+      } else {
+        const armName = armLabels()[c.arm | 0] || `腕${(c.arm | 0) + 1}`;
+        lane.awaitbox.append(el('div', 'msg wait',
+          `相方待ち ${sec}秒 — 相方が同じ待機分岐に着いたら、自動で`
+          + `「${armName}」を選んで両方いっしょに進みます(異常ではありません)`));
+      }
+    } else if (inRun) {
+      lane.awaitbox.append(el('div', 'msg warn',
+        '待機分岐で止まっています。連結バーの「両方へ同時に選ぶ」で'
+        + '両方まとめて進められます'));
+    } else {
+      lane.awaitbox.append(
+        el('div', 'msg warn', '待機分岐で止まっています。進む先を選んで'
+           + `ください(${lane.name} だけが進みます)`),
+        armRow(d, lane.name, lane.awaitbox));
+    }
+    if (inRun) {
+      // 連結中の単独 SELECT は合流の対応がずれるので、畳んで警告つきで置く
+      const det = document.createElement('details');
+      det.className = 'soloadv';
+      const sum = document.createElement('summary');
+      sum.textContent = `${lane.name} だけ進める…(合流の対応がずれます)`;
+      det.append(sum,
+                 el('div', 'hint',
+                    `連結中に ${lane.name} だけ進めると、次の合流の相手が`
+                    + '1周ずれます。意図してずらす検証のとき以外は、待つか、'
+                    + '連結バーの「両方へ同時に選ぶ」を使ってください'),
+                 armRow(d, lane.name, lane.awaitbox));
+      lane.awaitbox.append(det);
+    }
+  } else if (inRun && c.run.last_join && !c.run.last_join.solo
+             && Date.now() / 1000 - c.run.last_join.at < 3) {
+    lane.awaitbox.append(el('div', 'msg ok',
+      `そろって進みました(ズレ ${c.run.last_join.skew_ms ?? '?'}ms)`));
   }
   // 「実行中のまま戻らない」の自動復旧(1台時と同じ規則を装置ごとに)
   if (stateBusy && !running && !awaiting) lane.stuckPolls++;
@@ -2949,12 +3127,19 @@ function renderLanes() {
   });
   // 共有カード(反復テスト・手動操作)のボタン抑止は「対象」装置の状態で決める
   const tsel = document.getElementById('trialdev');
-  const t = devs.find(x => x.name === tsel.value) || devs[0];
-  const tBusy = !!t && !t.error && (t.running || t.awaiting
-    || t.state === 'RUNNING' || t.state === 'AWAITING');
-  const tLane = t && laneMap.get(t.name);
-  document.getElementById('trialrun').disabled =
-    !t || !!t.error || tBusy || !(tLane && tLane.proc.value);
+  if (tsel.value === '__pair__') {
+    // ペア反復(連結して1回=1試行)は、どちらかが動いていると試せない
+    document.getElementById('trialrun').disabled = devs.slice(0, 2)
+      .some(d => !d.error && (d.running || d.awaiting));
+  } else {
+    const t = devs.find(x => x.name === tsel.value) || devs[0];
+    const tBusy = !!t && !t.error && (t.running || t.awaiting
+      || t.state === 'RUNNING' || t.state === 'AWAITING');
+    const tLane = t && laneMap.get(t.name);
+    document.getElementById('trialrun').disabled =
+      !t || !!t.error || tBusy || !(tLane && tLane.proc.value);
+  }
+  renderCoupling();
   const msel = document.getElementById('manualdev');
   const m = devs.find(x => x.name === msel.value) || devs[0];
   const mBusy = !!m && !m.error && (m.running || m.awaiting);
@@ -2973,15 +3158,23 @@ function syncTargetSelects(devs, multi) {
   document.getElementById('trialdevwrap').style.display = multi ? '' : 'none';
   document.getElementById('manualdevwrap').style.display = multi ? '' : 'none';
   if (!multi) return;
-  const key = devs.map(x => x.name).join('\n');
+  const paired = !!(cpl() && cpl().on);
+  const key = devs.map(x => x.name).join('\n') + (paired ? '|p' : '');
   for (const selId of ['trialdev', 'manualdev']) {
     const sel = document.getElementById(selId);
     if (sel.dataset.key === key) continue;
     sel.dataset.key = key;
     const keep = sel.value;
     sel.textContent = '';
+    if (selId === 'trialdev' && paired) {
+      // ペア反復: 連結の1回実行(2台の組)を1試行として数える
+      sel.append(new Option(
+        `連結(${devs.slice(0, 2).map(d => d.name).join('+')} で1試行)`,
+        '__pair__'));
+    }
     for (const x of devs) sel.append(new Option(x.name, x.name));
-    if (devs.some(x => x.name === keep)) sel.value = keep;
+    if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+    else if (selId === 'trialdev' && paired) sel.value = '__pair__';
     else {
       // 既定は「動いていない装置」(実機の誤操作防止)
       const idle = devs.find(x => !x.error && !x.running && !x.awaiting);
@@ -2995,6 +3188,425 @@ function manualTarget() {
   return (state.devices || []).length >= 2
     ? document.getElementById('manualdev').value : '';
 }
+
+// ============ 連結バー(2台をまとめる唯一の場所。案C+D6〜D8) ============
+// 連動の実体はサーバ(coupler.py)。ここは盤面の写像と操作の入口だけ
+
+let loadedFormation = '';    // 呼び出した編成の名前('' = 未使用)
+let cplStopSeen = 0;         // 連動停止の知らせを × で閉じた時刻(at)
+
+function cpl() { return state.coupling || null; }
+
+function laneByName(name) {
+  const d = (state.devices || []).find(x => x.name === name);
+  return d ? laneMap.get(d.name) : null;
+}
+
+// 「進む腕」の名前。レーンの手順の最初の待機分岐から取る(無ければ相方から)
+function armLabels() {
+  for (const d of state.devices || []) {
+    const lane = laneMap.get(d.name);
+    if (!lane) continue;
+    const p = state.procedures.find(x => x.name === lane.proc.value);
+    if (p && (p.arms || []).length) return p.arms;
+  }
+  return [];
+}
+
+// いまの盤面から開始の計画を作る(loops1 = 1回実行の強制)
+function planFromLanes(once) {
+  const plan = [];
+  for (const d of state.devices || []) {
+    const lane = laneMap.get(d.name);
+    if (!lane) return null;
+    const v = parseInt(lane.loops.value, 10);
+    const at = lane.resume.value;
+    const p = {dev: d.name, name: lane.proc.value,
+               loops: once ? 1 : (Number.isFinite(v) && v >= 0 ? v : 0)};
+    if (at && at !== '先頭') p.resume_from = at;
+    plan.push(p);
+  }
+  return plan;
+}
+
+async function coupleRun(once) {
+  if (manualOn) await setManual(false);
+  const plan = planFromLanes(once);
+  if (!plan) return;
+  // 開始位置ぶんの再生位置の起点を各レーンに控える(単独実行と同じ理屈)
+  for (const p of plan) {
+    const lane = laneByName(p.dev);
+    const pt = ((lane.tl && lane.tl.resume_points) || [])
+      .find(x => x.name === p.resume_from);
+    lane.runOffset = pt ? (pt.frame || 0) : 0;
+  }
+  show('cactmsg', '', '');
+  const body = {plan};
+  if (loadedFormation && !formationDirty()) body.formation = loadedFormation;
+  const r = await api('/api/couple_run', 'POST', body);
+  if (r.error) { show('cactmsg', 'err', r.error); return; }
+  const w = (r.warnings || []).join(' / ');
+  show('cactmsg', w ? 'warn' : 'ok',
+       `まとめて開始しました(開始ズレ ${r.skew_ms ?? '?'}ms)`
+       + (w ? ` — ${w}` : ''));
+  refresh();
+}
+
+// 受け付けをビープで返す(F9/F10 は画面を見ずに打つキーなので)
+let audioCtx = null;
+
+function beep(freq) {
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = freq;
+    g.gain.value = 0.06;
+    o.connect(g).connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.09);
+  } catch (e) { /* 音が出せない環境では黙って続ける */ }
+}
+
+// F9 = 全部止める / F10 = もう一回。連結中のみ(誤爆防止)
+document.addEventListener('keydown', async e => {
+  const c = cpl();
+  if (!c || !c.on || (state.devices || []).length < 2) return;
+  if (e.key === 'F9') {
+    e.preventDefault();
+    beep(440);
+    const r = await api('/api/stop_both', 'POST', {mode: 'immediate'});
+    show('cactmsg', r.error ? 'err' : 'ok',
+         r.error || 'F9: 両方を今すぐ止めました');
+    refresh();
+  } else if (e.key === 'F10') {
+    e.preventDefault();
+    beep(880);
+    const r = await api('/api/couple_again', 'POST', {});
+    show('cactmsg', r.error ? 'err' : 'ok',
+         r.error || 'F10: 同じ条件でもう一回開始しました');
+    refresh();
+  }
+});
+
+// 盤面が呼び出した編成と食い違っているか(* 表示に使う)
+function formationDirty() {
+  if (!loadedFormation) return false;
+  const f = (state.formations || []).find(x => x.name === loadedFormation);
+  const c = cpl();
+  if (!f || !c) return true;
+  if (!!f.linked !== !!c.on || !!f.auto_join !== !!c.auto_join
+      || (f.arm | 0) !== (c.arm | 0)) return true;
+  for (const fd of f.devices || []) {
+    const d = (state.devices || []).find(x => x.id === fd.id);
+    const lane = d && laneMap.get(d.name);
+    if (!lane) return true;
+    const v = parseInt(lane.loops.value, 10) || 0;
+    const at = lane.resume.value;
+    if (lane.proc.value !== fd.proc || v !== (fd.loops | 0)
+        || (at === '先頭' ? '' : at) !== (fd.resume || '')) return true;
+  }
+  return false;
+}
+
+async function applyFormation(f) {
+  // 実行中の呼び出しはガード(盤面が実行と食い違うと誤読のもと)
+  const busy = (state.devices || []).some(d => !d.error
+    && (d.running || d.awaiting));
+  if (busy) {
+    show('formmsg', 'err', '実行中は編成を呼び出せません。止めてからどうぞ');
+    return;
+  }
+  for (const fd of f.devices || []) {
+    const d = (state.devices || []).find(x => x.id === fd.id);
+    if (!d) {
+      show('formmsg', 'err', `この編成の装置(ID 下4桁 ${String(fd.id)
+        .slice(-4).toUpperCase()})が台帳にいません`);
+      return;
+    }
+    const lane = laneMap.get(d.name);
+    if (!lane) return;
+    if (!state.procedures.some(p => p.name === fd.proc)) {
+      show('formmsg', 'err', `手順「${fd.proc}」が見つかりません`);
+      return;
+    }
+    lane.proc.value = fd.proc;
+    lane.proc.onchange();
+    lane.loops.value = String(fd.loops | 0);
+    lane.pendingResume = fd.resume || '';
+  }
+  await api('/api/couple', 'POST', {on: !!f.linked,
+                                    auto_join: !!f.auto_join,
+                                    arm: f.arm | 0});
+  loadedFormation = f.name;
+  show('formmsg', 'ok', `「${f.name}」を盤面にしました。開始はしていません`
+       + '(連結バーの ▶ で開始)');
+  refresh();
+}
+
+let formsKey = '';
+
+function renderFormations() {
+  const devs = state.devices || [];
+  const box = document.getElementById('formlist');
+  const key = JSON.stringify([state.formations, devs.map(d => [d.id, d.name]),
+                              loadedFormation]);
+  if (key === formsKey) return;
+  formsKey = key;
+  box.textContent = '';
+  const forms = state.formations || [];
+  if (!forms.length) {
+    box.append(el('div', 'hint',
+      'まだありません。盤面(連結・手順・周回)を作って「今の盤面を保存」'));
+    return;
+  }
+  for (const f of forms) {
+    const row = el('div', 'proc devrow');
+    row.append(el('span', 'dot'), el('b', null, f.name),
+               el('span', 'rowops'));
+    const meta = el('div', 'meta');
+    const parts = (f.devices || []).map(fd => {
+      const d = devs.find(x => x.id === fd.id);
+      const nm = d ? d.name : `ID ${String(fd.id).slice(-4).toUpperCase()}`;
+      return `${nm} ${fd.proc}×${fd.loops || '∞'}`;
+    });
+    const arms = armLabels();
+    meta.append(el('span', null,
+      (f.linked ? '連結 ・ ' : '') + parts.join(' ＋ ')
+      + (f.auto_join ? ` ・ 合流: ${arms[f.arm] || `腕${(f.arm | 0) + 1}`}`
+                     : ' ・ 合流: 手動')));
+    const use = el('button', 'small', '呼び出す');
+    use.title = '盤面(連結・手順・周回・合流)をこの内容にします。開始はしません';
+    use.onclick = () => applyFormation(f);
+    meta.append(use);
+    const del = el('button', 'small', '削除');
+    del.title = 'この編成を消します(手順や記録は消えません)';
+    del.onclick = async () => {
+      if (!confirm(`編成「${f.name}」を消します。よろしいですか?`)) return;
+      await api('/api/formation_delete', 'POST', {name: f.name});
+      if (loadedFormation === f.name) loadedFormation = '';
+      refresh();
+    };
+    meta.append(del);
+    row.append(meta);
+    box.append(row);
+  }
+}
+
+document.getElementById('formsave').onclick = async () => {
+  const name = prompt('編成の名前', loadedFormation || '');
+  if (!name) return;
+  const c = cpl() || {};
+  const data = {linked: !!c.on, auto_join: !!c.auto_join, arm: c.arm | 0,
+                devices: []};
+  for (const d of state.devices || []) {
+    const lane = laneMap.get(d.name);
+    if (!lane) return;
+    const at = lane.resume.value;
+    data.devices.push({id: d.id, proc: lane.proc.value,
+                       loops: parseInt(lane.loops.value, 10) || 0,
+                       resume: at === '先頭' ? '' : at});
+  }
+  const r = await api('/api/formation_save', 'POST', {name, data});
+  if (r.error) { show('formmsg', 'err', r.error); return; }
+  loadedFormation = name;
+  show('formmsg', 'ok', `「${name}」として残しました`);
+  refresh();
+};
+
+// 連結バーと CTA の毎秒更新
+function renderCoupling() {
+  const devs = state.devices || [];
+  const multi = devs.length >= 2;
+  const c = multi ? cpl() : null;
+  document.getElementById('formcard').style.display = multi ? '' : 'none';
+  const bar = document.getElementById('coupler');
+  const cta = document.getElementById('couplecta');
+  if (!c) {
+    bar.style.display = 'none';
+    cta.style.display = 'none';
+    return;
+  }
+  renderFormations();
+  const names = devs.slice(0, 2).map(d => d.name);
+  const pair = `(${names.join('+')})`;
+  cta.style.display = c.on ? 'none' : '';
+  bar.style.display = c.on ? '' : 'none';
+  document.getElementById('clink').textContent =
+    `◇ ${names.join(' と ')} を連結する`;
+  if (!c.on) return;
+  const run = c.run || {};
+  const active = !!run.active;
+  // 盤面の全容1行(編成名+*)。編成を使っていないときは出さない
+  const fchip = document.getElementById('cformation');
+  if (loadedFormation) {
+    fchip.style.display = '';
+    fchip.textContent = '編成: ' + loadedFormation
+      + (formationDirty() ? ' *' : '');
+  } else {
+    fchip.style.display = 'none';
+  }
+  // 実行系ボタン
+  const someBusy = devs.slice(0, 2).some(d => !d.error
+    && (d.running || d.awaiting));
+  for (const [id, label] of [['crun1', `▶ 1回実行${pair}`],
+                             ['crun', `⟳ 周回実行${pair}`]]) {
+    const b = document.getElementById(id);
+    if (b.textContent !== label) b.textContent = label;
+    b.disabled = someBusy;
+    b.title = someBusy ? 'いま実行中なので押せません' : b.title;
+  }
+  document.getElementById('cagain').disabled = someBusy || !run.plan;
+  document.getElementById('cstopg').disabled = !someBusy;
+  document.getElementById('cstopi').disabled = !someBusy;
+  // 合流の設定
+  const auto = document.getElementById('cauto');
+  if (auto !== document.activeElement) auto.checked = !!c.auto_join;
+  const armSel = document.getElementById('carm');
+  const arms = armLabels();
+  const armKey = arms.join('\n');
+  if (armSel.dataset.key !== armKey) {
+    armSel.dataset.key = armKey;
+    armSel.textContent = '';
+    (arms.length ? arms : ['腕1', '腕2']).forEach((a, i) =>
+      armSel.append(new Option(a, String(i))));
+  }
+  if (armSel !== document.activeElement) armSel.value = String(c.arm | 0);
+  const oneshot = document.getElementById('coneshot');
+  oneshot.classList.toggle('armed', !!c.oneshot_manual);
+  oneshot.textContent = c.oneshot_manual
+    ? '✋ 次の合流は自分で選ぶ(取り消す)' : '✋ 次の合流は自分で選ぶ(1回だけ)';
+  // 両方へ同時に選ぶ(両方が選択待ちのときだけ押せる。ボタンは消さない)
+  const both = document.getElementById('cbotharms');
+  const ready = devs.slice(0, 2).every(d => !d.error && d.awaiting);
+  const bKey = armKey + '|' + ready;
+  if (both.dataset.key !== bKey) {
+    both.dataset.key = bKey;
+    both.textContent = '';
+    (arms.length ? arms : ['腕1', '腕2']).forEach((a, i) => {
+      const b = el('button', 'small', `${a}(両方へ)`);
+      b.disabled = !ready;
+      b.title = ready ? '両方へ同時に SELECT を送ります'
+                      : '両方が選択待ちのときに押せます';
+      b.onclick = async () => {
+        const r = await api('/api/select_both', 'POST', {arm: i});
+        show('cactmsg', r.error ? 'err' : 'ok',
+             r.error || `両方へ「${a}」を送りました(ズレ ${r.skew_ms}ms)`);
+        refresh();
+      };
+      both.append(b);
+    });
+  }
+  // 連動停止・ワンショットの知らせ
+  const box = document.getElementById('cmsg');
+  box.textContent = '';
+  const ls = run.linked_stop;
+  if (ls && !active && ls.at !== cplStopSeen) {
+    const m = el('div', 'msg err');
+    const t = el('span', 'msgtext');
+    t.append(`連動停止: ${ls.cause} — ${ls.why}。`
+             + 'もう一方も止めました(連結して開始した組のため)');
+    const row = el('div', 'row');
+    row.style.marginTop = '7px';
+    const totals = (c.formations && run.formation
+                    && c.formations[run.formation] || {}).total_laps || {};
+    const remainTxt = Object.entries(ls.remain || {})
+      .filter(([, v]) => v > 0).map(([k, v]) => `${k} 残り${v}周`).join('・');
+    const rs = el('button', 'small',
+                  `⟲ 続きから再開${remainTxt ? `(${remainTxt})` : ''}`);
+    rs.title = '残り周回を引き継いで、両方まとめて再開します';
+    rs.disabled = devs.slice(0, 2).some(d => d.error);
+    if (rs.disabled) rs.title = '両方が見えるようになると押せます';
+    rs.onclick = async () => {
+      const r = await api('/api/couple_resume', 'POST', {});
+      show('cactmsg', r.error ? 'err' : 'ok',
+           r.error || '続きから再開しました');
+      refresh();
+    };
+    row.append(rs);
+    // 片方だけ続ける(残った健康な側をソロで)
+    for (const d of devs.slice(0, 2)) {
+      const rem = (ls.remain || {})[d.name] | 0;
+      if (d.error || d.name === ls.cause || rem <= 0) continue;
+      const lane = laneMap.get(d.name);
+      const b = el('button', 'small', `${d.name} だけ続ける(残り${rem}周)`);
+      b.title = 'この装置だけ、残り周回をソロで実行します';
+      b.onclick = async () => {
+        const r = await api('/api/run', 'POST',
+                            {name: lane ? lane.proc.value : '',
+                             loops: rem, dev: d.name});
+        show('cactmsg', r.error ? 'err' : 'ok',
+             r.error || `${d.name} だけ再開しました(残り${rem}周)`);
+        refresh();
+      };
+      row.append(b);
+    }
+    t.append(row);
+    m.append(t);
+    const x = el('button', 'msgclose', '×');
+    x.title = '閉じる(再開の操作は編成・レーンからもできます)';
+    x.onclick = () => { cplStopSeen = ls.at; box.textContent = ''; };
+    m.append(x);
+    box.append(m);
+  } else if (active && c.oneshot_manual && ready) {
+    box.append(el('div', 'msg warn',
+      '両方そろいました。上の「両方へ同時に選ぶ」で進めてください'
+      + '(この1回は自動で選びません)'));
+  }
+  // ヒント(実測の常時表示)
+  const bits = [];
+  if (run.skew_ms != null) bits.push(`前回の開始ズレ ${run.skew_ms}ms`
+    + `(${run.members ? run.members.join('→') : ''})`);
+  if (run.last_join && run.last_join.skew_ms != null) {
+    bits.push(`合流ズレ ${run.last_join.skew_ms}ms`);
+  }
+  bits.push('ズレは毎回 ms でログにも残ります(装置内の µs とは別物)');
+  bits.push('連動停止が効くのは片方の異常(装置の異常報告・約5秒見えない)'
+            + 'のときだけで、手で止めたときは連動しません');
+  bits.push('F9 = 全部止める ／ F10 = もう一回(受け付けはビープ音)');
+  document.getElementById('chint').textContent = bits.join('。');
+}
+
+document.getElementById('clink').onclick = async () => {
+  await api('/api/couple', 'POST', {on: true});
+  refresh();
+};
+document.getElementById('cunlink').onclick = async () => {
+  await api('/api/couple', 'POST', {on: false});
+  refresh();
+};
+document.getElementById('crun1').onclick = () => coupleRun(true);
+document.getElementById('crun').onclick = () => coupleRun(false);
+document.getElementById('cagain').onclick = async () => {
+  const r = await api('/api/couple_again', 'POST', {});
+  show('cactmsg', r.error ? 'err' : 'ok',
+       r.error || `同じ条件でもう一回開始しました(開始ズレ ${r.skew_ms}ms)`);
+  refresh();
+};
+document.getElementById('cstopg').onclick = async () => {
+  const r = await api('/api/stop_both', 'POST', {mode: 'graceful'});
+  show('cactmsg', r.error ? 'err' : 'ok',
+       r.error || '両方とも、今の周が終わったら止まります');
+  refresh();
+};
+document.getElementById('cstopi').onclick = async () => {
+  const r = await api('/api/stop_both', 'POST', {mode: 'immediate'});
+  show('cactmsg', r.error ? 'err' : 'ok', r.error || '両方を止めました');
+  refresh();
+};
+document.getElementById('cauto').onchange = async e => {
+  await api('/api/couple', 'POST', {auto_join: e.target.checked});
+  refresh();
+};
+document.getElementById('carm').onchange = async e => {
+  await api('/api/couple', 'POST', {arm: parseInt(e.target.value, 10) || 0});
+  refresh();
+};
+document.getElementById('coneshot').onclick = async () => {
+  const c = cpl() || {};
+  await api('/api/couple', 'POST', {oneshot_manual: !c.oneshot_manual});
+  refresh();
+};
 
 // ============ 手順を編集 ============
 function resolve(path) {
@@ -4555,11 +5167,16 @@ function showTrial(r) {
 }
 document.getElementById('trialrun').onclick = async () => {
   if (manualOn) await setManual(false);   // 実行の前に手動操作を終える(doRun と同じ)
-  // 2台以上のときは「対象」装置のレーンの手順・開始位置で1回実行する
+  // 2台以上のときは「対象」装置のレーンの手順・開始位置で1回実行する。
+  // 対象「連結」なら2台の組を1試行としてまとめて開始する
   const devs = state.devices || [];
   if (devs.length >= 2) {
-    const name = document.getElementById('trialdev').value;
-    const d = devs.find(x => x.name === name) || devs[0];
+    const target = document.getElementById('trialdev').value;
+    if (target === '__pair__') {
+      await coupleRun(true);
+      return;
+    }
+    const d = devs.find(x => x.name === target) || devs[0];
     const lane = d && laneMap.get(d.name);
     if (!lane) return;
     await laneRun(lane, 1);
@@ -4572,10 +5189,30 @@ document.getElementById('trialrun').onclick = async () => {
   // 成功時も必ず書き換える。前回の失敗理由が残ると、今回も失敗したように読める
   show('trialmsg', r.error ? 'err' : '', r.error || '');
 };
+// ○×に「何を試したか」を添える。ペア反復は開始ズレmsと手順の版が
+// 成功率の文脈になる(計画 §2c)
+function trialCtx() {
+  const devs = state.devices || [];
+  if (devs.length < 2) return {target: ''};
+  const target = document.getElementById('trialdev').value;
+  const ctx = {target};
+  if (target === '__pair__') {
+    const run = (cpl() || {}).run;
+    if (run && run.skew_ms != null) ctx.skew_ms = run.skew_ms;
+    ctx.hash = devs.slice(0, 2).map(d => {
+      const lane = laneMap.get(d.name);
+      const p = lane && state.procedures.find(x => x.name === lane.proc.value);
+      return p ? p.hash : '';
+    }).join('+');
+  }
+  return ctx;
+}
 document.getElementById('trialok').onclick = async () =>
-  showTrial(await api('/api/trial', 'POST', {action: 'mark', success: true}));
+  showTrial(await api('/api/trial', 'POST',
+                      {action: 'mark', success: true, ...trialCtx()}));
 document.getElementById('trialng').onclick = async () =>
-  showTrial(await api('/api/trial', 'POST', {action: 'mark', success: false}));
+  showTrial(await api('/api/trial', 'POST',
+                      {action: 'mark', success: false, ...trialCtx()}));
 document.getElementById('trialreset').onclick = async () =>
   showTrial(await api('/api/trial', 'POST', {action: 'reset'}));
 

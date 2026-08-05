@@ -345,8 +345,25 @@ class Coupler:
         with self._lock:
             run = self._state.get("run")
             active = bool(run and run.get("active"))
-            if active:
-                run = json.loads(json.dumps(run))
+            run = json.loads(json.dumps(run)) if run else None
+        # 連動停止(今の周で)を指示した相手が、周を終える前に待機分岐へ
+        # 着いてしまうと、SELECT が来ない限り「今の周」は永遠に終わらない。
+        # 駐機は全ニュートラルで停止済み相当なので、見つけ次第すぐ止める
+        if run and not active and run.get("linked_stop"):
+            for link in members:
+                name = link.cfg.get("name")
+                st = link.status
+                if name in run.get("members", []) and not link.error \
+                        and st.get("awaiting") and st.get("stop_graceful"):
+                    try:
+                        link.write_through(status=link.call(
+                            lambda c: (c.stop("immediate"), c.status())[1]))
+                        self._log(link, "PC_LINK_STOP", a=1,
+                                  why="周の途中の待機分岐に着いたため、"
+                                      "そこで止めました")
+                    except (DeviceError, OSError, ConnectionError,
+                            TimeoutError):
+                        pass
         if not active or len(members) < 2:
             return
         by_name = {l.cfg.get("name"): l for l in members}
@@ -462,6 +479,13 @@ class Coupler:
         for link in members:
             self._log(link, "PC_AUTO_JOIN" if auto else "PC_SELECT_BOTH",
                       a=int(arm), b=skew_ms or 0, c=1 if solo else 0)
+        with self._lock:
+            cur = self._state.get("run")
+            if cur and cur.get("active"):
+                # 「そろって進んだ直後」の緑表示と、ズレの常時表示に使う
+                cur["last_join"] = {"at": _now(), "skew_ms": skew_ms,
+                                    "auto": auto, "solo": solo}
+                self._save_runstate()
         if formation and waited is not None and not solo:
             with self._lock:
                 st = self._state.setdefault("formations", {}) \

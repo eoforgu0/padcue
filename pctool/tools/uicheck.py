@@ -181,7 +181,16 @@ def main() -> int:
     cfg["devices"] = [{"id": "", "name": "1P",
                        "host": "127.0.0.1", "port": dev.port}]
     cfg["host"], cfg["port"] = "127.0.0.1", dev.port
+    cfg["coupling"] = {}
     proj.save_config(cfg)
+    (proj.root / "runstate.json").unlink(missing_ok=True)
+    if (proj.root / "sets").is_dir():
+        for f in (proj.root / "sets").glob("*.json"):
+            f.unlink()
+    # 連結の検査が作る一時手順も消す(残っていると1台系の検査の
+    # 「手順一覧はこの3つ」という前提が崩れる)
+    (proj.root / "procedures" / "選んで進む(遅).flow.json").unlink(
+        missing_ok=True)
 
     # 【重要】実機に触れないよう固定する(理由は tools/_localonly.py)
     lock_to_mock(dev.port)
@@ -227,6 +236,7 @@ def main() -> int:
         c = Checker(page, out)
         run_all(c, page, proj, dev, prompt_value, dialogs)
         run_multi(c, page, proj, dev, prompt_value, dialogs)
+        run_coupling(c, page, proj, prompt_value, dialogs)
         print()
         if errors:
             print("=== ブラウザ側のエラー ===")
@@ -2219,6 +2229,313 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("2台目を外すと従来の1台の画面に戻る", t_remove_returns_to_solo)
 
     m1.stop()
+
+
+
+def run_coupling(c: Checker, page, proj: Project,
+                 prompt_value: list, dialogs: list):
+    """連結バー(案C・P3/P4): まとめて開始・自動合流・連動停止・編成。"""
+    print("[連結(2台をまとめて動かす)]", flush=True)
+    c1 = MockDevice(speed=1.0, device_id="mockcp100000")
+    c2 = MockDevice(speed=1.0, device_id="mockcp200000")
+    c1.start()
+    c2.start()
+    # 相方待ちの色を見るための「遅い」版(分岐の前が5秒長い)
+    slow = {
+        "schema": 1, "name": "選んで進む(遅)", "body": [
+            {"type": "wait", "frames": 300},
+            {"type": "wait_branch", "arms": {
+                "出た": [{"type": "press", "buttons": ["B"], "frames": 5},
+                         {"type": "wait", "frames": 55}],
+                "出ない": [{"type": "press", "buttons": ["X"], "frames": 5},
+                           {"type": "wait", "frames": 25}],
+            }},
+            {"type": "wait", "frames": 30},
+        ],
+    }
+    import json as _json
+    (proj.root / "procedures" / "選んで進む(遅).flow.json").write_text(
+        _json.dumps(slow, ensure_ascii=False), encoding="utf-8")
+    cfg = proj.load_config()
+    cfg["devices"] = [{"id": "", "name": "1P",
+                       "host": "127.0.0.1", "port": c1.port},
+                      {"id": "", "name": "2P",
+                       "host": "127.0.0.1", "port": c2.port}]
+    proj.save_config(cfg)
+    page.click(".tab[data-view='home']")
+    page.wait_for_function(
+        "() => document.querySelectorAll('#lanes .lane').length === 2",
+        timeout=10000)
+
+    def lane(i: int):
+        return page.locator("#lanes .lane").nth(i)
+
+    def wait_lane_state(i: int, want: str, timeout_ms: int = 15000):
+        page.wait_for_function(
+            "([i, want]) => {"
+            "  const ch = document.querySelectorAll("
+            "    '#lanes .lane .devbar .chip')[i];"
+            "  return ch && ch.textContent === want; }",
+            arg=[i, want], timeout=timeout_ms)
+
+    def set_lane_proc(i: int, name: str):
+        page.wait_for_function(
+            f"() => document.querySelectorAll('#lanes .lane .lproc')[{i}]"
+            f" && [...document.querySelectorAll('#lanes .lane .lproc')[{i}]"
+            f".options].some(o => o.value === {name!r})", timeout=8000)
+        lane(i).locator(".lproc").select_option(name)
+
+    def wait_idle(timeout_ms: int = 30000):
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => !d.error && !d.running && !d.awaiting)",
+            timeout=timeout_ms)
+
+    def t_cta_only_before_link():
+        assert page.locator("#couplecta").is_visible(), "連結の入口が無い"
+        assert not page.locator("#coupler").is_visible(), \
+            "連結していないのに連結バーが見えている"
+        body = page.locator("#lanes").inner_text()
+        assert "連結して開始" not in body, "連結の語彙がレーンに漏れている"
+    c.check("連結する前は入口だけがあり、連結の語彙は無い",
+            t_cta_only_before_link)
+
+    def t_link_shows_bar():
+        page.click("#clink")
+        page.wait_for_function(
+            "() => document.querySelector('#coupler').style.display !== 'none'",
+            timeout=8000)
+        assert not page.locator("#couplecta").is_visible()
+        bar = page.locator("#coupler").inner_text()
+        for want in ("連結中", "1回実行", "周回実行", "もう一回",
+                     "両方を今の周で止める", "両方を今すぐ止める",
+                     "連結を外す", "自動合流", "進む腕",
+                     "次の合流は自分で選ぶ", "両方へ同時に選ぶ"):
+            assert want in bar, f"連結バーに「{want}」が無い"
+        assert page.locator("#formcard").is_visible(), "編成カードが出ない"
+    c.check("連結すると連結バーの一式が現れる", t_link_shows_bar)
+
+    def t_unlink_and_relink():
+        page.click("#cunlink")
+        page.wait_for_function(
+            "() => document.querySelector('#coupler').style.display === 'none'",
+            timeout=8000)
+        assert page.locator("#couplecta").is_visible(), "外したのに入口が戻らない"
+        page.click("#clink")
+        page.wait_for_function(
+            "() => document.querySelector('#coupler').style.display !== 'none'",
+            timeout=8000)
+    c.check("連結を外すとバーごと消え、入口に戻る", t_unlink_and_relink)
+
+    def t_pair_run_and_auto_join():
+        set_lane_proc(0, "選んで進む")
+        set_lane_proc(1, "選んで進む")
+        page.wait_for_timeout(300)
+        if not page.is_checked("#cauto"):
+            page.click("#cauto")
+            page.wait_for_timeout(600)
+        page.click("#crun1")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        badges = [lane(i).locator(".runchip").inner_text() for i in (0, 1)]
+        assert all("連結して開始" in b for b in badges), badges
+        msg = page.locator("#cactmsg").inner_text()
+        assert "開始ズレ" in msg and "ms" in msg, f"開始ズレの実測が出ない: {msg}"
+        wait_idle()          # 人が選ばなくても自動合流で完走する
+    c.check("まとめて1回実行 → 連結バッジ・開始ズレms・自動合流で完走",
+            t_pair_run_and_auto_join)
+
+    def t_wait_colors():
+        set_lane_proc(1, "選んで進む(遅)")
+        page.wait_for_timeout(300)
+        page.click("#crun1")
+        # 早い 1P が先に駐機 → 青の「相方待ち」(黄や赤ではない)
+        page.wait_for_function(
+            "() => {"
+            "  const l1 = document.querySelectorAll('#lanes .lane')[0];"
+            "  const m = l1.querySelector('.lawait .msg.wait');"
+            "  return m && m.textContent.includes('相方待ち'); }",
+            timeout=10000)
+        assert lane(0).locator(".devbar .chip").first.inner_text() \
+            == "相方待ち", "レーンの状態表示が相方待ちにならない"
+        assert lane(0).locator(".lawait .msg.warn").count() == 0, \
+            "正常な相方待ちに黄色が使われている"
+        # 畳んだ単独操作(合流の対応がずれる警告つき)がある
+        assert "だけ進める" in lane(0).locator(".soloadv").inner_text()
+        # そろったら緑「そろって進みました」
+        page.wait_for_function(
+            "() => {"
+            "  const ls = document.querySelectorAll('#lanes .lane');"
+            "  return [...ls].some(l => {"
+            "    const m = l.querySelector('.lawait .msg.ok');"
+            "    return m && m.textContent.includes('そろって進みました');"
+            "  }); }", timeout=15000)
+        wait_idle()
+        set_lane_proc(1, "選んで進む")
+        page.wait_for_timeout(300)
+    c.check("相方待ちは青、そろった直後は緑(黄は使わない)", t_wait_colors)
+
+    def t_oneshot_manual():
+        page.click("#coneshot")
+        page.wait_for_function(
+            "() => document.getElementById('coneshot')"
+            ".classList.contains('armed')", timeout=8000)
+        page.click("#crun1")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every(d => d.awaiting)",
+            timeout=10000)
+        page.wait_for_timeout(2000)      # 自動では選ばれない
+        assert page.evaluate(
+            "(state.devices || []).slice(0, 2).every(d => d.awaiting)"), \
+            "ワンショット中なのに自動で選ばれた"
+        assert "両方そろいました" in page.locator("#cmsg").inner_text()
+        page.locator("#cbotharms button", has_text="出た(両方へ)").click()
+        wait_idle()
+        assert not page.evaluate(
+            "document.getElementById('coneshot').classList.contains('armed')"
+        ), "人が選んだのにワンショットが解除されない"
+    c.check("「次の合流は自分で選ぶ」は1回だけ自動を止める", t_oneshot_manual)
+
+    def t_manual_stop_not_coupled():
+        lane(0).locator(".lloops").fill("0")
+        lane(1).locator(".lloops").fill("0")
+        page.click("#crun")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        lane(1).locator("button", has_text="2P を今すぐ止める").click()
+        wait_lane_state(1, "待機中")
+        page.wait_for_timeout(3000)      # 1P は止まらず(合流もソロで進む)
+        assert page.evaluate(
+            "state.devices[0].running || state.devices[0].awaiting"), \
+            "人為停止が連動してしまった"
+        page.keyboard.press("F9")        # 全部止めるホットキー
+        page.wait_for_function(
+            "() => document.querySelector('#cactmsg')"
+            ".textContent.includes('F9')", timeout=8000)
+        wait_idle()
+    c.check("人為停止は連動せず、F9 で全部止められる", t_manual_stop_not_coupled)
+
+    def t_linked_stop_banner():
+        lane(0).locator(".lloops").fill("5")
+        lane(1).locator(".lloops").fill("5")
+        page.click("#crun")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        c2.stop()                        # 2P が突然消える(異常)
+        page.wait_for_function(
+            "() => document.querySelector('#cmsg')"
+            ".textContent.includes('連動停止')", timeout=30000)
+        msg = page.locator("#cmsg").inner_text()
+        assert "続きから再開" in msg, f"再開の導線が無い: {msg}"
+        assert "だけ続ける" in msg, f"片方だけ続ける導線が無い: {msg}"
+        page.wait_for_function(
+            "() => !state.devices[0].running && !state.devices[0].awaiting",
+            timeout=20000)
+        # 片方だけ続ける → 1P だけソロで走る
+        page.locator("#cmsg button", has_text="だけ続ける").click()
+        page.wait_for_function(
+            "() => state.devices[0].running || state.devices[0].awaiting",
+            timeout=10000)
+        badge = lane(0).locator(".runchip").inner_text()
+        assert "単独" in badge, f"ソロ再開なのにバッジが: {badge}"
+        lane(0).locator("button", has_text="1P を今すぐ止める").click()
+        wait_lane_state(0, "待機中")
+    c.check("異常の連動停止: 理由と再開・片方だけ続けるがその場に出る",
+            t_linked_stop_banner)
+
+    # 2P を復活させる(以降の検査は2台とも健康な前提。実機なら電源を
+    # 入れ直して「探す」に相当)
+    c2b = MockDevice(speed=1.0, device_id="mockcp200000")
+    c2b.start()
+    cfg2 = proj.load_config()
+    cfg2["devices"][1]["host"] = "127.0.0.1"
+    cfg2["devices"][1]["port"] = c2b.port
+    proj.save_config(cfg2)
+    wait_lane_state(1, "待機中", 20000)
+
+    def t_pc_logs_readable():
+        page.wait_for_function(
+            "() => document.querySelector('#logs')"
+            ".textContent.includes('連結でまとめて開始')", timeout=8000)
+        body = page.locator("#logs").inner_text()
+        assert "自動合流" in body, "自動合流のログが読める形で出ていない"
+        assert "連動停止" in body, "連動停止のログが読める形で出ていない"
+        assert "PC_" not in body, "生のログ種別がそのまま画面に出ている"
+    c.check("連結のログが日本語で読める", t_pc_logs_readable)
+
+    def t_formation_roundtrip():
+        prompt_value[0] = "いつもの"
+        page.click("#formsave")
+        page.wait_for_function(
+            "() => document.querySelector('#formlist')"
+            ".textContent.includes('いつもの')", timeout=8000)
+        row = page.locator("#formlist .devrow", has_text="いつもの")
+        assert "連結" in row.inner_text(), "編成の概要に連結が出ない"
+        # 盤面を変えると * が付く
+        lane(0).locator(".lloops").fill("9")
+        page.wait_for_function(
+            "() => document.querySelector('#cformation')"
+            ".textContent.includes('*')", timeout=8000)
+        # 呼び出すと盤面が戻り、* が消える
+        row.locator("button", has_text="呼び出す").click()
+        page.wait_for_function(
+            "() => !document.querySelector('#cformation')"
+            ".textContent.includes('*')", timeout=8000)
+        assert lane(0).locator(".lloops").input_value() == "5", \
+            "呼び出しても周回が戻らない"
+        # 実行中の呼び出しは断られる
+        page.click("#crun1")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).some("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        row.locator("button", has_text="呼び出す").click()
+        page.wait_for_function(
+            "() => document.querySelector('#formmsg')"
+            ".textContent.includes('実行中')", timeout=8000)
+        wait_idle()
+        prompt_value[0] = "自動テスト"
+    c.check("編成: 保存・*表示・呼び出し・実行中ガード", t_formation_roundtrip)
+
+    def t_pair_trial():
+        opts = page.locator("#trialdev option").all_inner_texts()
+        assert any("連結" in o for o in opts), f"対象に連結が無い: {opts}"
+        page.select_option("#trialdev", "__pair__")
+        page.click("#trialreset")
+        page.wait_for_timeout(300)
+        page.click("#trialrun")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        wait_idle()
+        page.click("#trialok")
+        page.wait_for_function(
+            "() => document.querySelector('#trialchip')"
+            ".textContent.includes('1 / 1')", timeout=8000)
+    c.check("ペア反復: 連結の1回実行を1試行として数える", t_pair_trial)
+
+    def t_f10_again():
+        page.keyboard.press("F10")
+        page.wait_for_function(
+            "() => document.querySelector('#cactmsg')"
+            ".textContent.includes('F10')", timeout=8000)
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        wait_idle()
+    c.check("F10 でもう一回(同じ条件)", t_f10_again)
+
+    # あと片づけ: 編成を消し、1台に戻す
+    row = page.locator("#formlist .devrow", has_text="いつもの")
+    if row.count():
+        row.locator("button", has_text="削除").click()
+        page.wait_for_timeout(600)
+    (proj.root / "procedures" / "選んで進む(遅).flow.json").unlink(
+        missing_ok=True)
+    c1.stop()
+    c2b.stop()
 
 
 if __name__ == "__main__":
