@@ -334,9 +334,10 @@ def test_mock_first_await_is_absolute(tmp_path):
             "乙": [{"type": "wait", "frames": 10}]}},
         {"type": "wait", "frames": 5}]})
     c = compile_flow(str(p.root), "p")
-    rel, arms = _first_await(list(c.events), 0, 0, 0)
+    rel, arms, timeout, on_to = _first_await(list(c.events), 0, 0, 0)
     assert rel == 90, rel        # 30F × 3周 の後
     assert arms == 2
+    assert (timeout, on_to) == (0, 0)    # 未指定なら無期限に待つ
 
 
 # ---------------- ゆらぎ(ゼロ点自動較正よけ) ----------------
