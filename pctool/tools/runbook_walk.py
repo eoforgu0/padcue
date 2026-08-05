@@ -60,7 +60,11 @@ def main():
     gui._Handler.project = proj
     gui._Handler.recorder = None
     gui._Handler.trials = []
-    gui._Handler._drop_client()
+    # 前回の装置プールが残っていたら閉じる(P2-1 で接続は _Handler.pool に
+    # 一本化された。プロジェクト差し替え時の作法は uicheck と同じ)
+    if gui._Handler.pool is not None:
+        gui._Handler.pool.close()
+        gui._Handler.pool = None
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_port}"
@@ -280,12 +284,17 @@ def walk(page, proj, dev, prompt):
                 "td.ax input").nth(lx).fill("-1200")
         page.click("#savepart")
         page.wait_for_timeout(1200)
+        # 保存の成功は文で出ない(バッジが「保存済み」になり一瞬光る仕様。
+        # 2026-08-04 ユーザー指示)。文が出るのはエラーのときだけ
         pm = txt(page, "#partmsg")
-        print("     保存の結果:", pm)
-        if "保存" not in pm:
+        badge = txt(page, "#partinfo")
+        print("     保存の結果: 文=", pm or "(なし)", "／バッジ=", badge)
+        if pm:
             note("runbook 5-6 の例のとおり埋めた部品が保存できない: " + pm)
+        elif badge != "保存済み":
+            note(f"保存してもバッジが「保存済み」にならない: {badge!r}")
         else:
-            ok("部品を保存できた")
+            ok("部品を保存できた(保存済みバッジ)")
 
     # 作った部品を手順から選べるか(runbook 5-6 の最後の行)
     step("5-6(最後) 作った部品を手順の「部品」から選べるか")

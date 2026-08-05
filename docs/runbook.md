@@ -743,13 +743,21 @@ python -m switchctl config frame_period_ns 16666667    # 60.00Hz に戻す
    シリアルログに「個体ID: xxxxxxxxxxxx」と IP アドレスが表示されるので控える)
 2. **WiFi を本体保存にする**(§1 の仕上げと同じ。`switchctl --host <IP> config
    wifi_ssid <SSID>` と `wifi_pass`。ビルド設定に頼らず NVS に入れる)
-3. **すぐ登録する**: `switchctl device add <2台目のIP> 2P`
-   - 接続して個体IDを確認してから台帳に載せる。古いファームだと断られる
-     (先に `switchctl --host <IP> ota firmware/build/padctl.bin`)
+3. **すぐ登録する**(どちらでも同じ):
+   - 画面から: 左の**装置カードの「＋ 装置を追加」**。LAN から未登録の
+     実機を探して候補に出す(見つからないときは IP 直接指定の欄が出る)
+   - コマンドで: `switchctl device add <2台目のIP> 2P`
+   - どちらも接続して個体IDを確認してから台帳に載せる。古いファームだと
+     断られる(先に `switchctl --host <IP> ota firmware/build/padctl.bin`)
 4. **確認する**: `switchctl device list` で 1P/2P と個体IDが並ぶこと。
-   `switchctl --device 2P status` が返ること
-5. どちらのマイコンがどの Switch 用かは**本体に名前を書いて**対応づける
-   (画面から装置に合図を出す「識別」機能は2台対応画面と一緒に入る予定)
+   `switchctl --device 2P status` が返ること。画面なら装置カードに2行
+   並び、**実行・監視が装置ごとのレーン2本**に切り替わる
+5. どちらのマイコンがどの Switch 用かの対応づけ:
+   - **本体に名前を書く**(恒久の対応づけ。基本はこれ)
+   - 画面の**「識別」ボタン**: その装置だけに小さな入力(左スティック半分の
+     左右ゆらし)を約1秒送る。Switch の設定 → コントローラー →
+     「入力デバイスの動作チェック」を開いておくと、反応した本体が
+     その装置のつながっている先(待機中の装置にだけ送れる)
 
 **装置を交換したとき**(基板が変わると個体IDも変わる):
 `switchctl device forget <名前>` で控えを解除 → 新しい個体へ接続すると
