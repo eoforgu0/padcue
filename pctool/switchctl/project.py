@@ -216,8 +216,30 @@ class Project:
                 continue
         return out
 
-    def clear_logs(self) -> None:
-        self.log_path().unlink(missing_ok=True)
+    def clear_logs(self, dev: str = "") -> None:
+        """ログを消す。dev(装置の個体ID)を指定すると、その装置の行だけ消す
+        (2台運用で片方の記録だけ整理したいとき。絞り込み表示と対応)。"""
+        if not dev:
+            self.log_path().unlink(missing_ok=True)
+            return
+        # 読み→選別→書き戻しの間に収集係が追記すると消えてしまうので、
+        # 全体を書き込み lock の中で行う
+        with self._log_write_lock:
+            try:
+                lines = self.log_path().read_text(
+                    encoding="utf-8").splitlines()
+            except OSError:
+                return
+            kept = []
+            for line in lines:
+                try:
+                    if json.loads(line).get("dev") == dev:
+                        continue
+                except ValueError:
+                    pass                   # 壊れた行は消す対象を誤らない
+                kept.append(line)
+            self.log_path().write_text(
+                "\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
 
     # ---- 並び順(order.json) ----
     # 一覧の並びはユーザーが D&D で決める。保存先はプロジェクト直下の

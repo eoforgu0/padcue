@@ -230,10 +230,25 @@ class _Handler(BaseHTTPRequestHandler):
                 return {"error": "接続先を入力してください"
                                  "(分からなければ「探す」を押してください)"}
             cfg = self.project.load_config()
-            cfg["host"] = host
-            if body.get("port"):
-                cfg["port"] = int(body["port"])
-            self.project.save_config(cfg)
+            dev = (body.get("dev") or "").strip()
+            if dev:
+                # レーンの「接続」: 指定した装置の接続先だけを書き換える
+                idx = next((i for i, d in
+                            enumerate(cfg.get("devices", []))
+                            if d.get("name") == dev), None)
+                if idx is None:
+                    return {"error": f"装置「{dev}」は登録されていません"}
+                fields = {"host": host}
+                if body.get("port"):
+                    fields["port"] = int(body["port"])
+                self.project.update_device(cfg, idx, **fields)
+            else:
+                # 従来形(1台目)。旧キー host/port の書き換えは save_config が
+                # devices[0] へ取り込む
+                cfg["host"] = host
+                if body.get("port"):
+                    cfg["port"] = int(body["port"])
+                self.project.save_config(cfg)
             self._pool().refresh()       # 古い接続はプールが捨てて追従する
             return {"ok": True, "host": host}
         if path == "/api/discover":
@@ -242,7 +257,12 @@ class _Handler(BaseHTTPRequestHandler):
             # あると「自分の別の住所」が候補に混じる。確かめずに採用すると、
             # いま繋がっているのに未接続へ落ちる
             cfg = self.project.load_config()
-            dev0 = (cfg.get("devices") or [{}])[0]
+            # dev 指定でその装置を追跡する(レーンの「探す」)。省略時は1台目
+            devs_all = cfg.get("devices") or [{}]
+            want_name = (body.get("dev") or "").strip()
+            didx = next((i for i, d in enumerate(devs_all)
+                         if d.get("name") == want_name), 0) if want_name else 0
+            dev0 = devs_all[didx]
             cur_host = (dev0.get("host") or "").strip()
             cur_port = int(dev0.get("port", 5555))
             # 今つながっているなら何も変えない。収集キャッシュが健康なら
@@ -271,7 +291,8 @@ class _Handler(BaseHTTPRequestHandler):
                     continue
                 if not self._reachable(f.host, f.port):
                     continue
-                self.project.update_device(cfg, 0, host=f.host, port=f.port)
+                self.project.update_device(cfg, didx,
+                                           host=f.host, port=f.port)
                 self._pool().refresh()
                 return {"ok": True, "host": f.host,
                         "found": [{"host": x.host, "port": x.port, "fw": x.fw,
@@ -493,7 +514,8 @@ class _Handler(BaseHTTPRequestHandler):
                 "body": [{"type": "wait", "frames": 30}]})
             return {"ok": True}
         if path == "/api/logs/clear":
-            self.project.clear_logs()
+            # dev(個体ID)指定は「絞り込み中はその装置の分だけ消す」に対応
+            self.project.clear_logs(body.get("dev") or "")
             return {"ok": True}
         if path == "/api/reorder":
             # 一覧の並び順(D&D の結果)。手順・部品とも同じ形で保存する

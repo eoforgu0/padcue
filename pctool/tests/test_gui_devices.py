@@ -141,6 +141,41 @@ def test_remove_refuses_while_running(env):
     assert r.get("ok"), r
 
 
+def test_device_endpoint_targets_named_device(env):
+    """/api/device の dev 指定は、その装置の接続先だけを書き換える
+    (レーンの「接続」。省略時は従来どおり1台目=旧キー経由)。"""
+    proj, d1, base = env
+    cfg = proj.load_config()
+    cfg["devices"].append({"id": "bbbb00000002", "name": "2P",
+                           "host": "192.0.2.9", "port": 5555})
+    proj.save_config(cfg)
+    r = post(base, "/api/device",
+             {"host": "192.0.2.10", "port": 6000, "dev": "2P"})
+    assert r.get("ok"), r
+    devs = proj.load_config()["devices"]
+    assert (devs[1]["host"], devs[1]["port"]) == ("192.0.2.10", 6000)
+    assert devs[0]["host"] == "127.0.0.1", "1台目まで書き換わった"
+    r = post(base, "/api/device", {"host": "192.0.2.9", "dev": "3P"})
+    assert "登録されていません" in str(r.get("error", "")), r
+    # 従来形(dev なし)は1台目に効く
+    r = post(base, "/api/device", {"host": "127.0.0.1", "port": d1.port})
+    assert r.get("ok"), r
+    assert proj.load_config()["devices"][0]["host"] == "127.0.0.1"
+
+
+def test_logs_clear_per_device(env):
+    """絞り込み中の「ログを消す」= その装置の行だけ消す(dev=個体ID)。"""
+    proj, d1, base = env
+    proj.append_logs([{"kind": "BOOT"}], dev="aaaa00000001")
+    proj.append_logs([{"kind": "BOOT"}], dev="bbbb00000002")
+    assert post(base, "/api/logs/clear",
+                {"dev": "aaaa00000001"}).get("ok")
+    devs = [e.get("dev") for e in proj.read_logs(100)]
+    assert "aaaa00000001" not in devs and "bbbb00000002" in devs
+    assert post(base, "/api/logs/clear", {}).get("ok")
+    assert proj.read_logs(100) == []
+
+
 def test_identify_only_when_idle(env):
     proj, d1, base = env
     wait_until(lambda: "fw" in get(base, "/api/state")["devices"][0])
