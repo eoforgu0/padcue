@@ -578,14 +578,24 @@ void app_engine_poll_await_timeout(void) {
     uint8_t on_to = s_engine.await_on_timeout;
     uint32_t waited_frames =
         (uint32_t)((uint64_t)waited_us * 1000 / s_period_ns);
-    app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,
-                waited_frames, on_to);
     if (on_to == 0) {
-        // 中断: 即時停止と同じ着地(supervisor が RUN_ABORT として記録する)
-        app_engine_stop(false);
+        // 中断。PC の SELECT(ctrl タスク)と同瞬に走る可能性があるため、
+        // こちらも入場券(awaiting の取り下げ)を先に取る。取れなければ
+        // SELECT が通って再開済みなので、停止してはいけない
+        if (!atomic_exchange_explicit(&s_awaiting, false,
+                                      memory_order_acq_rel)) {
+            return;
+        }
+        app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,
+                    waited_frames, on_to);
+        app_engine_stop(false);   // supervisor が RUN_ABORT として記録する
     } else {
-        // 指定の腕へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)
-        app_engine_select((uint8_t)(on_to - 1));
+        // 指定の腕へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)。
+        // 入場券は app_engine_select 自身が取る。負けたら何もしない
+        if (app_engine_select((uint8_t)(on_to - 1)) == ESP_OK) {
+            app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,
+                        waited_frames, on_to);
+        }
     }
 }
 

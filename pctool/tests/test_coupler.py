@@ -206,6 +206,60 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
     post(base, "/api/stop_both", {"mode": "immediate"})
 
 
+def test_transient_error_does_not_end_run(env):
+    """一過性の収集エラー(5秒未満)で連動停止・完走確定を誤発しないこと。
+
+    数時間の周回では WiFi の単発タイムアウトが毎周の駐機窓に重なる。
+    以前は busy 判定に猶予がなく、1回の失敗で「相方は完走した」と誤認して
+    駐機側を止めていた(2026-08-06 レビューで確定した実バグ)。
+    """
+    proj, d1, d2, base = env
+    wait_ready(base)
+    post(base, "/api/couple", {"auto_join": True, "arm": 0})
+    assert post(base, "/api/couple_run", {"plan": plan(loops=0)}).get("ok")
+    wait_until(lambda: all(d.get("running") or d.get("awaiting")
+                           for d in devs(base)))
+    # 2P の収集を一瞬だけ失敗させる(リンクの error を直接立てる。収集係が
+    # 次のサイクルで健康に戻す)
+    link2 = gui._Handler.pool.get("2P")
+    link2.error = "一過性の模擬エラー"
+    time.sleep(1.2)
+    end = time.monotonic() + 4.0
+    while time.monotonic() < end:
+        snap = get(base, "/api/state")["coupling"]
+        assert snap["run"]["active"] is True, \
+            f"一過性エラーで実行が終了扱いになった: {snap['run']}"
+        assert not snap["run"].get("linked_stop"), \
+            "一過性エラーで連動停止が誤発した"
+        time.sleep(0.5)
+    post(base, "/api/stop_both", {"mode": "immediate"})
+
+
+def test_solo_progress_ignores_oneshot(env):
+    """人為停止後のソロ自動進行は、ワンショット保留に妨げられないこと。
+
+    ワンショットは「合流の腕を人が選ぶ」ための保留で、相方のいないソロ進行
+    には合流が無い。保留すると解除経路(両方へ同時に選ぶ = 両方の駐機が必要)
+    も無く、恒久停止になる(2026-08-06 レビュー)。
+    """
+    proj, d1, d2, base = env
+    wait_ready(base)
+    post(base, "/api/couple", {"auto_join": True, "arm": 0,
+                               "oneshot_manual": True})
+    assert post(base, "/api/couple_run", {"plan": plan(loops=0)}).get("ok")
+    wait_until(lambda: all(d.get("running") or d.get("awaiting")
+                           for d in devs(base)))
+    assert post(base, "/api/stop", {"mode": "immediate", "dev": "2P"}).get("ok")
+    wait_until(lambda: not devs(base)[1].get("running")
+               and not devs(base)[1].get("awaiting"))
+    for _ in range(3):
+        time.sleep(1.0)
+        d = devs(base)[0]
+        assert d.get("running") or d.get("awaiting"), \
+            "ワンショット保留がソロ進行まで止めた(恒久停止)"
+    post(base, "/api/stop_both", {"mode": "immediate"})
+
+
 def test_anomaly_stops_partner_and_records_resume(env):
     proj, d1, d2, base = env
     wait_ready(base)

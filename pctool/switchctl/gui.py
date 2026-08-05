@@ -350,8 +350,16 @@ class _Handler(BaseHTTPRequestHandler):
                 self._pool().refresh()
             return {"ok": True, "message": msg} if ok else {"error": msg}
         if path == "/api/device_rename":
-            ok, msg = registry.rename_device(self.project,
-                                             body.get("old") or "",
+            old = body.get("old") or ""
+            # 連結実行の運転記録は装置名で追っている。実行中に改名すると
+            # 監視(連動停止・自動合流)が黙って対象を見失う(2026-08-06
+            # レビュー)。止まってからの改名は従来どおり自由
+            snap = self._coupler().snapshot()
+            crun = snap.get("run")
+            if crun and crun.get("active") and old in crun.get("members", []):
+                return {"error": f"{old} は連結実行中です。"
+                                 "止めてから改名してください"}
+            ok, msg = registry.rename_device(self.project, old,
                                              body.get("new") or "")
             if ok:
                 self._pool().refresh()
@@ -438,15 +446,17 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/stop":
             mode = body.get("mode", "immediate")
             link = self._pool().get(body.get("dev", ""))
+            link.write_through(
+                status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             # 人が押した停止の印。連結実行中でも「人為停止は連動しない」
             # (§0.1)ため、監視係が異常停止と区別できるように記す。
-            # 予約の取り消しは印も取り消す(走り続けるので)
+            # 停止が**実際に届いてから**記す(届く前に印だけ付くと、その
+            # 装置の本物の異常が連動停止にならない)。予約の取り消しは
+            # 印も取り消す(走り続けるので)
             if mode == "cancel":
                 self._coupler().note_manual_cancel(link.cfg.get("name", ""))
             else:
                 self._coupler().note_manual_stop(link.cfg.get("name", ""))
-            link.write_through(
-                status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             return {"ok": True}
         if path == "/api/clear_error":
             link = self._pool().get(body.get("dev", ""))
@@ -499,7 +509,13 @@ class _Handler(BaseHTTPRequestHandler):
             run = snap.get("run")
             if not run:
                 return {"error": "直前の連結実行の記録がありません"}
-            if run.get("active"):
+            # 「実行中」は装置の実際の状態で判定する。記録上の active は
+            # 終了確定の猶予(終了ログ待ち 1.5秒)の間 true のままで、
+            # 完走直後の「もう一回」を弾いてしまう
+            busy = any(not l.error and (l.status.get("running")
+                                        or l.status.get("awaiting"))
+                       for l in self._coupler().members())
+            if busy:
                 return {"error": "まだ実行中です"}
             return self._coupler().couple_run(
                 run["plan"], formation=run.get("formation", ""))
@@ -2899,6 +2915,15 @@ async function syncLaneTimeline(lane, runName) {
     if ([...lane.resume.options].some(o => o.value === keep)) {
       lane.resume.value = keep;
     }
+    // 編成の呼び出しで指定された開始位置は、選択肢がそろった今しか
+    // 適用できない(呼び出し時点では図がまだ古い)
+    if (lane.pendingResume !== undefined) {
+      const wantAt = lane.pendingResume || '先頭';
+      if ([...lane.resume.options].some(o => o.value === wantAt)) {
+        lane.resume.value = wantAt;
+      }
+      lane.pendingResume = undefined;
+    }
     const only = lane.resume.options.length <= 1;
     lane.resume.disabled = only;
     lane.resume.title = only
@@ -3025,58 +3050,80 @@ function updateLane(lane, d) {
   }
   // 待機分岐の表示。三態色(計画 §2b): 青=相方待ち(自動で進む予定)/
   // 緑=そろって進んだ直後/黄=人の操作が要る・相方が来ない。赤は装置異常専用
-  lane.awaitbox.textContent = '';
   const autoJoinLive = inRun && c.auto_join && !c.oneshot_manual;
-  if (awaiting) {
-    if (lane.parkedGenSeen !== d.await_gen) {
-      lane.parkedGenSeen = d.await_gen;
-      lane.parkedAt = Date.now();
-    }
-    if (autoJoinLive) {
-      lane.chip.className = 'chip wait';
-      lane.chip.textContent = '相方待ち';
-      const late = c.run.late && c.run.late.dev === lane.name;
-      const sec = Math.max(0, Math.round(
-        (Date.now() - (lane.parkedAt || Date.now())) / 1000));
-      if (late) {
+  if (awaiting && lane.parkedGenSeen !== d.await_gen) {
+    lane.parkedGenSeen = d.await_gen;
+    lane.parkedAt = Date.now();
+  }
+  // 超過警告は「今の駐機」についてだけ(サーバは合流できた時点で消すが、
+  // 古い駐機ぶんの警告を新しい駐機に重ねない保険)
+  const late = awaiting && autoJoinLive && c.run.late
+    && c.run.late.dev === lane.name
+    && c.run.late.at * 1000 >= (lane.parkedAt || 0) - 2000;
+  const showGreen = !awaiting && inRun && c.run.last_join
+    && !c.run.last_join.solo
+    && Date.now() / 1000 - c.run.last_join.at < 3;
+  if (awaiting && autoJoinLive) {
+    lane.chip.className = 'chip wait';
+    lane.chip.textContent = '相方待ち';
+  }
+  // 作り直すのは形が変わったときだけ。毎秒作り直すと、開いた「だけ進める…」
+  // が1秒で畳まれ、経過秒のためだけにボタンの DOM が捨てられる
+  const aKey = JSON.stringify([
+    !!awaiting, d.await_gen || 0, autoJoinLive, inRun, !!late, showGreen,
+    d.arm_names || [], c ? c.arm : 0]);
+  if (lane.awaitKey !== aKey) {
+    lane.awaitKey = aKey;
+    lane.awaitbox.textContent = '';
+    lane.waitMsg = null;
+    if (awaiting) {
+      if (autoJoinLive) {
+        if (late) {
+          lane.awaitbox.append(el('div', 'msg warn',
+            `相方(${c.run.late.partner})が来ません`
+            + '(この編成のいつもの待ちを超えました)。相方のレーンの状態を'
+            + '確かめてください'));
+        } else {
+          lane.waitMsg = el('div', 'msg wait', '');
+          lane.awaitbox.append(lane.waitMsg);
+        }
+      } else if (inRun) {
         lane.awaitbox.append(el('div', 'msg warn',
-          `相方(${c.run.late.partner})が来ません`
-          + '(この編成のいつもの待ちを超えました)。相方のレーンの状態を'
-          + '確かめてください'));
+          '待機分岐で止まっています。連結バーの「両方へ同時に選ぶ」で'
+          + '両方まとめて進められます'));
       } else {
-        const armName = armLabels()[c.arm | 0] || `腕${(c.arm | 0) + 1}`;
-        lane.awaitbox.append(el('div', 'msg wait',
-          `相方待ち ${sec}秒 — 相方が同じ待機分岐に着いたら、自動で`
-          + `「${armName}」を選んで両方いっしょに進みます(異常ではありません)`));
+        lane.awaitbox.append(
+          el('div', 'msg warn', '待機分岐で止まっています。進む先を選んで'
+             + `ください(${lane.name} だけが進みます)`),
+          armRow(d, lane.name, lane.awaitbox));
       }
-    } else if (inRun) {
-      lane.awaitbox.append(el('div', 'msg warn',
-        '待機分岐で止まっています。連結バーの「両方へ同時に選ぶ」で'
-        + '両方まとめて進められます'));
-    } else {
-      lane.awaitbox.append(
-        el('div', 'msg warn', '待機分岐で止まっています。進む先を選んで'
-           + `ください(${lane.name} だけが進みます)`),
-        armRow(d, lane.name, lane.awaitbox));
+      if (inRun) {
+        // 連結中の単独 SELECT は合流の対応がずれるので、畳んで警告つきで置く
+        const det = document.createElement('details');
+        det.className = 'soloadv';
+        const sum = document.createElement('summary');
+        sum.textContent = `${lane.name} だけ進める…(合流の対応がずれます)`;
+        det.append(sum,
+                   el('div', 'hint',
+                      `連結中に ${lane.name} だけ進めると、次の合流の相手が`
+                      + '1周ずれます。意図してずらす検証のとき以外は、待つか、'
+                      + '連結バーの「両方へ同時に選ぶ」を使ってください'),
+                   armRow(d, lane.name, lane.awaitbox));
+        lane.awaitbox.append(det);
+      }
+    } else if (showGreen) {
+      lane.awaitbox.append(el('div', 'msg ok',
+        `そろって進みました(ズレ ${c.run.last_join.skew_ms ?? '?'}ms)`));
     }
-    if (inRun) {
-      // 連結中の単独 SELECT は合流の対応がずれるので、畳んで警告つきで置く
-      const det = document.createElement('details');
-      det.className = 'soloadv';
-      const sum = document.createElement('summary');
-      sum.textContent = `${lane.name} だけ進める…(合流の対応がずれます)`;
-      det.append(sum,
-                 el('div', 'hint',
-                    `連結中に ${lane.name} だけ進めると、次の合流の相手が`
-                    + '1周ずれます。意図してずらす検証のとき以外は、待つか、'
-                    + '連結バーの「両方へ同時に選ぶ」を使ってください'),
-                 armRow(d, lane.name, lane.awaitbox));
-      lane.awaitbox.append(det);
-    }
-  } else if (inRun && c.run.last_join && !c.run.last_join.solo
-             && Date.now() / 1000 - c.run.last_join.at < 3) {
-    lane.awaitbox.append(el('div', 'msg ok',
-      `そろって進みました(ズレ ${c.run.last_join.skew_ms ?? '?'}ms)`));
+  }
+  if (lane.waitMsg) {
+    // 経過秒だけを書き換える(DOM は作り直さない)
+    const sec = Math.max(0, Math.round(
+      (Date.now() - (lane.parkedAt || Date.now())) / 1000));
+    const armName = armLabels()[c.arm | 0] || `腕${(c.arm | 0) + 1}`;
+    lane.waitMsg.textContent =
+      `相方待ち ${sec}秒 — 相方が同じ待機分岐に着いたら、自動で`
+      + `「${armName}」を選んで両方いっしょに進みます(異常ではありません)`;
   }
   // 「実行中のまま戻らない」の自動復旧(1台時と同じ規則を装置ごとに)
   if (stateBusy && !running && !awaiting) lane.stuckPolls++;
@@ -3111,6 +3158,9 @@ function renderLanes() {
     document.getElementById(id).style.display = multi ? 'none' : '';
   }
   syncTargetSelects(devs, multi);
+  // 連結バー・CTA・編成カードの出し引きは装置数に関わらずここで行う
+  // (2台→1台に減ったとき、レーンだけ消えて連結バーが残らないように)
+  renderCoupling();
   const box = document.getElementById('lanes');
   if (!multi) {
     if (laneMap.size) { laneMap.clear(); box.textContent = ''; }
@@ -3148,7 +3198,6 @@ function renderLanes() {
     document.getElementById('trialrun').disabled =
       !t || !!t.error || tBusy || !(tLane && tLane.proc.value);
   }
-  renderCoupling();
   const msel = document.getElementById('manualdev');
   const m = devs.find(x => x.name === msel.value) || devs[0];
   const mBusy = !!m && !m.error && (m.running || m.awaiting);
@@ -3222,10 +3271,11 @@ function armLabels() {
   return [];
 }
 
-// いまの盤面から開始の計画を作る(loops1 = 1回実行の強制)
+// いまの盤面から開始の計画を作る(loops1 = 1回実行の強制)。
+// 連結の対象は台帳の先頭2台(サーバの members() と同じ規則)
 function planFromLanes(once) {
   const plan = [];
-  for (const d of state.devices || []) {
+  for (const d of (state.devices || []).slice(0, 2)) {
     const lane = laneMap.get(d.name);
     if (!lane) return null;
     const v = parseInt(lane.loops.value, 10);
@@ -3458,12 +3508,15 @@ function renderCoupling() {
   // 実行系ボタン
   const someBusy = devs.slice(0, 2).some(d => !d.error
     && (d.running || d.awaiting));
-  for (const [id, label] of [['crun1', `▶ 1回実行${pair}`],
-                             ['crun', `⟳ 周回実行${pair}`]]) {
+  for (const [id, label, base] of [
+    ['crun1', `▶ 1回実行${pair}`,
+     '両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級'],
+    ['crun', `⟳ 周回実行${pair}`,
+     '各レーンの周回数で、両方まとめて開始します']]) {
     const b = document.getElementById(id);
     if (b.textContent !== label) b.textContent = label;
     b.disabled = someBusy;
-    b.title = someBusy ? 'いま実行中なので押せません' : b.title;
+    b.title = someBusy ? 'いま実行中なので押せません' : base;
   }
   document.getElementById('cagain').disabled = someBusy || !run.plan;
   document.getElementById('cstopg').disabled = !someBusy;
@@ -3506,10 +3559,21 @@ function renderCoupling() {
       both.append(b);
     });
   }
-  // 連動停止・ワンショットの知らせ
+  // 連動停止・ワンショットの知らせ。作り直すのは中身が変わったときだけ
+  // (毎秒作り直すと、再開ボタンを押している最中に DOM が差し替わって
+  // クリックが失われる。2026-08-06 レビュー)
   const box = document.getElementById('cmsg');
-  box.textContent = '';
   const ls = run.linked_stop;
+  const anyErr = devs.slice(0, 2).some(d => d.error);
+  const cKey = JSON.stringify(
+    ls && !active && ls.at !== cplStopSeen
+      ? ['stop', ls.at, anyErr]
+      : (active && c.oneshot_manual && ready ? ['oneshot'] : []));
+  if (box.dataset.key === cKey) {
+    // 中身は同じ。何もしない(押しかけのボタンを壊さない)
+  } else {
+  box.dataset.key = cKey;
+  box.textContent = '';
   if (ls && !active && ls.at !== cplStopSeen) {
     const m = el('div', 'msg err');
     const t = el('span', 'msgtext');
@@ -3533,16 +3597,18 @@ function renderCoupling() {
       refresh();
     };
     row.append(rs);
-    // 片方だけ続ける(残った健康な側をソロで)
+    // 片方だけ続ける(残った健康な側をソロで)。手順は止まった連結実行の
+    // 計画のもの(いまのレーンの選択に差し替えられていても、再開の意図は
+    // 「同じ手順の続き」)
     for (const d of devs.slice(0, 2)) {
       const rem = (ls.remain || {})[d.name] | 0;
       if (d.error || d.name === ls.cause || rem <= 0) continue;
-      const lane = laneMap.get(d.name);
+      const planp = (run.plan || []).find(p => p.dev === d.name) || {};
       const b = el('button', 'small', `${d.name} だけ続ける(残り${rem}周)`);
-      b.title = 'この装置だけ、残り周回をソロで実行します';
+      b.title = `「${planp.name || '?'}」の残り周回を、この装置だけソロで実行します`;
       b.onclick = async () => {
         const r = await api('/api/run', 'POST',
-                            {name: lane ? lane.proc.value : '',
+                            {name: planp.name || '',
                              loops: rem, dev: d.name});
         show('cactmsg', r.error ? 'err' : 'ok',
              r.error || `${d.name} だけ再開しました(残り${rem}周)`);
@@ -3554,13 +3620,18 @@ function renderCoupling() {
     m.append(t);
     const x = el('button', 'msgclose', '×');
     x.title = '閉じる(再開の操作は編成・レーンからもできます)';
-    x.onclick = () => { cplStopSeen = ls.at; box.textContent = ''; };
+    x.onclick = () => {
+      cplStopSeen = ls.at;
+      box.dataset.key = '';
+      box.textContent = '';
+    };
     m.append(x);
     box.append(m);
   } else if (active && c.oneshot_manual && ready) {
     box.append(el('div', 'msg warn',
       '両方そろいました。上の「両方へ同時に選ぶ」で進めてください'
       + '(この1回は自動で選びません)'));
+  }
   }
   // ヒント(実測の常時表示)
   const bits = [];

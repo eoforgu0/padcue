@@ -134,6 +134,14 @@ static void supervisor_task(void *arg)
         }
         // 駐機タイムアウト(手順に書いてあれば)。永久駐機の保険
         app_engine_poll_await_timeout();
+        // 逆向きのレベル同期: タイムアウトの自動進行はエンジンを直接再開
+        // するため、状態機械が AWAITING のまま残る(RUNNING の書き手は
+        // cmd_run/cmd_select だけ)。走っているのに選択待ち表示のままだと
+        // PC の表示も SELECT の可否も食い違う(2026-08-06 レビュー)
+        if (app_state_get() == APP_STATE_AWAITING
+            && app_engine_is_running() && !app_engine_is_awaiting()) {
+            app_state_set(APP_STATE_RUNNING);
+        }
         // ペアリング引数の控えがあれば記録する(本体識別子の調査。§0.1:
         // 同じ本体で毎回同じ値が出るなら、どの Switch に繋がっているかの
         // 自動識別に昇格できる。違えば物理記名で確定)

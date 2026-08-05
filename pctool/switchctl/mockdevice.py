@@ -39,7 +39,7 @@ def _first_await(events, start_index: int, start_base: int,
     idx = start_index
     for _ in range(1_000_000):
         if idx < 0 or idx >= len(events):
-            return None, 0
+            return None, 0, 0, 0
         ev = events[idx]
         if isinstance(ev, binfmt.Await):
             return (base + ev.frame - skip, len(ev.targets),
