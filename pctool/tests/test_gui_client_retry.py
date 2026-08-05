@@ -1,17 +1,18 @@
-"""GUI ⇔ 実機の接続の持ち回しと、切れたときのやり直しの検証。
+"""装置リンク(DeviceLink.call)の接続の持ち回しと、切れたときのやり直し。
 
 実際に起きた不具合(2026-08-02): 実機が応答を返さない(TimeoutError)と、
 本来の理由が RuntimeError("generator didn't stop after throw()") に化けて、
 端末に例外の山が出ていた。原因は contextmanager の中で 2 回目の yield を
-していたこと(やり直しは呼び出し側の責務)。
+していたこと。P2-1 で接続管理は devicepool.DeviceLink に一本化されたが、
+守るべき規則は同じ:
+ - TimeoutError は繋ぎ直して再送しない(二重実行防止)。理由はそのまま伝える
+ - 接続断(ConnectionError/OSError)は1度だけ繋ぎ直して同じ操作をやり直す
+ - 続けて呼んでも接続は1本を使い回す(実機は同時1接続しか受けない)
 """
-import json
-from pathlib import Path
-
 import pytest
 
-from switchctl import gui
 from switchctl.client import DeviceError
+from switchctl.devicepool import DeviceLink
 from switchctl.project import Project
 
 
@@ -53,57 +54,48 @@ class _FakeClient:
 
 
 @pytest.fixture
-def handler(tmp_path, monkeypatch):
-    proj = Project(tmp_path)
-    cfg = proj.load_config()
-    cfg["host"], cfg["port"] = "127.0.0.1", 5555
-    proj.save_config(cfg)
-
-    monkeypatch.setattr(gui, "DeviceClient", _FakeClient)
+def link(tmp_path):
     _FakeClient.made = []
     _FakeClient.fail_first = None
-    gui._Handler.project = proj
-    gui._Handler.dev = None
+    proj = Project(tmp_path)
+    cfg = proj.load_config()
+    proj.update_device(cfg, 0, host="127.0.0.1", port=5555)
+    # 収集スレッドは起こさない(start() しない)。call の規則だけを検査する
+    yield DeviceLink(proj, proj.load_config()["devices"][0],
+                     client_cls=_FakeClient)
 
-    h = gui._Handler.__new__(gui._Handler)   # 通信路を作らずメソッドだけ使う
-    yield h
-    gui._Handler.dev = None
 
-
-def test_timeout_is_not_masked(handler):
-    """応答が返らないときは、その理由がそのまま伝わること。
-
-    以前は RuntimeError('generator didn't stop after throw()') に化けていた。
-    """
+def test_timeout_is_not_masked(link):
+    """応答が返らないときは、その理由がそのまま伝わること。"""
     _FakeClient.fail_first = TimeoutError("timed out")
     with pytest.raises(TimeoutError):
-        handler._retrying(lambda c: c.stop("immediate"))
+        link.call(lambda c: c.stop("immediate"))
     # 壊れた可能性のある接続は捨てる(次回は繋ぎ直す)
-    assert gui._Handler.dev is None
+    assert link.client is None
     assert _FakeClient.made[0].closed
 
 
-def test_disconnect_is_retried_once(handler):
+def test_disconnect_is_retried_once(link):
     """相手が黙って閉じていた場合は、繋ぎ直して同じ操作をやり直すこと。"""
     _FakeClient.fail_first = ConnectionResetError("closed by peer")
-    handler._retrying(lambda c: c.stop("immediate"))
+    link.call(lambda c: c.stop("immediate"))
     assert len(_FakeClient.made) == 2, "繋ぎ直していない"
     assert _FakeClient.made[1].stopped == "immediate", "やり直せていない"
-    assert gui._Handler.dev is _FakeClient.made[1]
+    assert link.client is _FakeClient.made[1]
 
 
-def test_connection_is_reused(handler):
+def test_connection_is_reused(link):
     """続けて呼んでも接続は1本を使い回すこと(実機は同時1接続しか受けない)。"""
-    handler._retrying(lambda c: c.stop("immediate"))
-    handler._retrying(lambda c: c.stop("graceful"))
+    link.call(lambda c: c.stop("immediate"))
+    link.call(lambda c: c.stop("graceful"))
     assert len(_FakeClient.made) == 1, "毎回繋ぎ直している"
 
 
-def test_no_host_is_a_clear_error(handler, tmp_path):
+def test_no_host_is_a_clear_error(tmp_path):
     """接続先が未設定なら、理由の分かるエラーになること。"""
-    cfg = handler.project.load_config()
-    cfg["host"] = ""
-    handler.project.save_config(cfg)
-    gui._Handler.dev = None
-    with pytest.raises(DeviceError):
-        handler._retrying(lambda c: c.stop("immediate"))
+    proj = Project(tmp_path)
+    link = DeviceLink(proj, {"id": "", "name": "1P", "host": "", "port": 5555},
+                      client_cls=_FakeClient)
+    with pytest.raises(DeviceError) as e:
+        link.call(lambda c: c.stop("immediate"))
+    assert e.value.code == "NO_HOST"

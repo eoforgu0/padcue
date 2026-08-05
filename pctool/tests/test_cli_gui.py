@@ -1,6 +1,7 @@
 """CLI とGUI(HTTPサーバ)の結合テスト。実機なし・模擬デバイスで検証する。"""
 import json
 import threading
+import time
 import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -156,8 +157,14 @@ def test_gui_logs_resolve_run_start_name(guiserver):
     assert http_post(guiserver + "/api/run",
                      {"name": "サンプル", "loops": 5}).get("ok")
     http_post(guiserver + "/api/stop", {"mode": "immediate"})
-    entries = http_get(guiserver + "/api/logs")["entries"]
-    starts = [e for e in entries if e["kind"] == "RUN_START"]
+    # ログの回収は装置プールが約1秒周期で行う(P2-1 で非同期化)。少し待つ
+    starts = []
+    for _ in range(40):
+        entries = http_get(guiserver + "/api/logs")["entries"]
+        starts = [e for e in entries if e["kind"] == "RUN_START"]
+        if starts:
+            break
+        time.sleep(0.1)
     assert starts, [e["kind"] for e in entries]
     assert starts[-1].get("name") == "サンプル", starts[-1]
     assert starts[-1].get("a") == 5, starts[-1]

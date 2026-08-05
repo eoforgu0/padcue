@@ -4,10 +4,11 @@
 仮想マシン)があると、自分の別の住所が候補に混じる。確かめずに採用すると
 **いま繋がっているのに未接続へ落ちる**。だから採用前に必ず到達を確かめる。
 
-「いまつながっているか」は持ち回している接続が生きているかで判る。改めて
-試すと、名前(padctl.local)を引けない環境で数秒待たされるため。画面は毎秒
-状態を取りに行くので、人が「探す」を押せる時点では必ず判定材料がある。
+「いまつながっているか」は装置プールの収集キャッシュで判る(P2-1)。改めて
+試すと自分の接続を横取りして壊すため。収集は毎秒回っているので、人が
+「探す」を押せる時点では必ず判定材料がある。
 """
+import time
 import json
 import threading
 import urllib.request
@@ -32,7 +33,9 @@ def env(tmp_path):
     gui._Handler.project = proj
     gui._Handler.recorder = None
     gui._Handler.trials = []
-    gui._Handler._drop_client()
+    if gui._Handler.pool is not None:
+        gui._Handler.pool.close()
+        gui._Handler.pool = None
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -40,7 +43,9 @@ def env(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
-        gui._Handler._drop_client()
+        if gui._Handler.pool is not None:
+            gui._Handler.pool.close()
+            gui._Handler.pool = None
         dev.stop()
 
 
@@ -57,10 +62,19 @@ def post(base, path, obj=None):
         return json.loads(r.read())
 
 
+def _wait_device(base, timeout=8.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if get(base, "/api/state").get("device") is not None:
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def test_keeps_a_working_connection(env):
     """つながっているときに押しても、接続先を変えないこと。"""
     proj, dev, base = env
-    assert get(base, "/api/state")["device"] is not None   # 画面を開いた状態
+    assert _wait_device(base)          # 画面を開いた状態
     r = post(base, "/api/discover")
     assert r.get("ok"), r
     assert r.get("kept") is True, r
@@ -70,9 +84,8 @@ def test_keeps_a_working_connection(env):
 
 def test_kept_answer_is_immediate(env):
     """つながっているときは探索そのものを行わない(待たせない)こと。"""
-    import time
     proj, dev, base = env
-    get(base, "/api/state")
+    assert _wait_device(base)
     t0 = time.monotonic()
     r = post(base, "/api/discover")
     took = time.monotonic() - t0
@@ -102,7 +115,6 @@ def test_does_not_adopt_an_unreachable_candidate(env, monkeypatch):
 def test_state_still_works_after_pressing_find(env):
     """「探す」のあとも、ふつうに状態を取れること(接続を持ち回すため)。"""
     proj, dev, base = env
-    assert get(base, "/api/state")["device"] is not None
+    assert _wait_device(base)
     assert post(base, "/api/discover").get("ok")
-    st = get(base, "/api/state")
-    assert st.get("device") is not None, st.get("device_error")
+    assert _wait_device(base), get(base, "/api/state").get("device_error")

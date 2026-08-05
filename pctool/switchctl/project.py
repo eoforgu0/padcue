@@ -103,13 +103,23 @@ class Project:
         if devs:
             # 旧キー host/port を書き換えた呼び出し元(既存ツール)の意図は
             # 「1台目の接続先の変更」なので devices[0] へ取り込む。
-            # そうでなければ devices[0] を旧キーへ写す(常に両者を一致させる)
-            if cfg.get("host") not in (None, devs[0]["host"]) \
-                    or cfg.get("port") not in (None, devs[0]["port"]):
-                if cfg.get("host") is not None:
-                    devs[0]["host"] = cfg["host"]
-                if cfg.get("port") is not None:
-                    devs[0]["port"] = int(cfg["port"])
+            # 「呼び出し元が本当に旧キーを変えたのか」はディスク上の値との
+            # 差で判別する(devices 側だけを差し替えた呼び出し元の変更を、
+            # 読み込んだままの古い旧キーで巻き戻さないため)
+            disk_host = disk_port = None
+            if self.config_path.is_file():
+                try:
+                    disk = json.loads(
+                        self.config_path.read_text(encoding="utf-8"))
+                    disk_host, disk_port = disk.get("host"), disk.get("port")
+                except ValueError:
+                    pass
+            if cfg.get("host") is not None and cfg["host"] != disk_host \
+                    and cfg["host"] != devs[0]["host"]:
+                devs[0]["host"] = cfg["host"]
+            if cfg.get("port") is not None and cfg["port"] != disk_port \
+                    and int(cfg["port"]) != devs[0]["port"]:
+                devs[0]["port"] = int(cfg["port"])
             cfg["host"] = devs[0]["host"]
             cfg["port"] = devs[0]["port"]
         self.config_path.write_text(

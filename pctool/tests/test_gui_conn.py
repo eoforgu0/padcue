@@ -1,11 +1,13 @@
-"""GUI サーバーと実機の接続の扱い。
+"""GUI サーバーと実機の接続の扱い(P2-1 で装置プールへ一本化)。
 
 実機は同時に1接続しか受けない。手動操作は毎秒30回コマンドを送るので、
-毎回繋ぎ直すと接続の開閉だけで手一杯になる。1本を持ち回し、切れたら
-繋ぎ直すこと(ユーザーには見えない形で)。
+毎回繋ぎ直すと接続の開閉だけで手一杯になる。装置ごとに1本を持ち回し、
+切れたら繋ぎ直すこと(ユーザーには見えない形で)。状態は収集スレッドの
+キャッシュを即答するため、変化の反映は最大1〜数秒遅れる(検査は待つ)。
 """
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -29,7 +31,9 @@ def env(tmp_path):
     gui._Handler.project = proj
     gui._Handler.recorder = None
     gui._Handler.trials = []
-    gui._Handler._drop_client()
+    if gui._Handler.pool is not None:
+        gui._Handler.pool.close()
+        gui._Handler.pool = None
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
@@ -39,7 +43,9 @@ def env(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
-        gui._Handler._drop_client()
+        if gui._Handler.pool is not None:
+            gui._Handler.pool.close()
+            gui._Handler.pool = None
         dev.stop()
 
 
@@ -56,30 +62,45 @@ def post(base, path, obj):
         return json.loads(r.read())
 
 
+def wait_until(fn, timeout=8.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        v = fn()
+        if v:
+            return v
+        time.sleep(0.1)
+    return fn()
+
+
 def test_connection_is_reused(env):
     proj, dev, base = env
-    for _ in range(5):
-        assert get(base, "/api/state")["device"]["fw"]
-    cl = gui._Handler.dev
+    assert wait_until(lambda: get(base, "/api/state").get("device")),         "装置が見えない"
+    link = gui._Handler.pool.links()[0]
+    cl = link.client
     assert cl is not None, "接続が使い回されていない"
-    for _ in range(5):
-        get(base, "/api/state")
-    assert gui._Handler.dev is cl, "毎回繋ぎ直している"
+    time.sleep(2.5)                     # 収集2〜3周期ぶん
+    get(base, "/api/state")
+    assert link.client is cl, "毎回繋ぎ直している"
 
 
 def test_reconnects_after_device_restart(env):
     """実機が切れて戻ってきても、次の操作で自動的に繋ぎ直すこと。"""
     proj, dev, base = env
-    assert get(base, "/api/state")["device"]["fw"]
+    assert wait_until(lambda: get(base, "/api/state").get("device"))
     port = dev.port
     dev.stop()
-    st = get(base, "/api/state")
-    assert st.get("device") is None
+    assert wait_until(
+        lambda: get(base, "/api/state").get("device") is None),         "切断が画面に伝わらない"
     dev2 = MockDevice(speed=2000.0, port=port)
-    dev2.start()
+    for _ in range(50):                 # 排他 bind は TIME_WAIT で少し待つ
+        try:
+            dev2.start()
+            break
+        except OSError:
+            time.sleep(0.1)
     try:
-        st = get(base, "/api/state")
-        assert st.get("device") is not None, f"繋ぎ直せていない: {st.get('device_error')}"
+        st = wait_until(lambda: get(base, "/api/state").get("device"))
+        assert st is not None, "繋ぎ直せていない"
     finally:
         dev2.stop()
 
@@ -99,9 +120,9 @@ def test_passthrough_burst_is_served(env):
 
 def test_host_change_drops_old_connection(env):
     proj, dev, base = env
-    assert get(base, "/api/state")["device"] is not None
+    assert wait_until(lambda: get(base, "/api/state").get("device"))
     post(base, "/api/device", {"host": "10.255.255.1"})
-    st = get(base, "/api/state")
-    assert st.get("device") is None, "接続先を変えたのに古い接続を使っている"
+    assert wait_until(
+        lambda: get(base, "/api/state").get("device") is None),         "接続先を変えたのに古い接続を使っている"
     post(base, "/api/device", {"host": "127.0.0.1"})
-    assert get(base, "/api/state")["device"] is not None
+    assert wait_until(lambda: get(base, "/api/state").get("device"))

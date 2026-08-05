@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import binfmt, engine
-from .client import DeviceClient, DeviceError, connect_verified
+from .client import DeviceClient, DeviceError
+from .devicepool import DevicePool
 from .discover import discover
 from .project import Project, validate_name
 from .record import Recorder
@@ -72,8 +73,8 @@ def build_timeline(blob: bytes) -> dict:
 
 class _Handler(BaseHTTPRequestHandler):
     project: Project = None      # type: ignore[assignment]
-    lock = threading.Lock()
-    dev = None            # 実機への共有接続(lock の下でだけ触る)
+    lock = threading.Lock()      # 記録(recorder)・反復統計など PC 側共有物の直列化
+    pool = None                  # DevicePool(装置への接続・収集の唯一の窓口)
     recorder: Recorder | None = None   # 手動操作の記録中だけ存在する
     trials: list = []                  # 反復統計の成否記録
 
@@ -101,85 +102,42 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    @contextmanager
-    def _client(self):
-        """実機への接続を1本だけ持ち回す。
+    # ---- 装置プール(接続・収集・キャッシュの唯一の窓口) ----
+    # 接続の張り方・個体ID照合・繋ぎ直しの規則は devicepool.DeviceLink に
+    # 一本化した(2台化 P2-1)。ここは「どの装置へ」を選んで渡すだけ
 
-        手動操作は毎秒30回コマンドを送る。そのたびに繋ぎ直すと、実機側は
-        同時1接続しか受けないので接続の開閉だけで手一杯になる。lock で
-        直列化してあるので1本を共有して問題ない。相手が閉じていたら繋ぎ直す。
-        """
-        cfg = self.project.load_config()
-        dev = (cfg.get("devices") or [{}])[0]
-        host = dev.get("host") or ""
-        port = int(dev.get("port", 5555))
-        if not host:
-            raise DeviceError("NO_HOST", "接続先が未設定です")
-        cl = _Handler.dev
-        if cl is not None and ((cl.host, cl.port) != (host, port)
-                               or not cl.is_alive()):
-            self._drop_client()
-            cl = None
-        if cl is None:
-            # 接続のたびに個体ID(MAC)を照合する。IP の入れ替わりで別個体に
-            # 繋がっても操作しない(誤爆防止)。初回はIDを学習して控える。
+    @classmethod
+    def _pool(cls):
+        # プロジェクトが差し替わっていたら作り直す(プールはクラス属性なので、
+        # テストや再起動で project だけ入れ替えると古い装置を掴んだままになる)
+        if cls.pool is not None and cls.pool.project is not cls.project:
+            cls.pool.close()
+            cls.pool = None
+        if cls.pool is None:
             # DeviceClient をモジュール名で渡すのはテストの差し替えを生かすため
-            cl, info = connect_verified(dev, timeout=3.0,
-                                        client_cls=DeviceClient)
-            # 模擬デバイスのIDは学習しない(練習が台帳を汚さないように)
-            if (not dev.get("id") and info.device_id
-                    and not info.device_id.startswith("mock")):
-                self.project.update_device(cfg, 0, id=info.device_id)
-            _Handler.dev = cl
-        try:
-            yield cl
-        except Exception:
-            self._drop_client()   # 壊れた可能性がある。次回は繋ぎ直す
-            raise
+            cls.pool = DevicePool(cls.project, client_cls=DeviceClient)
+            cls.pool.refresh()
+        return cls.pool
 
-    def _retrying(self, fn):
-        """実機への操作を、接続が切れていたら1度だけ繋ぎ直してやり直す。
+    def _call(self, fn, dev: str = ""):
+        """装置への操作。dev = 装置の名前(省略時は台帳の1台目)。
 
-        以前はこの「やり直し」を _client() の中で 2 回目の yield として書いて
-        いたが、contextmanager は yield を1回しか実行できないため、例外が
-        起きるたびに RuntimeError('generator didn't stop after throw()') に
-        化けていた(本当の理由が消え、画面には未接続が出る)。やり直しは
-        呼び出し側の責務なのでここへ移した。
-
-        やり直すのは「接続が切れていた」場合だけにする。応答が返ってこない
-        (TimeoutError)場合に投げ直すと、実機が受け取り済みの操作を二重に
-        実行しかねないため、そのまま失敗として扱う。
+        収集スレッドと同じ接続・同じ lock を通る(実機は同時1接続・後着横取り
+        のため、別接続を作ると奪い合いになる)。接続断は1度だけ繋ぎ直し、
+        TimeoutError は二重実行防止のため繋ぎ直さない(規則は DeviceLink.call)。
         """
-        try:
-            with self._client() as c:
-                return fn(c)
-        except TimeoutError:
-            raise
-        except (ConnectionError, OSError):
-            # 相手が黙って閉じていた場合、is_alive() では拾えないことがある
-            # (送った直後に切れる等)。繋ぎ直して同じ操作をやり直す。
-            # これをしないと、画面に一瞬「未接続」が出る
-            with self._client() as c:
-                return fn(c)
-
-    @staticmethod
-    def _drop_client() -> None:
-        cl, _Handler.dev = _Handler.dev, None
-        if cl is not None:
-            try:
-                cl.close()
-            except OSError:
-                pass
+        return self._pool().get(dev).call(fn)
 
     def _reachable(self, host: str, port: int) -> bool:
         """その住所で本当に padctl が応答するか(短い待ちで確かめる)。
 
+        健康な登録済み装置がその宛先を使用中なら、試さずに到達可とする
+        (実機は同時1接続・後着優先。試すと自分の接続を横取りして壊す)。
         待ちを 3 秒取るのは、実機が「先客が黙ってから」新しい接続へ乗り換える
-        ため(最大1秒。app_ctrl.c handle_client)。1.5 秒では乗り換え待ちと
-        重なったときに取りこぼし、見つかっているのに『応答しません』になる
-        (2026-08-05 uicheck で再現)
+        ため(最大1秒。app_ctrl.c handle_client)。
         """
-        self._drop_client()      # 実機は同時1接続。試す前に手放す
+        if self._pool().has_healthy(host, int(port)):
+            return True
         cl = DeviceClient(host, port, timeout=3.0)
         try:
             cl.connect()
@@ -215,40 +173,13 @@ class _Handler(BaseHTTPRequestHandler):
             tl["resume_points"] = r.resume_points
             return self._json(tl)
         if u.path == "/api/logs":
-            # 実機から取り出したぶんを溜め込み、溜まっている全体を返す
-            # (実機のログは読むと消えるので、ここで残さないと失われる)
-            err = ""
-            try:
-                with self.lock, self._client() as c:
-                    entries = c.logs()
-                    # RUN_START はログに手順名を載せられない(文字列不可)ため、
-                    # ハッシュ(b=上位/c=下位 32bit)を実機の一覧と突き合わせて
-                    # 名前に戻す。取り出した今しかできない(後で一覧が変わる)。
-                    # 実機のログは読んだ時点で消えているので、突き合わせに
-                    # 失敗しても取り出した記録は必ず保存する(名前なしになるだけ)
-                    try:
-                        if any(e.get("kind") == "RUN_START" and "c" in e
-                               for e in entries):
-                            names = {p["hash"]: p["name"] for p in c.list()}
-                            for e in entries:
-                                if e.get("kind") != "RUN_START" or "c" not in e:
-                                    continue
-                                h = f"{int(e.get('b', 0)):08x}{int(e['c']):08x}"
-                                if h in names:
-                                    e["name"] = names[h]
-                    except (DeviceError, OSError):
-                        pass
-                    # どの装置の記録かを取り出した瞬間に付ける(装置側は読むと
-                    # 消えるため、今を逃すと帰属が永久に分からなくなる)。
-                    # タグは「この接続が実際に名乗ったID」(台帳の登録IDではなく。
-                    # 練習の mock でも帰属が正しく残る)
-                    self.project.append_logs(
-                        entries, dev=getattr(c, "device_id", ""))
-            except (DeviceError, OSError) as e:
-                err = str(e)
+            # 回収は装置プールの収集係が装置ごとに行い、装置タグ付きで保存
+            # 済み(装置側は読むと消えるため、読み手をプールに一本化した)。
+            # ここは溜まっている記録を返すだけ
+            self._pool()                     # 収集が動いていることを保証
             n = int(parse_qs(u.query).get("limit", ["1000"])[0])
             return self._json({"entries": self.project.read_logs(n),
-                               "error": err})
+                               "error": ""})
         if u.path == "/api/flow":
             name = parse_qs(u.query).get("name", [""])[0]
             try:
@@ -303,7 +234,7 @@ class _Handler(BaseHTTPRequestHandler):
             if body.get("port"):
                 cfg["port"] = int(body["port"])
             self.project.save_config(cfg)
-            self._drop_client()          # 古い接続は捨てる
+            self._pool().refresh()       # 古い接続はプールが捨てて追従する
             return {"ok": True, "host": host}
         if path == "/api/discover":
             # 探して「実際につながる」ものだけを採用する。
@@ -314,12 +245,12 @@ class _Handler(BaseHTTPRequestHandler):
             dev0 = (cfg.get("devices") or [{}])[0]
             cur_host = (dev0.get("host") or "").strip()
             cur_port = int(dev0.get("port", 5555))
-            # 今つながっているなら何も変えない。持ち回している接続が生きている
-            # かどうかで判る(改めて試すと、名前が引けない場合に数秒待たされる)
-            cl = _Handler.dev
-            if (cur_host and cl is not None
-                    and (cl.host, cl.port) == (cur_host, cur_port)
-                    and cl.is_alive()):
+            # 今つながっているなら何も変えない。収集キャッシュが健康なら
+            # 生きている(改めて試すと自分の接続を横取りして壊す)。
+            # 先にプールを設定へ追従させる(接続先を書き換えた直後に押された
+            # 場合、古い宛先の健康さで「維持」と答えないように)
+            self._pool().refresh()
+            if cur_host and self._pool().has_healthy(cur_host, cur_port):
                 return {"ok": True, "host": cur_host, "kept": True}
             found = discover(timeout=float(body.get("timeout", 1.5)))
             # 追跡するのは登録した個体(ID一致)だけ。ID 未学習の初回のみ、
@@ -341,7 +272,7 @@ class _Handler(BaseHTTPRequestHandler):
                 if not self._reachable(f.host, f.port):
                     continue
                 self.project.update_device(cfg, 0, host=f.host, port=f.port)
-                self._drop_client()
+                self._pool().refresh()
                 return {"ok": True, "host": f.host,
                         "found": [{"host": x.host, "port": x.port, "fw": x.fw,
                                    "how": x.how} for x in found]}
@@ -360,9 +291,14 @@ class _Handler(BaseHTTPRequestHandler):
             r, err = self.project.build_safe(name)
             if r is None:
                 return {"error": err}
-            with self._client() as c:
+            link = self._pool().get(body.get("dev", ""))
+            def _push(c):
                 c.put(r.name, r.blob)
                 c.commit(r.name)
+                return {e["name"]: e["hash"] for e in c.list()}
+            # 一覧キャッシュへ書き戻す(次の収集を待つと、直後の画面更新が
+            # 「未転送」のまま最大1秒残る)
+            link.write_through(listing=link.call(_push))
             return {"ok": True, "hash": r.hash}
         if path == "/api/run":
             name = body.get("name", "")
@@ -378,26 +314,37 @@ class _Handler(BaseHTTPRequestHandler):
                 if pt is None:
                     return {"error": f"再開点が見つかりません: {at}"}
                 resume = {"index": pt["index"], "base": pt["base"]}
-            with self._client() as c:
-                listing = {e["name"]: e for e in c.list()}
-                if listing.get(name, {}).get("hash") != r.hash:
+            link = self._pool().get(body.get("dev", ""))
+            def _run(c):
+                listing = {e["name"]: e["hash"] for e in c.list()}
+                if listing.get(name) != r.hash:
                     c.put(r.name, r.blob)   # 版がずれていれば自動で転送し直す
                     c.commit(r.name)
+                    listing[name] = r.hash
                 c.run(name, r.hash, loop_n=loops, resume=resume)
+                return listing, c.status()
+            listing, status = link.call(_run)
+            link.write_through(status=status, listing=listing)
             return {"ok": True}
         # 停止・異常解除・腕の選択は、繰り返しても結果が変わらない(冪等)ので、
         # 接続が切れていたら繋ぎ直してやり直す。転送・実行は二重に効きうるので
         # やり直さない(下の with のまま)
         if path == "/api/stop":
             mode = body.get("mode", "immediate")
-            self._retrying(lambda c: c.stop(mode))
+            link = self._pool().get(body.get("dev", ""))
+            link.write_through(
+                status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             return {"ok": True}
         if path == "/api/clear_error":
-            self._retrying(lambda c: c.clear_error())
+            link = self._pool().get(body.get("dev", ""))
+            link.write_through(
+                status=link.call(lambda c: (c.clear_error(), c.status())[1]))
             return {"ok": True}
         if path == "/api/select":
             arm = int(body.get("arm", 0))
-            self._retrying(lambda c: c.select(arm))
+            link = self._pool().get(body.get("dev", ""))
+            link.write_through(
+                status=link.call(lambda c: (c.select(arm), c.status())[1]))
             return {"ok": True}
         if path == "/api/passthrough":
             enable = bool(body.get("enable"))
@@ -406,7 +353,8 @@ class _Handler(BaseHTTPRequestHandler):
             if enable and self.recorder is not None \
                     and not getattr(self.recorder, "paused", False):
                 self.recorder.add(time.monotonic(), st)
-            self._retrying(lambda c: c.passthrough(enable, **st))
+            self._call(lambda c: c.passthrough(enable, **st),
+                       body.get("dev", ""))
             return {"ok": True}
         if path == "/api/trial":
             # 反復統計: 同じ手順を繰り返し、成功/失敗を人が記録して分布を見る
@@ -537,31 +485,59 @@ class _Handler(BaseHTTPRequestHandler):
         cfg = self.project.load_config()
         out = {"procedures": procs, "host": cfg.get("host", ""),
                "project": str(self.project.root)}
-        def _ask(c):
-            return c.hello(), c.status(), {e["name"]: e["hash"] for e in c.list()}
-
-        try:
-            # 1秒ごとに叩く経路。接続が切れていたら繋ぎ直してやり直す(読むだけ
-            # なので繰り返しても害がない)
-            info, st, listing = self._retrying(_ask)
-            out["device"] = {
-                "fw": info.fw_version, "mode": info.transport_mode,
-                "binterval": info.binterval, "partition": info.partition,
-                "rolled_back": info.rolled_back,
-                # 再生位置をなめらかに動かすため、実機のフレーム周期も渡す
-                "frame_period_ns": info.frame_period_ns, **st,
-            }
-            for p in procs:
-                p["on_device"] = listing.get(p["name"]) == p.get("hash")
-            # 待機分岐で止まっているとき、腕の名前を出せるようにする
-            if out["device"].get("awaiting"):
-                running = out["device"].get("proc") or ""
-                r, _e = self.project.build_safe(running)
-                if r and r.wait_branch_arms:
-                    out["device"]["arm_names"] = r.wait_branch_arms[0]
-        except (DeviceError, OSError, ConnectionError) as e:
-            out["device_error"] = _why(e, out["host"])
+        # 装置プールの収集キャッシュを即答する(装置への I/O はしない)。
+        # 片方が無応答でも、その装置の error になるだけで他方は即座に返る
+        links = self._pool().links()
+        self._wait_first_collect(links)
+        devices = []
+        for l in links:
+            d = {"name": l.cfg.get("name", ""), "id": l.cfg.get("id", ""),
+                 "host": l.cfg.get("host", ""),
+                 "port": int(l.cfg.get("port", 5555)), "at": l.at}
+            if l.error:
+                d["error"] = _why(l.error_exc, d["host"]) if l.error_exc                     else l.error
+            elif l.info is not None:
+                d.update({
+                    "fw": l.info.fw_version, "mode": l.info.transport_mode,
+                    "binterval": l.info.binterval,
+                    "partition": l.info.partition,
+                    "rolled_back": l.info.rolled_back,
+                    "frame_period_ns": l.info.frame_period_ns,
+                    **l.status,
+                })
+                if d.get("awaiting"):
+                    r, _e = self.project.build_safe(d.get("proc") or "")
+                    if r and r.wait_branch_arms:
+                        d["arm_names"] = r.wait_branch_arms[0]
+            devices.append(d)
+        out["devices"] = devices
+        # 互換: 従来の1台形は devices[0] の写し(P2-2 の画面切替まで
+        # 既存 JS を支える)
+        if devices:
+            first = devices[0]
+            link0 = links[0]
+            if "error" in first:
+                out["device_error"] = first["error"]
+            elif link0.info is not None:
+                out["device"] = {k: v for k, v in first.items()
+                                 if k not in ("name", "id", "at")}
+                for p in procs:
+                    p["on_device"] = link0.listing.get(p["name"])                         == p.get("hash")
+        else:
+            out["device_error"] = "装置が登録されていません"
         return out
+
+    @staticmethod
+    def _wait_first_collect(links, timeout: float = 2.5) -> None:
+        """起動直後の1回だけ、最初の収集が終わるまで少し待つ。
+
+        待たないと、画面の最初の1秒だけ全装置が「未接続」に見えてしまう
+        (従来はこの経路が同期接続だったので起きなかった)。
+        """
+        end = time.monotonic() + timeout
+        while (any(l.at == 0 for l in links)
+               and time.monotonic() < end):
+            time.sleep(0.05)
 
 
 def _why(e: Exception, host: str) -> str:
@@ -3794,5 +3770,6 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
               "または本体ボタンを1.5秒長押し)")
     finally:
         srv.server_close()
-        _Handler._drop_client()
+        if _Handler.pool is not None:
+            _Handler.pool.close()
     return 0
