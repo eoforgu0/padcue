@@ -2124,17 +2124,17 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("今すぐ止めるは押したレーンだけ(相方は継続)", t_stop_2p_keeps_1p)
 
     def t_identify_idle_and_busy():
-        lane(1).locator("button", has_text="識別").click()
+        lane(1).locator("button", has_text="本体を確認").click()
         page.wait_for_function(
             "() => {"
             "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
-            "  return l2 && l2.textContent.includes('識別の入力を送りました'); }",
+            "  return l2 && l2.textContent.includes('確認用の入力を送りました'); }",
             timeout=8000)
-        wait_lane_state(1, "待機中")     # 識別のあと手動操作状態が残らない
+        wait_lane_state(1, "待機中")     # 確認のあと手動操作状態が残らない
         lane(1).locator(".lloops").fill("50")
         lane(1).locator("button", has_text="2P だけ周回実行").click()
         wait_lane_state(1, "実行中")
-        lane(1).locator("button", has_text="識別").click()
+        lane(1).locator("button", has_text="本体を確認").click()
         page.wait_for_function(
             "() => {"
             "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
@@ -2142,7 +2142,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             timeout=8000)
         lane(1).locator("button", has_text="2P を今すぐ止める").click()
         wait_lane_state(1, "待機中")
-    c.check("識別は待機中だけ(実行中は理由が出て断られる)",
+    c.check("本体の確認は待機中だけ(実行中は理由が出て断られる)",
             t_identify_idle_and_busy)
 
     def t_wait_branch_in_lane():
@@ -2201,7 +2201,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     def t_rename_follows_everywhere():
         prompt_value[0] = "サブ"
         row = page.locator("#devlist .devrow").nth(1)
-        row.locator("button", has_text="改名").click()
+        row.locator(".rowops button").first.click()   # ✎(名前を変える)
         page.wait_for_function(
             "() => document.querySelectorAll('#lanes .lane h2')[1]"
             "      .textContent.includes('サブ')", timeout=8000)
@@ -2212,13 +2212,36 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             f"レーンのボタン文言が旧名のまま: {btns}"
         prompt_value[0] = "2P"
         page.locator("#devlist .devrow").nth(1) \
-            .locator("button", has_text="改名").click()
+            .locator(".rowops button").first.click()
         page.wait_for_function(
             "() => document.querySelectorAll('#lanes .lane h2')[1]"
             "      .textContent.includes('2P')", timeout=8000)
         prompt_value[0] = "自動テスト"
     c.check("改名がレーン・チップ・ボタン文言まで追従する",
             t_rename_follows_everywhere)
+
+    def t_console_panel_naming():
+        # 本体識別子が名乗られると「Switch 本体」カードが現れ、✎ で名前を
+        # 付けられる。名前は装置の欄(どの本体に繋がっているか)にも出る
+        m1.report_host_info(0x0100005E, 0x0053013C)
+        page.wait_for_function(
+            "() => document.getElementById('consolecard').style.display"
+            " !== 'none'", timeout=10000)
+        assert "識別子 0100005e0053013c" in text(page, "#consolelist"), \
+            text(page, "#consolelist")
+        assert "1P が接続中" in text(page, "#consolelist"), \
+            text(page, "#consolelist")
+        prompt_value[0] = "リビングのSwitch2"
+        page.locator("#consolelist .devrow .rowops button").first.click()
+        page.wait_for_function(
+            "() => document.getElementById('consolelist')"
+            ".textContent.includes('リビングのSwitch2')", timeout=8000)
+        page.wait_for_function(
+            "() => document.getElementById('devlist')"
+            ".textContent.includes('リビングのSwitch2')", timeout=8000)
+        prompt_value[0] = "自動テスト"
+    c.check("Switch 本体のカードで識別子に名前を付けられる",
+            t_console_panel_naming)
 
     def t_unreachable_lane_isolated():
         d2.stop()
@@ -2235,7 +2258,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
     def t_remove_returns_to_solo():
         row = page.locator("#devlist .devrow").nth(1)
-        row.locator("button", has_text="外す").click()
+        row.locator("button", has_text="登録を解除").click()
         page.wait_for_function(
             "() => document.querySelector('#conncard').style.display !== 'none'",
             timeout=10000)

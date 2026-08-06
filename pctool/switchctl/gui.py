@@ -405,7 +405,7 @@ class _Handler(BaseHTTPRequestHandler):
             def _ident(c):
                 if c.status().get("state") != "IDLE":
                     raise DeviceError(
-                        "BUSY", "識別は待機中の装置にだけ送れます"
+                        "BUSY", "本体の確認は待機中の装置にだけ送れます"
                                 "(実行中・手動操作中は入力が混ざるため)")
                 try:
                     for _ in range(4):
@@ -1026,6 +1026,9 @@ main > .card { min-width:0; }
 .chip.warn { color:var(--warn); border-color:var(--warn); }
 .chip.err { color:var(--err); border-color:var(--err); font-weight:700; }
 .row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+/* レーンは行(手順・開始位置・実行ボタン…)を縦に積むので、行間に周囲と
+   同じリズムの余白を入れる(無いと実行ボタン行が上の行に密着する) */
+.lane .row + .row { margin-top:9px; }
 /* .hint の上マージンは本文下の注釈用。行の中に置いたラベルまで持ち上げると
    行(と保存バー)が画面ごとに違う高さになる(2026-08-04 ユーザー指摘) */
 .row > .hint { margin-top:0; }
@@ -1330,10 +1333,22 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
           ＋ 装置を追加</button>
       </div>
       <div id="devaddbox" style="display:none"></div>
-      <!-- devmsg = このカードの操作(追加/識別/改名/外す)の結果。次の操作まで残す -->
+      <!-- devmsg = このカードの操作(追加/接続先の確認/名前変更/登録解除)の
+           結果。次の操作まで残す -->
       <div id="devmsg"></div>
       <div class="hint" id="devhint"
            style="display:none">2台目のマイコンを用意したら、「＋ 装置を追加」で登録します</div>
+    </div>
+    <!-- Switch 本体の一覧。マイコンを挿すと本体が名乗る識別子を記録するので、
+         ここで名前を付けられる(名前は識別子に付く=マイコンを挿し替えても
+         本体に付いていく)。確認済みの本体が1台もなければカードごと出さない -->
+    <div class="card" id="consolecard" style="display:none">
+      <h2>Switch 本体</h2>
+      <div id="consolelist"></div>
+      <div id="consolemsg"></div>
+      <div class="hint">マイコンを挿した Switch 本体を、名乗られた識別子で
+        見分けて記録します。✎ で名前を付けると、装置の欄にも
+        「どの本体に繋がっているか」が名前で出ます</div>
     </div>
     <!-- 編成 = 盤面(連結・装置×手順×周回×開始位置・合流の腕)のスナップ
          ショット。2台以上のときだけ出る -->
@@ -2078,7 +2093,7 @@ function renderLogs(entries) {
 }
 document.getElementById('logdev').onchange = () => renderLogs(lastLogs);
 
-// ============ 装置の台帳(登録・識別・改名)とヘッダの状態チップ ============
+// ============ 装置の台帳(登録・本体の確認・名前変更)とヘッダの状態チップ ============
 // 丸印の色分け: 黄=選択待ち(人の操作が要る)だけ、赤=異常・未接続だけ。
 // 実行中・待機中はどちらも「正常」なので緑(色を警告の意味に取っておく)
 function devDot(d) {
@@ -2141,68 +2156,49 @@ function renderDevices() {
     const row = el('div', 'proc devrow');
     const dot = el('span', 'dot ' + devDot(d));
     dot.title = d.error || devStateJa(d);
-    row.append(dot, el('b', null, d.name), el('span', 'rowops'));
-    const meta = el('div', 'meta');
-    meta.append(el('span', null, devStateJa(d)
-      + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`
-      + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
-    // ボタン群は1つの折返し単位にまとめる。状態文の長さ次第で
-    // 「識別」だけ1行目・「改名」だけ2行目とボタン対が泣き別れ、
-    // 毎秒の状態変化でカードの高さがガタつくのを防ぐ
-    const ops = el('span');
-    ops.style.cssText = 'display:inline-flex; gap:6px; flex:none;';
-    if (d.host_info) {
-      // 本体に名前を付ける(キーは本体識別子なので、マイコンを挿し替えても
-      // 名前は本体に付いていく)
-      const cn = el('button', 'small',
-                    (state.consoles || {})[d.host_info] ? '本体名を変更'
-                                                        : '本体に命名');
-      cn.title = `つながっている Switch 本体に名前を付けます`
-        + `(識別子 ${d.host_info})。空にすると外れます`;
-      cn.onclick = async () => {
-        const cur = (state.consoles || {})[d.host_info] || '';
-        const nv = prompt('この本体の名前(例: リビングのSwitch2)', cur);
-        if (nv == null) return;
-        const r = await api('/api/console_name', 'POST',
-                            {host_info: d.host_info, name: nv});
-        show('devmsg', r.error ? 'err' : 'ok',
-             r.error || (nv ? `この本体を「${nv}」と呼びます` : '名前を外しました'));
-        refresh();
-      };
-      ops.append(cn);
-    }
-    const ident = el('button', 'small', '識別');
-    if (d.error) {
-      ident.disabled = true;
-      ident.title = 'つながっていないので送れません';
-    } else {
-      ident.title = 'この装置だけに小さな入力(左スティック半分の左右ゆらし)を'
-        + '送ります。Switch のコントローラー画面で反応した本体が、この装置の'
-        + 'つながっている先です';
-    }
-    ident.onclick = async () => {
-      const r = await api('/api/identify', 'POST', {dev: d.name});
-      show('devmsg', r.error ? 'err' : 'ok', r.error
-           || `${d.name} へ識別の入力を送りました。Switch 側の反応を確かめてください`);
-    };
-    ops.append(ident);
-    const ren = el('button', 'small', '改名');
-    ren.title = '表示名を変えます(個体IDでの照合は変わりません)';
-    ren.onclick = async () => {
+    const rops = el('span', 'rowops');
+    // 名前の変更は手順・部品の一覧と同じ作法(行右端の ✎)
+    rops.append(rowIcon('pencil', 'この装置の名前を変える', false, async () => {
       const nv = prompt(`「${d.name}」の新しい名前`, d.name);
       if (nv == null || nv === d.name) return;
       const r = await api('/api/device_rename', 'POST', {old: d.name, new: nv});
       show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
       refresh();
+    }));
+    row.append(dot, el('b', null, d.name), rops);
+    const meta = el('div', 'meta');
+    meta.append(el('span', null, devStateJa(d)
+      + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`
+      + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
+    // ボタン群は1つの折返し単位にまとめる(状態文の長さ次第でボタン対が
+    // 泣き別れ、毎秒の状態変化でカードの高さがガタつくのを防ぐ)
+    const ops = el('span');
+    ops.style.cssText = 'display:inline-flex; gap:6px; flex:none;';
+    const ident = el('button', 'small', '本体を確認');
+    if (d.error) {
+      ident.disabled = true;
+      ident.title = 'つながっていないので送れません';
+    } else {
+      ident.title = 'この装置がどの Switch 本体に挿さっているかを実物で'
+        + '確かめます。押すと、この装置へ「左スティックを半分だけ1秒ゆらす」'
+        + '入力が送られます(待機中のみ)。画面が動いた本体が接続先です';
+    }
+    ident.onclick = async () => {
+      const r = await api('/api/identify', 'POST', {dev: d.name});
+      show('devmsg', r.error ? 'err' : 'ok', r.error
+           || `${d.name} へ確認用の入力を送りました。`
+              + '画面が動いた Switch がこの装置の本体です');
     };
-    ops.append(ren);
+    ops.append(ident);
     if (multi) {
       // 1台だけのときは出さない(従来の1台運用で誤って台帳を空にしない。
       // どうしても外すときは CLI の device remove)
-      const rm = el('button', 'small', '外す');
+      const rm = el('button', 'small', '登録を解除');
       rm.title = '台帳から外します(装置は消えません。あとで再登録できます)';
       rm.onclick = async () => {
-        if (!confirm(`「${d.name}」を台帳から外します。よろしいですか?`)) return;
+        if (!confirm(`「${d.name}」の登録を解除します`
+                     + '(装置は消えません。あとで再登録できます)。'
+                     + 'よろしいですか?')) return;
         const r = await api('/api/device_remove', 'POST', {name: d.name});
         show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
         refresh();
@@ -2210,6 +2206,48 @@ function renderDevices() {
       ops.append(rm);
     }
     meta.append(ops);
+    row.append(meta);
+    box.append(row);
+  }
+  renderConsoles(devs);
+}
+
+// ---- Switch 本体の一覧(識別子に名前を付ける) ----
+// 台帳(state.consoles)に載っている本体と、いま装置が報告している本体の
+// 和集合を出す。1台も確認できていなければカードごと出さない
+function renderConsoles(devs) {
+  const named = state.consoles || {};
+  const seen = new Map();   // 識別子 → つながっている装置名の一覧
+  for (const d of devs) {
+    if (!d.host_info) continue;
+    if (!seen.has(d.host_info)) seen.set(d.host_info, []);
+    seen.get(d.host_info).push(d.name);
+  }
+  const ids = [...new Set([...seen.keys(), ...Object.keys(named)])];
+  document.getElementById('consolecard').style.display =
+    ids.length ? '' : 'none';
+  const box = document.getElementById('consolelist');
+  box.textContent = '';
+  for (const hi of ids) {
+    const row = el('div', 'proc devrow');
+    const conn = seen.get(hi) || [];
+    const dot = el('span', 'dot ' + (conn.length ? 'ok' : ''));
+    dot.title = conn.length ? `${conn.join(' と ')} が接続中` : 'いまは接続なし';
+    const rops = el('span', 'rowops');
+    rops.append(rowIcon('pencil', 'この本体の名前を変える(空にすると外れます)',
+                        false, async () => {
+      const nv = prompt('この本体の名前(例: リビングのSwitch2)', named[hi] || '');
+      if (nv == null) return;
+      const r = await api('/api/console_name', 'POST',
+                          {host_info: hi, name: nv});
+      show('consolemsg', r.error ? 'err' : 'ok',
+           r.error || (nv ? `この本体を「${nv}」と呼びます` : '名前を外しました'));
+      refresh();
+    }));
+    row.append(dot, el('b', null, consoleJa(hi)), rops);
+    const meta = el('div', 'meta');
+    meta.append(el('span', null, `識別子 ${hi}`
+      + (conn.length ? ` ・ ${conn.join(' と ')} が接続中` : '')));
     row.append(meta);
     box.append(row);
   }
@@ -2797,12 +2835,12 @@ function buildLane(d) {
   lane.find.title = 'LAN からこの装置(個体IDが一致する実機)を探して接続先にします';
   lane.conn = el('button', 'small', '接続');
   lane.conn.title = '入力した接続先に切り替えます';
-  lane.ident = el('button', 'small', '識別');
-  lane.ident.title = 'この装置だけに小さな入力(左スティック半分の左右ゆらし)を'
-    + '送ります。Switch のコントローラー画面で反応した本体が、この装置の'
-    + 'つながっている先です';
+  lane.ident = el('button', 'small', '本体を確認');
+  lane.ident.title = 'この装置がどの Switch 本体に挿さっているかを実物で'
+    + '確かめます。押すと、この装置へ「左スティックを半分だけ1秒ゆらす」'
+    + '入力が送られます(待機中のみ)。画面が動いた本体が接続先です';
   const lbl = el('label', 'lbl', '接続先');
-  bar.append(el('span', 'lbl', 'マイコン'), lane.chip, el('span', 'sep'),
+  bar.append(el('span', 'lbl', '装置'), lane.chip, el('span', 'sep'),
              lbl, lane.host, lane.find, lane.conn, lane.ident);
   card.append(bar);
   lane.connmsg = el('div');
@@ -2917,7 +2955,7 @@ function wireLane(lane) {
   lane.ident.onclick = async () => {
     const r = await api('/api/identify', 'POST', {dev: lane.name});
     showIn(lane.connmsg, r.error ? 'err' : 'ok', r.error
-           || '識別の入力を送りました。Switch 側の反応を確かめてください');
+           || '確認用の入力を送りました。画面が動いた Switch がこの装置の本体です');
   };
 }
 

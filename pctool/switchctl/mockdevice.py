@@ -584,6 +584,10 @@ class MockDevice:
             self._pair_reqs = reqs
             self._pair_step = step
 
+    def report_host_info(self, a: int, b: int) -> None:
+        """本体識別子(HOST_INFO)のログを発報する(本体パネルの検査用)。"""
+        self._log("HOST_INFO", a, b)
+
     def inject_fault(self, reason: str = "ENGINE_FAULT") -> None:
         with self._lock:
             self._run = None
