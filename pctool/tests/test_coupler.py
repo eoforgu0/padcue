@@ -205,6 +205,45 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
     post(base, "/api/stop_both", {"mode": "immediate"})
 
 
+def test_manual_restart_solo_not_auto_joined(env):
+    """人為停止 → その装置でソロ実行を開始しても、相方がまだ連結実行中の
+    自動合流に誤って巻き込まれない(2026-08-07 レビュー)。
+
+    駐機の追跡が「連結実行のメンバーとして駐機したか」を区別していないと、
+    人為停止後にソロ再開した装置の駐機まで『2台そろった』と誤認し、独立の
+    ソロ実行へ勝手に SELECT を送ってしまう。
+    """
+    proj, d1, d2, base = env
+    wait_ready(base)
+    post(base, "/api/couple", {"auto_join": True, "arm": 0})
+    # 1P は毎周駐機する連結実行を続ける(相方を待つ状況を作る)
+    r = post(base, "/api/couple_run", {"plan": plan(loops=100000)})
+    assert r.get("ok"), r
+    wait_until(lambda: all(d.get("running") or d.get("awaiting")
+                           for d in devs(base)))
+    # 2P を人為停止 → 連動しない
+    assert post(base, "/api/stop", {"mode": "immediate", "dev": "2P"}).get("ok")
+    wait_until(lambda: not devs(base)[1].get("running")
+               and not devs(base)[1].get("awaiting"))
+    # その 2P でソロ実行を開始できる(1P はまだ連結実行として毎周駐機し、
+    # 来ない相方=2Pを待ち続けている状況)
+    assert post(base, "/api/run", {"name": "合流", "loops": 1,
+                                   "dev": "2P"}).get("ok")
+    # 誤発火する実装では、ここで 1P の駐機と 2P のソロ駐機が「2台そろった」
+    # と誤認され、2P へ勝手に SELECT が送られて1周だけの実行が完走してしまう。
+    # 正しい実装では、SELECT する人がいないので 2P は駐機したまま止まる
+    time.sleep(3.0)
+    d2s = devs(base)[1]
+    assert d2s.get("awaiting"), \
+        f"ソロ実行のはずの2Pが勝手に選択されて進んでしまった" \
+        f"(連結の自動合流が誤発火): {d2s}"
+    logs = proj.read_logs(500)
+    solo_joins = [e for e in logs if e.get("kind") == "PC_AUTO_JOIN"
+                 and e.get("dev") == "bbbb00000002"]
+    assert not solo_joins, f"ソロ実行の2Pが自動合流の対象になった: {solo_joins}"
+    post(base, "/api/stop_both", {"mode": "immediate"})
+
+
 def test_transient_error_does_not_end_run(env):
     """一過性の収集エラー(5秒未満)で連動停止・完走確定を誤発しないこと。
 
@@ -302,7 +341,7 @@ def test_anomaly_stops_partner_and_records_resume(env):
         d3.stop()
 
 
-def test_couple_again_and_formations(env):
+def test_formations(env):
     proj, d1, d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
@@ -310,8 +349,9 @@ def test_couple_again_and_formations(env):
                 {"plan": plan(loops=1), "formation": "検証A"}).get("ok")
     wait_until(lambda: get(base, "/api/state")["coupling"]["run"]["active"]
                is False, timeout=20)
-    # もう一回(同じ条件)
-    r = post(base, "/api/couple_again", {})
+    # 同じ盤面でもう一度まとめて開始(⟳ 周回実行 / F10 と同じ経路)
+    r = post(base, "/api/couple_run",
+             {"plan": plan(loops=1), "formation": "検証A"})
     assert r.get("ok"), r
     wait_until(lambda: get(base, "/api/state")["coupling"]["run"]["active"]
                is False, timeout=20)

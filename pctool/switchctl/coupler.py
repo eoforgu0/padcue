@@ -446,11 +446,17 @@ class Coupler:
         if set(run["members"]) != set(by_name):
             return                        # 台帳が変わった(外した等)
         links = [by_name[n] for n in run["members"]]
-        # 駐機の観測(いつから・どの世代か)
+        # 駐機の観測(いつから・どの世代か)。対象は**連結実行のメンバーとして
+        # 駐機した装置**だけに限る。人為停止の印(manual)が付いた装置は、
+        # あとで独立にソロ実行を始められる(§0.1)——その駐機まで拾うと、
+        # 「連結実行の相方の駐機」と「無関係なソロ実行の駐機」がたまたま
+        # 重なっただけで『2台そろった』と誤認し、無関係なソロ実行へ勝手に
+        # SELECT を送ってしまう(2026-08-07 レビューで実証したバグ)
         for link in links:
             name = link.cfg.get("name")
             st = link.status
-            if not link.error and st.get("awaiting"):
+            if not link.error and st.get("awaiting") \
+                    and name not in run["manual"]:
                 gen = int(st.get("await_gen", 0))
                 if self._parked_gen.get(name) != gen:
                     self._parked_gen[name] = gen

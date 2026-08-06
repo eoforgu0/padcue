@@ -2468,12 +2468,22 @@ def run_coupling(c: Checker, page, proj: Project,
             timeout=8000)
         assert not page.locator("#couplecta").is_visible()
         bar = page.locator("#coupler").inner_text()
-        for want in ("連結中", "1回実行", "周回実行", "もう一回",
+        for want in ("1回実行", "周回実行", "プリセットへ保存",
                      "両方を今の周で止める", "両方を今すぐ止める",
                      "連結を外す", "自動合流", "進む先",
-                     "次の合流は自分で選ぶ", "両方へ同時に選ぶ"):
+                     "次の合流は自分で選ぶ", "選択肢を両方へ同時に送る"):
             assert want in bar, f"連結バーに「{want}」が無い"
+        assert "連結中" not in bar, \
+            "バーは連結中にしか存在しない純粋な重複チップが残っている"
+        assert "もう一回" not in bar, \
+            "廃止した「もう一回(同じ条件)」ボタンが残っている"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
+        # #chint は実測(開始ズレ)+見えないホットキーの凡例だけに圧縮済み
+        # (µs との区別・連動停止の条件、といった教育文は乗せない。原則 §5)
+        hint = page.locator("#chint").inner_text()
+        assert "F9 = 全部止める" in hint and "F10 = まとめて開始" in hint, hint
+        assert "µs" not in hint and "連動停止が効くのは" not in hint, \
+            f"廃止したはずの教育文が #chint に残っている: {hint}"
     c.check("連結すると連結バーの一式が現れる", t_link_shows_bar)
 
     def t_unlink_and_relink():
@@ -2487,6 +2497,37 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.querySelector('#coupler').style.display !== 'none'",
             timeout=8000)
     c.check("連結を外すとバーごと消え、入口に戻る", t_unlink_and_relink)
+
+    def t_together_refused_when_solo_busy():
+        # 片方が単独実行中に F10(= ⟳ 周回実行 と同じ、まとめて開始)を押すと
+        # 理由付きで断られ、走っている側は無傷であること(coupler.py の
+        # 事前検査が既に持つ契約を、実測で確定させる)
+        set_lane_proc(0, "選んで進む")
+        lane(0).locator(".lloops").fill("0")
+        lane(0).locator("button", has_text="周回実行").click()
+        page.wait_for_function(
+            "() => state.devices[0].running || state.devices[0].awaiting",
+            timeout=10000)
+        assert not page.evaluate(
+            "state.devices[1].running || state.devices[1].awaiting"), \
+            "単独実行のはずなのに2Pまで動き出した"
+        page.keyboard.press("F10")
+        page.wait_for_function(
+            "() => document.querySelector('#cactmsg .msg.err')",
+            timeout=8000)
+        msg = page.locator("#cactmsg").inner_text()
+        assert "待機中ではありません" in msg, f"断る理由が伝わらない: {msg}"
+        # 走っていた1Pは無傷、2Pは動き出していない
+        assert page.evaluate(
+            "state.devices[0].running || state.devices[0].awaiting"), \
+            "断られたはずなのに走っていた1Pが止まってしまった"
+        assert not page.evaluate(
+            "state.devices[1].running || state.devices[1].awaiting"), \
+            "断られたはずなのに2Pが動き出した"
+        lane(0).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(0, "待機中")
+    c.check("単独実行中の F10(まとめて開始)は理由付きで断られ、走っている側は無傷",
+            t_together_refused_when_solo_busy)
 
     def t_pair_run_and_auto_join():
         set_lane_proc(0, "選んで進む")
@@ -2577,6 +2618,39 @@ def run_coupling(c: Checker, page, proj: Project,
             ".textContent.includes('F9')", timeout=8000)
         wait_idle()
     c.check("人為停止は連動せず、F9 で全部止められる", t_manual_stop_not_coupled)
+
+    def t_solo_restart_after_manual_stop_not_auto_joined():
+        # 連結実行中、片方を人為停止 → その装置で単独実行を開始できること。
+        # かつ単独実行が駐機に達しても、連結の自動合流が誤発火して勝手に
+        # 選択肢を選ばないこと(相方=1P はまだ連結実行中のまま)
+        lane(0).locator(".lloops").fill("0")
+        lane(1).locator(".lloops").fill("0")
+        page.click("#crun")
+        page.wait_for_function(
+            "() => (state.devices || []).slice(0, 2).every("
+            "  d => d.running || d.awaiting)", timeout=10000)
+        lane(1).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(1, "待機中")
+        # 人為停止した2Pで単独実行を開始できる
+        lane(1).locator(".lloops").fill("0")
+        lane(1).locator("button", has_text="周回実行").click()
+        page.wait_for_function(
+            "() => state.devices[1].running || state.devices[1].awaiting",
+            timeout=10000)
+        # 1Pは連結実行として毎周駐機し、来ない相方(2P)を待ち続けている状況。
+        # 誤発火する実装では、この駐機と2Pのソロ駐機が「2台そろった」と
+        # 誤認され、2Pへ勝手にSELECTが送られて進んでしまう
+        page.wait_for_timeout(3000)
+        assert page.evaluate("state.devices[1].awaiting"), \
+            "単独実行のはずの2Pが勝手に選択されて進んでしまった" \
+            "(連結の自動合流が誤発火)"
+        page.keyboard.press("F9")        # 全部止めるホットキー
+        page.wait_for_function(
+            "() => document.querySelector('#cactmsg')"
+            ".textContent.includes('F9')", timeout=8000)
+        wait_idle()
+    c.check("人為停止した装置は単独実行を開始でき、連結の自動合流に巻き込まれない",
+            t_solo_restart_after_manual_stop_not_auto_joined)
 
     def t_linked_stop_banner():
         lane(0).locator(".lloops").fill("5")
@@ -2692,16 +2766,17 @@ def run_coupling(c: Checker, page, proj: Project,
     c.check("プリセット: 保存・上書き保存・改名・呼び出し・実行中ガード",
             t_formation_roundtrip)
 
-    def t_f10_again():
+    def t_f10_starts_together():
+        # F10 = 現在の盤面のままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)
         page.keyboard.press("F10")
         page.wait_for_function(
             "() => document.querySelector('#cactmsg')"
-            ".textContent.includes('F10')", timeout=8000)
+            ".textContent.includes('開始ズレ')", timeout=8000)
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
             "  d => d.running || d.awaiting)", timeout=10000)
         wait_idle()
-    c.check("F10 でもう一回(同じ条件)", t_f10_again)
+    c.check("F10 で現在の盤面をまとめて開始", t_f10_starts_together)
 
     # あと片づけ: プリセットを消し、1台に戻す(改名後の名前で消す)
     row = page.locator("#formlist .devrow", has_text="いつものB")

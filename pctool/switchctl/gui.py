@@ -498,21 +498,6 @@ class _Handler(BaseHTTPRequestHandler):
                  for p in body.get("plan", [])],
                 formation=str(body.get("formation", "")))
             return r
-        if path == "/api/couple_again":
-            snap = self._coupler().snapshot()
-            run = snap.get("run")
-            if not run:
-                return {"error": "直前の連結実行の記録がありません"}
-            # 「実行中」は装置の実際の状態で判定する。記録上の active は
-            # 終了確定の猶予(終了ログ待ち 1.5秒)の間 true のままで、
-            # 完走直後の「もう一回」を弾いてしまう
-            busy = any(not l.error and (l.status.get("running")
-                                        or l.status.get("awaiting"))
-                       for l in self._coupler().members())
-            if busy:
-                return {"error": "まだ実行中です"}
-            return self._coupler().couple_run(
-                run["plan"], formation=run.get("formation", ""))
         if path == "/api/couple_resume":
             return self._coupler().couple_resume()
         if path == "/api/stop_both":
@@ -867,7 +852,7 @@ header { position:relative; }
 .menu button:hover { background:var(--accent-soft); color:var(--accent); }
 .menu button.on { font-weight:700; color:var(--accent); }
 .menu button.on::before { content:'✓ '; }
-/* ラベル語(接続先・両方へ同時に選ぶ、など)の基本の見た目。強調したい
+/* ラベル語(接続先・選択肢を両方へ同時に送る、など)の基本の見た目。強調したい
    文脈(連結バー)だけ .coupler .lbl で太字に上書きする */
 .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em; }
 .sep-v { width:1px; height:18px; background:var(--line); margin:0 4px; }
@@ -1349,21 +1334,18 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <div class="card coupler" id="coupler" style="display:none">
       <div class="row">
         <span class="lbl">⧉ 連結</span>
-        <span class="chip link">連結中</span>
         <span class="chip" id="cformation" style="display:none"
               title="呼び出したプリセットの名前"></span>
         <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
         <span class="chip" id="cforminfo" style="display:none"></span>
         <button class="small" id="cformsave"
                 title="いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)を保存します">
-          保存</button>
+          プリセットへ保存</button>
         <span class="sep-v"></span>
         <button class="primary" id="crun1"
                 title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
         <button class="primary" id="crun"
                 title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
-        <button id="cagain"
-                title="直前と同じ条件(手順・周回・開始ラベル)でもう一度まとめて開始します">⟲ もう一回(同じ条件)</button>
         <span class="sep-v"></span>
         <button id="cstopg"
                 title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
@@ -1382,7 +1364,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <button id="coneshot"
                 title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">✋ 次の合流は自分で選ぶ(1回だけ)</button>
         <span class="sep-v"></span>
-        <span class="lbl">両方へ同時に選ぶ</span>
+        <span class="lbl">選択肢を両方へ同時に送る</span>
         <span id="cbotharms" class="row" style="margin:0;gap:6px"></span>
       </div>
       <!-- cmsg = 連動停止の理由と再開、ワンショットの案内(状態から毎秒作る) -->
@@ -1395,7 +1377,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <div class="card" id="couplecta" style="display:none">
       <div class="row">
         <button id="clink"
-                title="まとめて開始・自動合流・連動停止・両方へ同時に選ぶ、は連結したときにだけ現れます">⧉ 連結する</button>
+                title="まとめて開始・自動合流・連動停止・選択肢を両方へ同時に送る、は連結したときにだけ現れます">⧉ 連結する</button>
       </div>
     </div>
     <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
@@ -2923,7 +2905,7 @@ function updateLane(lane, d) {
         }
       } else if (inRun) {
         lane.awaitbox.append(el('div', 'msg warn',
-          '待機分岐で止まっています。連結バーの「両方へ同時に選ぶ」で'
+          '待機分岐で止まっています。連結バーの「選択肢を両方へ同時に送る」で'
           + '両方まとめて進められます'));
       } else {
         lane.awaitbox.append(
@@ -2941,7 +2923,7 @@ function updateLane(lane, d) {
                    el('div', 'hint',
                       `連結中に ${lane.name} だけ進めると、次の合流の相手が`
                       + '1周ずれます。意図してずらす検証のとき以外は、待つか、'
-                      + '連結バーの「両方へ同時に選ぶ」を使ってください'),
+                      + '連結バーの「選択肢を両方へ同時に送る」を使ってください'),
                    armRow(d, lane.name, lane.awaitbox));
         lane.awaitbox.append(det);
       }
@@ -3146,7 +3128,8 @@ function beep(freq) {
   } catch (e) { /* 音が出せない環境では黙って続ける */ }
 }
 
-// F9 = 全部止める / F10 = もう一回。連結中のみ(誤爆防止)
+// F9 = 全部止める / F10 = まとめて開始(現在の盤面、⟳ 周回実行と同じ)。
+// 連結中のみ(誤爆防止)
 document.addEventListener('keydown', async e => {
   const c = cpl();
   if (!c || !c.on || (state.devices || []).length < 2) return;
@@ -3160,10 +3143,7 @@ document.addEventListener('keydown', async e => {
   } else if (e.key === 'F10') {
     e.preventDefault();
     beep(880);
-    const r = await api('/api/couple_again', 'POST', {});
-    show('cactmsg', r.error ? 'err' : 'ok',
-         r.error || 'F10: 同じ条件でもう一回開始しました');
-    refresh();
+    await coupleRun(false);
   }
 });
 
@@ -3387,7 +3367,6 @@ function renderCoupling() {
     b.disabled = someBusy;
     b.title = someBusy ? 'いま実行中なので押せません' : base;
   }
-  document.getElementById('cagain').disabled = someBusy || !run.plan;
   document.getElementById('cstopg').disabled = !someBusy;
   document.getElementById('cstopi').disabled = !someBusy;
   // 合流の設定
@@ -3407,7 +3386,7 @@ function renderCoupling() {
   oneshot.classList.toggle('armed', !!c.oneshot_manual);
   oneshot.textContent = c.oneshot_manual
     ? '↩ 次の合流の保留を取り消す' : '✋ 次の合流は自分で選ぶ(1回だけ)';
-  // 両方へ同時に選ぶ(両方が選択待ちのときだけ押せる。ボタンは消さない)
+  // 選択肢を両方へ同時に送る(両方が選択待ちのときだけ押せる。ボタンは消さない)
   const both = document.getElementById('cbotharms');
   const ready = devs.slice(0, 2).every(d => !d.error && d.awaiting);
   const bKey = armKey + '|' + ready;
@@ -3498,22 +3477,16 @@ function renderCoupling() {
     box.append(m);
   } else if (active && c.oneshot_manual && ready) {
     box.append(el('div', 'msg warn',
-      '両方そろいました。上の「両方へ同時に選ぶ」で進めてください'
+      '両方そろいました。上の「選択肢を両方へ同時に送る」で進めてください'
       + '(この1回は自動で選びません)'));
   }
   }
-  // ヒント(実測の常時表示)
+  // ヒント(実測の開始ズレ+見えないホットキーの凡例だけに圧縮。原則 §5)
   const bits = [];
   if (run.skew_ms != null) bits.push(`前回の開始ズレ ${run.skew_ms}ms`
     + `(${run.members ? run.members.join('→') : ''})`);
-  if (run.last_join && run.last_join.skew_ms != null) {
-    bits.push(`合流ズレ ${run.last_join.skew_ms}ms`);
-  }
-  bits.push('ズレは毎回 ms でログにも残ります(装置内の µs とは別物)');
-  bits.push('連動停止が効くのは片方の異常(装置の異常報告・約5秒見えない)'
-            + 'のときだけで、手で止めたときは連動しません');
-  bits.push('F9 = 全部止める ／ F10 = もう一回(受け付けはビープ音)');
-  document.getElementById('chint').textContent = bits.join('。');
+  bits.push('F9 = 全部止める ／ F10 = まとめて開始(受け付けはビープ音)');
+  document.getElementById('chint').textContent = bits.join('・');
 }
 
 document.getElementById('clink').onclick = async () => {
@@ -3526,12 +3499,6 @@ document.getElementById('cunlink').onclick = async () => {
 };
 document.getElementById('crun1').onclick = () => coupleRun(true);
 document.getElementById('crun').onclick = () => coupleRun(false);
-document.getElementById('cagain').onclick = async () => {
-  const r = await api('/api/couple_again', 'POST', {});
-  show('cactmsg', r.error ? 'err' : 'ok',
-       r.error || `同じ条件でもう一回開始しました(開始ズレ ${r.skew_ms}ms)`);
-  refresh();
-};
 document.getElementById('cstopg').onclick = async () => {
   const r = await api('/api/stop_both', 'POST', {mode: 'graceful'});
   show('cactmsg', r.error ? 'err' : 'ok',
