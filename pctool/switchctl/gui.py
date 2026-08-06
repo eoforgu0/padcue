@@ -867,13 +867,9 @@ header { position:relative; }
 .menu button:hover { background:var(--accent-soft); color:var(--accent); }
 .menu button.on { font-weight:700; color:var(--accent); }
 .menu button.on::before { content:'✓ '; }
-.devbar { display:flex; align-items:center; gap:7px;
-  border:1px solid var(--line); border-radius:9px; padding:3px 9px; }
-.devbar .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em; }
-.devbar .sep { width:1px; height:16px; background:var(--line); }
-.devbar input { width:132px; }
-.devbar.off { border-color:var(--err); background:var(--err-bg); }
-.devbar.busy { border-color:var(--ok); }
+/* ラベル語(接続先・両方へ同時に選ぶ、など)の基本の見た目。強調したい
+   文脈(連結バー)だけ .coupler .lbl で太字に上書きする */
+.lbl { font-size:11px; color:var(--muted); letter-spacing:.06em; }
 .sep-v { width:1px; height:18px; background:var(--line); margin:0 4px; }
 .tabs { display:flex; gap:4px; }
 .tab { border:1px solid var(--line); border-radius:7px; padding:3px 14px;
@@ -890,8 +886,20 @@ header { position:relative; }
 /* 装置カードの行。手順一覧の .proc の形を借りるが、行は選択対象ではない */
 .devrow b, .devrow .meta { cursor:default; }
 .devrow .meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-/* 装置ごとの縦レーン(2台以上のとき)。横に並べて両方を常に1画面に。
-   幅が足りなければ縦積みに落ちる(minmax の下限) */
+/* 開閉式の詳細を持つ行(装置の台帳)。折りたたみ三角ぶんだけ列を1つ増やす
+   (手順を編集のフォルダ行 .folder-row と同じ作法。原則 §5 同じ意味は同じ形) */
+.devrow.foldable { grid-template-columns:14px 16px 1fr auto; }
+.devrow.foldable .meta { grid-column:3 / -1; }
+.devtoggle { border:0; background:transparent; cursor:pointer;
+  color:var(--muted); padding:0; width:16px; font-size:10px; text-align:center; }
+.devdetail { grid-column:1 / -1; display:none; margin-top:8px; padding-top:8px;
+  border-top:1px solid var(--line); }
+.devrow.open .devdetail { display:flex; flex-direction:column; gap:8px; }
+/* 未接続・異常のとき、対処の場所であることを縁取りで自ら名乗る(原則 §1) */
+.devrow.flagged { border-color:var(--err); background:var(--err-bg); }
+/* 装置ごとの縦レーン(台数に関わらず常に1本以上。原則 §1 系: 1台と2台は
+   同型)。2台以上は横に並べて両方を常に1画面に。幅が足りなければ縦積みに
+   落ちる(minmax の下限) */
 .lanes { display:grid; grid-template-columns:repeat(auto-fit, minmax(430px, 1fr));
   gap:14px; align-items:start; }
 .lane h2 { display:flex; align-items:center; gap:7px; font-size:13px;
@@ -1036,8 +1044,8 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
    崩れない。auto-flow の row 方向で4列を順に埋めるだけで、
    dt1,dd1,dt2,dd2 → dt3,dd3,dt4,dd4 … と自然にペアが揃う) */
 .kv { display:grid;
-  grid-template-columns:max-content 1fr max-content 1fr;
-  column-gap:24px; row-gap:2px; font-size:12.5px; }
+  grid-template-columns:max-content 1fr;
+  column-gap:14px; row-gap:2px; font-size:12.5px; }
 .kv dt { color:var(--muted); margin-right:8px; }
 .kv dd { margin:0; font-variant-numeric:tabular-nums; }
 /* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
@@ -1298,10 +1306,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 <main id="main" class="home">
   <!-- ホーム(左ペイン: 手順の一覧と装置の台帳) -->
   <div class="stack v-home">
-    <div class="card">
-      <h2>手順を選ぶ</h2>
-      <div id="procs"></div>
-    </div>
+    <!-- 実行対象の選択はレーンの手順プルダウン(運転席の設定行)の仕事。
+         手順の在庫管理(並べ替え・フォルダ・表示選別)は「手順を編集」の
+         仕事なので、ホームに手順一覧カードは置かない(原則 §1 系) -->
     <div class="card">
       <h2>装置</h2>
       <div id="devlist"></div>
@@ -1394,70 +1401,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
          実機が動く事故を防ぐ(2台化で生まれた組み合わせ) -->
     <div id="mixwarn" style="display:none"></div>
-    <!-- 装置が2台以上のときは、下の3カード(接続・実行・タイムライン)を
-         隠して、装置ごとのレーンをここに並べる(案C。1台なら従来のまま) -->
-    <div class="lanes" id="lanes" style="display:none"></div>
-    <div class="card" id="conncard">
-      <h2>装置との接続</h2>
-      <div class="devbar" id="devbar">
-        <span class="lbl">装置</span>
-        <span id="devchip" class="chip">確認中…</span>
-        <span class="sep"></span>
-        <label class="lbl" for="host">接続先</label>
-        <input type="text" id="host" size="16" placeholder="IP か padctl-xxxx.local"
-               title="マイコンの IP か名前(padctl-<個体ID下4桁>.local)。ふだんは「探す」で自動設定されます">
-        <button id="finddev" class="small"
-                title="LAN からマイコンを探して接続先にします">探す</button>
-        <button id="sethost" class="small"
-                title="入力した接続先に切り替えます">接続</button>
-      </div>
-      <!-- connmsg = このカードの操作(探す/接続)の結果。次の操作まで残す -->
-      <div id="connmsg"></div>
-      <!-- msg = 実機の状態の知らせ(毎秒作り直す)。「異常を解除」もここ -->
-      <div id="msg"></div>
-    </div>
-    <div class="card" id="runcard">
-      <h2>実行</h2>
-      <!-- 前提条件は「押す前に読むもの」なのでボタンの上に置く。選んだ手順に
-           付いている案内で、実行中に出たり消えたりしないため、ここにあっても
-           操作の途中でボタンの位置が動くことはない(2026-08-02 ユーザー指摘) -->
-      <div id="prenote" class="prenote" style="display:none"></div>
-      <!-- 設定は上、行動は下(原則 §2)。読み順 = どれだけ(周回)→
-           どこから(開始ラベル)→ 押す(実行・停止) -->
-      <div class="row">
-        <label>周回 <input type="number" id="loops" value="0" min="0" max="100000"
-          title="実行中に変えた値は次の開始から効きます">
-          <span style="color:var(--muted); font-size:11px">0=止めるまで</span></label>
-        <label>開始ラベル <select id="resume"></select></label>
-      </div>
-      <div class="row" style="margin-top:7px">
-        <button class="primary" id="run1"
-                title="周回の指定に関係なく、この手順を1回だけ実行します">▶ 1回実行</button>
-        <button class="primary" id="run"
-                title="右の周回数だけくり返して実行します">⟳ 周回実行</button>
-        <span class="sep-v"></span>
-        <button id="stopg" title="今の周を最後までやってから止まります(ゲームの状態が整う)">
-          ◼ 今の周で止める</button>
-        <button id="stopi" class="danger"
-                title="その場で全ボタンを離して止めます(ゲームは操作の途中で放置される)">
-          ⏹ 今すぐ止める</button>
-      </div>
-      <!-- 実行中の手順を編集したときだけ出る注意。ボタンより下に置いて、
-           出たり消えたりしてもボタンの位置が動かないようにする -->
-      <div id="nowplaying" style="display:none"></div>
-      <!-- actmsg = このカードの操作(実行/停止/転送)の結果。次の操作まで残す -->
-      <div id="actmsg"></div>
-      <!-- awaitmsg = 実行を続けるための知らせ(待機分岐の選択・食い違い警告)。
-           実機の状態から毎秒作り直す。ボタンより下なので、出たり消えたりしても
-           ボタンの位置は動かない -->
-      <div id="awaitmsg"></div>
-      <dl class="kv" id="status" style="margin-top:9px"></dl>
-    </div>
-    <div class="card" id="tlcard">
-      <h2>タイムライン<span id="tlprog" class="tlprog"></span></h2>
-      <div class="tl-wrap"><div class="tl" id="tl"></div></div>
-      <div id="tlmsg"></div>
-    </div>
+    <!-- 装置台数に関わらず、常にレーン(原則 §1 系: 1台と2台は同型)。
+         接続・診断・登録解除は装置カード(格納庫)側の開閉式詳細へ移した -->
+    <div class="lanes" id="lanes"></div>
     <div class="card" id="manualcard">
       <h2>手動操作(PC 経由)</h2>
       <div class="row">
@@ -1622,7 +1568,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 
 <script>
 let view = 'home';
-let selected = null, state = null, timeline = null;
+// selected = 「手順を編集」を開くときの初期候補(最後にどこかのレーンで
+// 選んだ手順)。実行対象そのものの選択は各レーンの手順プルダウンが持つ
+let selected = null, state = null;
 let flowDoc = null, flowName = null, flowSel = null, flowParts = [];
 let flowDirty = false, undoStack = [];
 let partData = null, partName = null, partDirty = false;
@@ -1816,15 +1764,13 @@ for (const t of document.querySelectorAll('.tab')) {
     if (view === 'home') {
       // 手順を編集してから戻ってきたときに、古いタイムラインを見せない。
       // 実行中の手順を編集した場合も「編集後の内容」を見せる(実機は転送
-      // 時点の内容で動き続けるので、そのずれは実行パネルの警告で知らせる)
-      timeline = null;
-      // レーン(2台以上)側も同じく読み直す。syncLaneTimeline は blob の
-      // ハッシュ変化で読み直す作りだが、ラベルだけの追加はハッシュが
-      // 変わらない(ラベルはボタン入力に影響しない付随情報のため)。
-      // ハッシュ一致でも「戻ってきた」ことそのもので古さを疑い、
-      // 1台側と同じく強制的に読み直す
+      // 時点の内容で動き続けるので、そのずれは実行パネルの警告で知らせる)。
+      // syncLaneTimeline は blob のハッシュ変化で読み直す作りだが、ラベル
+      // だけの追加はハッシュが変わらない(ボタン入力に影響しない付随情報の
+      // ため)。ハッシュ一致でも「戻ってきた」ことそのもので古さを疑い、
+      // 強制的に読み直す
       for (const lane of laneMap.values()) { lane.tlName = ''; lane.tlHash = ''; }
-      refresh().then(loadTimeline);
+      refresh();
     }
   };
 }
@@ -2017,7 +1963,7 @@ const LOG_JA = {
     const hi = hex(a) + hex(b);
     const nm = (state && state.consoles || {})[hi];
     return `本体情報: ${hex(a)} ${hex(b)}`
-      + (nm ? `(=「${nm}」)` : '(装置カードの「本体に命名」で名前を付けられます)');
+      + (nm ? `(=「${nm}」)` : '(「Switch 本体」の ✎ で名前を付けられます)');
   },
   AWAIT_TIMEOUT: (a, b) => b
     ? `待機分岐の待ちが上限に達したので、選択肢${b}へ自動で進みました`
@@ -2109,12 +2055,168 @@ function consoleJa(hi) {
   return n || `本体 ${hi.slice(-4).toUpperCase()}`;
 }
 
-// 一覧・チップは毎秒の状態取得のたびに呼ばれるが、作り直すのは中身が
-// 変わったときだけ(ボタンへのフォーカスやホバーを毎秒切らない)
+// 一覧・チップは毎秒の状態取得のたびに呼ばれる。行は build/update(レーンと
+// 同じ規則。入力欄のフォーカス・開閉状態・ホバーを毎秒壊さない)
 let devsKey = '';
 
-// 装置id → レーン(2台以上のときの実行・監視画面。実体は loadTimeline の後)
+// 装置id → レーン(実行・監視画面。実体は buildLane の後)
 const laneMap = new Map();   // キーは装置名(一意)。id は未学習だと空で衝突する
+// 装置名 → 装置カードの行(接続・診断の実体。原則 §1 の「環境側」の実体)
+const devRowMap = new Map();
+const devOpen = new Map();     // 装置名 → 詳細を開いているか(手動操作を尊重)
+const devAutoKey = new Map();  // 装置名 → 直近に自動で開いた異常の署名
+
+// 未接続・異常(state=ERROR や⚠登録未完了)の署名。空文字は「異常なし」
+function devFlagKey(d) {
+  if (d.error) return 'off:' + d.error;
+  if (d.state === 'ERROR') return 'err';
+  if ('pair_step' in d && (d.pair_step === 1 || d.pair_step === 2)) return 'pair';
+  return '';
+}
+
+function applyDevOpenState(row) {
+  const open = !!devOpen.get(row.name);
+  row.card.classList.toggle('open', open);
+  row.toggle.textContent = open ? '▾' : '▸';
+  row.toggle.title = open ? 'たたむ' : '詳細を開く(接続先・診断)';
+}
+
+function toggleDevOpen(name) {
+  devOpen.set(name, !devOpen.get(name));
+  const row = devRowMap.get(name);
+  if (row) applyDevOpenState(row);
+}
+
+// レーンの状態チップから装置パネルの該当行へ渡す導線(原則 §1: 結論→対処)
+function openDevDetail(name) {
+  devOpen.set(name, true);
+  const row = devRowMap.get(name);
+  if (!row) return;
+  applyDevOpenState(row);
+  row.card.scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+// 装置カードの行を組み立てる(一度だけ)。開閉式の詳細に接続・診断・
+// 登録解除を集約する(原則 §1 系B: 対処の場所は環境側)
+function buildDevRow(d) {
+  const row = {name: d.name};
+  const card = el('div', 'proc devrow foldable');
+  row.card = card;
+  row.dot = el('span', 'dot');
+  card.append(row.dot);
+  row.toggle = el('button', 'devtoggle', '▸');
+  row.toggle.onclick = (e) => { e.stopPropagation(); toggleDevOpen(row.name); };
+  card.append(row.toggle);
+  row.nameEl = el('b', null, row.name);
+  card.append(row.nameEl);
+  const rops = el('span', 'rowops');
+  // 名前の変更は手順・部品の一覧と同じ作法(行右端の ✎)
+  rops.append(rowIcon('pencil', 'この装置の名前を変える', false, async () => {
+    const nv = prompt(`「${row.name}」の新しい名前`, row.name);
+    if (nv == null || nv === row.name) return;
+    const r = await api('/api/device_rename', 'POST', {old: row.name, new: nv});
+    show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
+    refresh();
+  }));
+  card.append(rops);
+  row.meta = el('div', 'meta');
+  card.append(row.meta);
+  row.detail = el('div', 'devdetail');
+  // 1) 接続行
+  const connRow = el('div', 'row');
+  connRow.append(el('span', 'lbl', '接続先'));
+  row.host = document.createElement('input');
+  row.host.type = 'text';
+  row.host.className = 'devhost';
+  row.host.size = 20;
+  row.host.placeholder = 'IP か padctl-xxxx.local';
+  row.host.title = 'この装置の IP か名前。ふだんは「探す」で自動設定されます';
+  row.find = el('button', 'small', '探す');
+  row.find.title = 'LAN からこの装置(個体IDが一致する実機)を探して接続先にします';
+  row.conn = el('button', 'small', '接続');
+  row.conn.title = '入力した接続先に切り替えます';
+  connRow.append(row.host, row.find, row.conn);
+  row.detail.append(connRow);
+  // devconnmsg: uicheck からこのまとまりの結果を読むための識別子(見た目には無関係)
+  row.connmsg = el('div', 'devconnmsg');
+  row.detail.append(row.connmsg);
+  // 2) 診断 kv(状態を除いた statusRows。開けば無条件に全て見える)
+  row.kv = el('dl', 'kv');
+  row.detail.append(row.kv);
+  // 3) 登録を解除(2台以上のみ)
+  row.rmWrap = el('div', 'row');
+  row.rm = el('button', 'small', '登録を解除');
+  row.rm.title = '装置は消えません。あとで再登録できます';
+  row.rmWrap.append(row.rm);
+  row.detail.append(row.rmWrap);
+  card.append(row.detail);
+  wireDevRow(row);
+  return row;
+}
+
+function wireDevRow(row) {
+  row.find.onclick = async () => {
+    row.find.disabled = true;
+    showIn(row.connmsg, '', '探しています…');
+    const r = await api('/api/discover', 'POST', {dev: row.name});
+    row.find.disabled = false;
+    showIn(row.connmsg, r.error ? 'err' : 'ok', r.error
+           || (r.kept ? `いまの接続先(${r.host})でつながっています`
+                      : `接続先を ${r.host} にしました`));
+    refresh();
+  };
+  row.conn.onclick = async () => {
+    const r = await api('/api/device', 'POST',
+                        {host: row.host.value.trim(), dev: row.name});
+    showIn(row.connmsg, r.error ? 'err' : 'ok',
+           r.error || `接続先を ${r.host} にしました`);
+    refresh();
+  };
+  row.rm.onclick = async () => {
+    if (!confirm(`「${row.name}」の登録を解除します`
+                 + '(装置は消えません。あとで再登録できます)。'
+                 + 'よろしいですか?')) return;
+    const r = await api('/api/device_remove', 'POST', {name: row.name});
+    show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
+    refresh();
+  };
+}
+
+function updateDevRow(row, d, multi) {
+  row.dot.className = 'dot ' + devDot(d);
+  row.dot.title = d.error || devStateJa(d);
+  // 生きた状態(実行中の手順など)はレーン側だけに出す。ここは装置の
+  // 登録と名づけの情報(個体IDと、繋がる本体の名前)だけにする
+  row.meta.textContent = '';
+  row.meta.append(el('span', null, devIdJa(d.id)
+    + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
+  if (document.activeElement !== row.host) row.host.value = d.host || '';
+  row.conn.disabled = row.host.value.trim() === (d.host || '').trim();
+  // 1台だけのときは登録解除を出さない(従来の1台運用で誤って台帳を空に
+  // しない。どうしても外すときは CLI の device remove)
+  row.rmWrap.style.display = multi ? '' : 'none';
+  // 診断値は繋がっているときだけ意味を持つ(未接続では state.devices に
+  // ファーム等の項目自体が無い)。繋がるまでは接続行だけを見せる
+  row.kv.textContent = '';
+  if (!d.error) {
+    for (const [k, v] of statusRows(d, '').slice(1)) {
+      row.kv.append(el('dt', null, k), el('dd', null, String(v)));
+    }
+  }
+  // 未接続・異常のとき、対処の場所であることを自ら名乗る(赤い縁取り+自動で
+  // 開く)。手動で閉じたら、同じ異常が続く間は再度開かない
+  const flagKey = devFlagKey(d);
+  row.card.classList.toggle('flagged', !!flagKey);
+  if (flagKey) {
+    if (devAutoKey.get(row.name) !== flagKey) {
+      devAutoKey.set(row.name, flagKey);
+      devOpen.set(row.name, true);
+    }
+  } else {
+    devAutoKey.delete(row.name);
+  }
+  applyDevOpenState(row);
+}
 
 function renderDevices() {
   const devs = state.devices || [];
@@ -2127,64 +2229,40 @@ function renderDevices() {
   devaddBtn.disabled = multi;
   devaddBtn.title = multi ? 'いまは2台までです(3台以上は未検証)'
     : 'LAN からマイコンを探して、まだ登録していない実機を登録します';
-  const key = JSON.stringify([devs.map(d => [d.name, d.id, d.host, d.state,
-                                             d.error || '', d.proc || '',
-                                             d.host_info || '']),
-                              state.consoles || {}]);
-  if (key === devsKey) return;
-  devsKey = key;
-  // ログの絞り込みの選択肢を台帳に追従させる(選んでいたものは保つ)
-  const sel = document.getElementById('logdev');
-  const cur = sel.value;
-  sel.textContent = '';
-  sel.append(new Option('すべて', ''));
-  for (const d of devs) if (d.id) sel.append(new Option(d.name, d.id));
-  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  // ログの絞り込みの選択肢は、台帳の顔ぶれが変わったときだけ作り直す
+  // (毎秒作り直すと、開いているドロップダウンが閉じる)
+  const key = JSON.stringify(devs.map(d => [d.name, d.id]));
+  if (key !== devsKey) {
+    devsKey = key;
+    const sel = document.getElementById('logdev');
+    const cur = sel.value;
+    sel.textContent = '';
+    sel.append(new Option('すべて', ''));
+    for (const d of devs) if (d.id) sel.append(new Option(d.name, d.id));
+    if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  }
   // 台帳カードの行
   const box = document.getElementById('devlist');
-  box.textContent = '';
+  const seen = new Set();
   for (const d of devs) {
-    const row = el('div', 'proc devrow');
-    const dot = el('span', 'dot ' + devDot(d));
-    dot.title = d.error || devStateJa(d);
-    const rops = el('span', 'rowops');
-    // 名前の変更は手順・部品の一覧と同じ作法(行右端の ✎)
-    rops.append(rowIcon('pencil', 'この装置の名前を変える', false, async () => {
-      const nv = prompt(`「${d.name}」の新しい名前`, d.name);
-      if (nv == null || nv === d.name) return;
-      const r = await api('/api/device_rename', 'POST', {old: d.name, new: nv});
-      show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
-      refresh();
-    }));
-    row.append(dot, el('b', null, d.name), rops);
-    const meta = el('div', 'meta');
-    // 生きた状態(実行中の手順など)はレーン側だけに出す。ここは装置の
-    // 登録と名づけの情報(個体IDと、繋がる本体の名前)だけにする
-    meta.append(el('span', null, devIdJa(d.id)
-      + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
-    // ボタン群は1つの折返し単位にまとめる(状態文の長さ次第でボタン対が
-    // 泣き別れ、毎秒の状態変化でカードの高さがガタつくのを防ぐ)
-    const ops = el('span');
-    ops.style.cssText = 'display:inline-flex; gap:6px; flex:none;';
-    if (multi) {
-      // 1台だけのときは出さない(従来の1台運用で誤って台帳を空にしない。
-      // どうしても外すときは CLI の device remove)
-      const rm = el('button', 'small', '登録を解除');
-      rm.title = '装置は消えません。あとで再登録できます';
-      rm.onclick = async () => {
-        if (!confirm(`「${d.name}」の登録を解除します`
-                     + '(装置は消えません。あとで再登録できます)。'
-                     + 'よろしいですか?')) return;
-        const r = await api('/api/device_remove', 'POST', {name: d.name});
-        show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
-        refresh();
-      };
-      ops.append(rm);
+    let row = devRowMap.get(d.name);
+    if (!row) {   // 改名は seen に残らず片づく=作り直し(レーンと同じ規則)
+      row = buildDevRow(d);
+      devRowMap.set(d.name, row);
     }
-    meta.append(ops);
-    row.append(meta);
-    box.append(row);
+    seen.add(d.name);
+    updateDevRow(row, d, multi);
   }
+  for (const [nm, row] of [...devRowMap]) {
+    if (!seen.has(nm)) {
+      row.card.remove();
+      devRowMap.delete(nm); devOpen.delete(nm); devAutoKey.delete(nm);
+    }
+  }
+  devs.forEach((d, i) => {
+    const card = devRowMap.get(d.name).card;
+    if (box.children[i] !== card) box.insertBefore(card, box.children[i] || null);
+  });
   renderConsoles(devs);
 }
 
@@ -2281,247 +2359,6 @@ document.getElementById('devadd').onclick = async () => {
   box.append(man);
 };
 
-function shortErr(msg) {
-  const m = String(msg).split(': ');
-  return (m[m.length - 1] || msg).slice(0, 40);
-}
-// 一覧は毎秒の状態取得のたびに呼ばれるが、実際に作り直すのは中身が
-// 変わったときだけにする。理由は2つ:
-//  ・ドラッグ中に作り直すと、掴んでいる行ごと消えて並べ替えが中断する
-//  ・変わっていないのに DOM を捨てて作り直すのは無駄(選択やホバーも切れる)
-let procsKey = '';
-
-function renderProcs(force) {
-  const box = document.getElementById('procs');
-  if (dragging) return;
-  const shown = visibleProcs();
-  const key = JSON.stringify([
-    shown.map(p => [p.name, p.frames, p.seconds, p.warnings, p.error || '']),
-    selected, runningProc()]);
-  if (!force && key === procsKey && box.childElementCount) return;
-  procsKey = key;
-  box.textContent = '';
-  if (!state.procedures.length) {
-    box.append(el('div', 'msg warn', '手順がありません。「手順を編集」タブで作れます'));
-    return;
-  }
-  if (!shown.length) {
-    box.append(el('div', 'msg warn',
-      '表示する手順がありません(「手順を編集」の目のアイコンで選べます)'));
-    return;
-  }
-  for (const p of shown) {
-    const d = el('div', 'proc' + (p.name === selected ? ' sel' : ''));
-    d.dataset.name = p.name;
-    const g = el('span', 'grab', '⠿');
-    g.title = 'ドラッグで並べ替え(手順画面と共通の並び)';
-    bindRowDrag(g, d, 'procedures', p.name,
-                async () => { await refresh(); renderProcs(true); });
-    d.append(g);
-    const nm = el('b', null, p.name);
-    if (p.name === runningProc()) {
-      const mk = el('span', 'playmark', '▶ 実行中');
-      mk.title = 'いま実機で実行中の手順';
-      nm.append(mk);
-    }
-    d.append(nm);
-    d.append(el('span', 'rowops'));   // 位置合わせ(この一覧は編集アイコンなし)
-    const meta = el('div', 'meta');
-    if (p.error) {
-      const chip = el('span', 'chip err', 'エラー');
-      chip.title = p.error;          // ホバーで理由の全文
-      meta.append(chip, ' ', el('span', null, shortErr(p.error)));
-    }
-    else {
-      meta.textContent = `${p.frames} フレーム(${p.seconds} 秒)`;
-      if (p.warnings) meta.append(' ', el('span', 'chip warn', `警告 ${p.warnings}`));
-    }
-    d.append(meta);
-    d.onclick = () => {
-      // 別の手順に切り替えたら、前の手順に対する操作結果は片づける。
-      // 残すと「今見ている手順を転送した」ように読めてしまう
-      if (selected !== p.name) show('actmsg', '', '');
-      selected = p.name; renderProcs(); loadTimeline();
-    };
-    box.append(d);
-  }
-}
-// 実機がいま動かしている手順の名前(STATUS の proc)。実行していなければ空
-function runningProc() {
-  const d = state && state.device;
-  if (!d || !(d.running || d.awaiting)) return '';
-  return d.proc || '';
-}
-
-// 実行中の手順を編集・保存すると、画面の内容と実機で動いているものがずれる。
-// 実機は実行開始時に受け取った複製を再生しており、途中で差し替わらないため。
-// 「実機と一致」チップで平常時にも表示していたのをやめ、ずれている今だけ
-// はっきり伝える(2026-08-01 ユーザー要望)
-// 実行中の手順名は「状態」の行に出す(バナーを足すとボタンが下へずれるため)。
-// ここで出すのは、普段は出ない注意だけ
-function renderNowPlaying() {
-  const box = document.getElementById('nowplaying');
-  const name = runningProc();
-  box.textContent = '';
-  const cur = name
-    ? (state.procedures || []).find(p => p.name === name) : null;
-  if (cur && cur.on_device === false) {
-    box.style.display = '';
-    box.append(el('div', 'msg warn',
-      `実行中の「${name}」は転送後に編集されています。実機は転送した時点の`
-      + '内容で動き続けます(編集を反映するには、止めてから実行し直して'
-      + 'ください)'));
-  } else {
-    box.style.display = 'none';
-  }
-}
-
-function renderStatus() {
-  const chip = document.getElementById('devchip');
-  const dl = document.getElementById('status');
-  dl.textContent = '';
-  show('awaitmsg', '', '');   // 実機の状態から毎秒作り直す(msg と同じ扱い)
-  const d = state.device;
-  if (!d) {
-    chip.className = 'chip err'; chip.textContent = '未接続';
-    // つながっていないときは、枠を目立たせ「探す」を第一操作にする
-    document.getElementById('devbar').className = 'devbar off';
-    document.getElementById('finddev').className = 'small primary';
-    show('msg', 'err', (state.device_error || '接続できません')
-         + ' — すぐ上の「探す」でマイコンを見つけられます');
-    dl.classList.add('stale');
-    for (const id of ['run','run1','stopg','stopi','manual',
-                      'rec']) {
-      document.getElementById(id).disabled = true;
-    }
-    renderNowPlaying();
-    document.getElementById('tlprog').textContent = '';
-    return;
-  }
-  dl.classList.remove('stale');
-  document.getElementById('devbar').className =
-    'devbar' + (d.running || d.awaiting ? ' busy' : '');
-  document.getElementById('finddev').className = 'small';
-  show('msg', '', '');
-  const running = d.running;
-  const awaiting = !!d.awaiting;
-  chip.className = 'chip ' + (d.state === 'ERROR' ? 'err'
-                              : awaiting ? 'warn' : running ? 'ok' : '');
-  chip.textContent = stateJa(d.state);
-  // 実行の終了はメッセージで知らせない。ボタンが押せるようになり、再生位置の
-  // 表示が消えることで分かる(状態の変化そのもので伝わることに文字を足すと、
-  // 古い文が残って実状とちぐはぐになる事故のほうが大きい。2026-08-02 ユーザー指示)
-  wasRunning = running || awaiting;
-  for (const [k, v] of statusRows(d, runningProc())) {
-    dl.append(el('dt', null, k), el('dd', null, String(v)));
-  }
-
-  renderNowPlaying();
-  // 実行の進み具合はタイムライン側に出す。実行パネルは行数が変わらないので
-  // ボタンや項目の位置がずれない(2026-08-02 ユーザー要望)
-  {
-    const tp = document.getElementById('tlprog');
-    // 出すのは「選択中の手順 = 実行中の手順」のときだけ。別の手順の図の上に
-    // 周回・フレーム数を重ねると、その手順が動いているように誤認させる
-    // (2026-08-02 ユーザー指摘)
-    if ((running || awaiting) && selected === runningProc()) {
-      const sec = (d.frames_elapsed / 60).toFixed(1);
-      const lap = d.loop_n === 0 ? `${d.session_loop} 周目(止めるまで)`
-                                 : `${d.session_loop} / ${d.loop_n ?? '?'} 周`;
-      tp.textContent = `${lap}　${d.frames_elapsed} フレーム(${sec} 秒)`;
-    } else {
-      tp.textContent = '';
-    }
-  }
-  // 操作できないボタンは押せなくする(押してエラーになるのを防ぐ)。
-  // エンジンの動作フラグ(running/awaiting)だけでなくデバイスの状態機械
-  // (d.state)も見る。両者が食い違ったとき(状態は実行中なのにエンジンは
-  // 停止)に、エンジン基準だと「実行は押せるのに必ず BUSY で失敗し、
-  // 止めるボタンは押せない」という詰みの画面になる(2026-07-31 に発生)。
-  // busy 側に倒せば、実行は塞がり「今すぐ止める」で常に復帰できる
-  const stateBusy = d.state === 'RUNNING' || d.state === 'AWAITING';
-  const busy = running || awaiting || stateBusy;
-  // 実行を受け付けない状態では、押して失敗する前にボタン側で理由を出す。
-  // 手動操作中(PASSTHRU)はここに入れない。押した意図は「実行したい」なので、
-  // 断るのではなく doRun 側で手動操作を自動的に終えてから実行する
-  // (塞ぐと、操作中の見た目のまま何もできない状態になる。2026-08-02 指摘)
-  const blocked = blockedReason(d);
-  // 変換できない手順は押しても必ず失敗する。押せなくして理由を出す
-  const cur = state.procedures.find(p => p.name === selected);
-  const broken = !!(cur && cur.error);
-  const btnTitle = broken ? 'この手順は変換できません(一覧のエラーを参照)' : '';
-  for (const id of ['run', 'run1']) {
-    const b = document.getElementById(id);
-    b.disabled = busy || !!blocked || broken || !selected;
-    b.title = btnTitle || blocked;
-  }
-  const sg = document.getElementById('stopg');
-  sg.disabled = !running;
-  if (stopgIntent && Date.now() < stopgIntent.until && (running || awaiting)) {
-    setStopgArmed(stopgIntent.armed);   // 直後は押した本人の操作が正
-  } else {
-    stopgIntent = null;
-    setStopgArmed(!!d.stop_graceful && (running || awaiting));
-  }
-  document.getElementById('stopi').disabled = !busy;
-  // 記録中は手動操作を終われない(記録だけ残って空回りするため)。
-  // 手動操作中(PASSTHRU)自体は塞がない(「終了」ボタンとして押せる必要がある)
-  // 手動操作中は「終了」だけは常に押せるようにする。実行中などを理由に塞ぐと、
-  // 操作中の見た目のまま終わらせられない詰みになる(2026-08-02 ユーザー指摘)。
-  // 記録中は記録が手動操作に依存するので、先に記録を止めてもらう
-  document.getElementById('manual').disabled = recOn || (busy && !manualOn);
-  // 記録できるのは手動操作で送っている入力だけ。始めるまで押せなくして理由を出す
-  const rb = document.getElementById('rec');
-  if (!recOn) {
-    rb.disabled = busy || !manualOn;
-    rb.title = manualOn ? '' : '先に「手動操作を開始」を押すと記録できます';
-  } else {
-    rb.disabled = false; rb.title = '';
-  }
-  // リロード直後など、実機は手動操作中なのに画面側が知らないままのとき
-  const mc = document.getElementById('manualchip');
-  if (d.state === 'PASSTHRU' && !manualOn) {
-    mc.textContent = '実機は手動操作中(「手動操作を開始」で再開)';
-    mc.className = 'chip warn';
-  } else if (!manualOn && mc.className.includes('warn')) {
-    mc.textContent = '停止中'; mc.className = 'chip';
-  }
-  // 実機が「実行中」と言っているのに何も動いていない状態。
-  // ただし実行が終わった直後は、実機の中で「終わった」が反映されるまで
-  // 最大 0.1 秒だけ正常にこの形になる(実機は 0.1 秒ごとに状態を整える)。
-  // 毎秒の取得がその隙に当たると一瞬だけ警告が出てしまうので、
-  // 続けて数回見えたときだけ「戻らなくなっている」と判断する
-  if (stateBusy && !running && !awaiting) stuckPolls++; else { stuckPolls = 0; stuckFixed = false; }
-  if (stuckPolls >= 3 && !stuckFixed) {
-    // 直せるものは自分で直す。この状態は「実機は実行中と言っているが手順は
-    // 動いていない」なので、止める指示を送れば待機中に戻る(すでに止まって
-    // いる相手に送っても害はない)。押させるより先に直して、結果だけ知らせる
-    stuckFixed = true;
-    api('/api/stop', 'POST', {mode: 'immediate'}).then(() => refresh());
-    show('awaitmsg', 'ok', '実機が「実行中」のまま戻らなくなっていたので、'
-         + '自動で待機中に戻しました');
-  } else if (stuckPolls >= 8) {
-    // 自動で直せなかった(送っても戻らない)。ここで初めて人の手を借りる
-    show('awaitmsg', 'warn', '実機が「実行中」のまま戻りません(手順は動いて'
-         + 'いません)。自動で戻そうとしましたが効きませんでした。'
-         + '本体のリセットを短く押すか、USB を挿し直してください');
-  }
-  if (d.state === 'ERROR') {
-    // レーン版(2台以上)と同じ「文+ボタン」の形にする。ボタンだけ置くと
-    // 何が起きたのか読めない
-    show('msg', 'err', '装置が異常を報告しています');
-    const b = el('button', null, '異常を解除');
-    b.onclick = async () => { await api('/api/clear_error', 'POST', {}); refresh(); };
-    document.getElementById('msg').firstChild.append(b);
-  }
-  if (d.awaiting) {
-    // 待機分岐で止まっている。どちらへ進むかを選ぶ。実行を続けるための
-    // 操作なので、視線のある実行カード〜タイムラインの間に出す
-    const box = document.getElementById('awaitmsg');
-    box.append(el('div', 'msg warn', '待機分岐で止まっています。進む先を選んでください'),
-               armRow(d, '', box));
-  }
-}
 
 // ---- 装置ひとつぶんの表示部品(1台カードとレーンで共用する) ----
 
@@ -2654,42 +2491,10 @@ function renderTimelineInto(box, tl) {
   return play;
 }
 
-function renderTimeline() {
-  const box = document.getElementById('tl');
-  box.textContent = '';
-  show('tlmsg', '', '');
-  if (!timeline) return;
-  if (timeline.error) { show('tlmsg', 'err', timeline.error); return; }
-  const play = renderTimelineInto(box, timeline);
-  play.id = 'play';
-  // 前提条件は「実行する前に読むもの」なので実行ボタンのすぐ上に出す。
-  // ここ(タイムラインの下)に混ぜると、押した後に気づく位置になってしまう
-  const pre = document.getElementById('prenote');
-  pre.textContent = '';
-  if (timeline.pre) {
-    pre.style.display = '';
-    pre.append(el('b', null, '実行前に:'), el('span', null, timeline.pre));
-  } else {
-    pre.style.display = 'none';
-  }
-  const notes = [];
-  for (const w of timeline.warnings || []) notes.push(`${w.line}番目: ${w.msg}`);
-  if (notes.length) show('tlmsg', 'warn', notes.join('  /  '));
-}
-// 実行中の現在位置をタイムライン上に示す(今どこを走っているかが分かる)
-// 再生位置。実機の進捗は1秒に1回しか届かないので、その間は経過時間から
+// 実行中の現在位置をタイムライン上に示す(今どこを走っているかが分かる)。
+// 再生位置は、実機の進捗が1秒に1回しか届かないので、その間は経過時間から
 // 補間して動かす(1秒ごとに飛ぶのではなく連続して見えるように)。
 // 次の報告が来たら実測値へ合わせ直すので、ずれが溜まることはない
-let playAt = {frames: 0, at: 0, period: 16.6667, live: false};
-
-function notePlayhead() {
-  const d = state && state.device;
-  if (!d || !(d.running || d.awaiting) || d.frames_elapsed === undefined) {
-    playAt.live = false;
-    return;
-  }
-  playAt = mkPlayAt(d);
-}
 
 // 補間した現在フレームから、図の上の覆い(0〜1)を出す。null = 非表示。
 // 実機は「今回の実行ぜんぶ」の経過を返すので、図の上の位置に直す。
@@ -2726,22 +2531,11 @@ function mkPlayAt(d) {
   };
 }
 
-function updatePlayhead() {
-  const play = document.getElementById('play');
-  if (!play) return;
-  const d = state && state.device;
-  // 再生位置を重ねるのは、表示中の図が実行中の手順そのものであるときだけ
-  // (別の手順を選んで眺めているときに重ねると動いているように見える)
-  const on = d && selected === runningProc();
-  setPlay(play, on ? playheadFrac(timeline, d, playAt, runOffset) : null);
-}
-
-// 画面の更新周期でなめらかに引き直す(タブが裏なら呼ばれないので無駄がない)
+// 画面の更新周期でなめらかに引き直す(タブが裏なら呼ばれないので無駄がない)。
+// レーンの図は常に「その装置の手順」なので、実行中の手順と図が一致して
+// いるときだけ再生位置を重ねる
 (function tickPlayhead() {
   if (view === 'home') {
-    updatePlayhead();
-    // レーンの再生位置(レーンの図は常に「その装置の手順」なので、
-    // 実行中の手順と図が一致しているときだけ重ねる)
     for (const [nm, lane] of laneMap) {
       if (!lane.play) continue;
       const d = (state && state.devices || []).find(x => x.name === nm);
@@ -2755,33 +2549,8 @@ function updatePlayhead() {
   requestAnimationFrame(tickPlayhead);
 })();
 
-async function loadTimeline() {
-  if (!selected) {
-    document.getElementById('tl').textContent = '';
-    document.getElementById('resume').textContent = '';
-    show('tlmsg', '', '');
-    return;
-  }
-  timeline = await api('/api/timeline?name=' + encodeURIComponent(selected));
-  renderTimeline();
-  // 開始ラベル(ラベルが再開点になる。長い手順の後半だけ試せる)
-  const sel = document.getElementById('resume');
-  const keep = sel.value;
-  sel.textContent = '';
-  for (const p of (timeline.resume_points || [])) {
-    const o = el('option', null, p.name === '先頭' ? '―(先頭から)' : p.name);
-    o.value = p.name;
-    sel.append(o);
-  }
-  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
-  // ラベルの無い手順では選択肢が「先頭」だけになり意味がないので押せなくする。
-  // 説明の title は付けない: 欄名が「開始ラベル」なので、無効=この手順に
-  // ラベルが無い、は名前から察せる(名前で分からせたことを説明し直さない)
-  sel.disabled = sel.options.length <= 1;
-}
-
-// ============ レーン(装置2台以上の実行・監視画面。案C) ============
-// 1台のときは従来のカード(固定 ID)をそのまま使い、レーンは作らない。
+// ============ レーン(装置ごとの実行・監視画面。案C) ============
+// 装置台数に関わらず常にレーン(原則 §1 系: 1台と2台は同型)。
 // レーンの DOM は装置ごとに一度だけ組み立て、毎秒は中身だけ更新する
 // (入力欄・フォーカス・ホバーを毎秒壊さない)。改名は作り直し(まれ)
 
@@ -2794,33 +2563,21 @@ function buildLane(d) {
   lane.card = card;
   const h2 = el('h2');
   lane.dot = el('span', 'dot');
+  // 状態チップ = 結論だけ(原則 §1)。原因と対処は装置カードの該当行にある。
+  // クリックでそこへ導線を渡す(結論→対処)
+  lane.chip = el('span', 'chip', '確認中…');
+  lane.chip.style.cursor = 'pointer';
+  lane.chip.title = 'クリックすると装置パネルの該当行を開きます';
+  lane.chip.onclick = () => openDevDetail(d.name);
   lane.badge = el('span', 'chip runchip');   // ⧉連結して開始 / 単独で実行中
   lane.badge.style.display = 'none';
   lane.tlprog = el('span', 'tlprog');
-  h2.append(lane.dot, el('b', null, d.name), lane.badge, lane.tlprog);
+  h2.append(lane.dot, el('b', null, d.name), lane.chip, lane.badge, lane.tlprog);
   card.append(h2);
-  // 接続(1台時の「マイコンとの接続」カードに相当)
-  const bar = el('div', 'devbar');
-  lane.devbar = bar;
-  lane.chip = el('span', 'chip', '確認中…');
-  lane.host = document.createElement('input');
-  lane.host.className = 'lhost';   // クラス名は検査(uicheck)の足がかり
-  lane.host.type = 'text';
-  lane.host.size = 14;
-  lane.host.placeholder = 'IP か padctl-xxxx.local';
-  lane.host.title = 'この装置の IP か名前。ふだんは「探す」で自動設定されます';
-  lane.find = el('button', 'small', '探す');
-  lane.find.title = 'LAN からこの装置(個体IDが一致する実機)を探して接続先にします';
-  lane.conn = el('button', 'small', '接続');
-  lane.conn.title = '入力した接続先に切り替えます';
-  const lbl = el('label', 'lbl', '接続先');
-  bar.append(el('span', 'lbl', '装置'), lane.chip, el('span', 'sep'),
-             lbl, lane.host, lane.find, lane.conn);
-  card.append(bar);
-  lane.connmsg = el('div');
-  lane.msg = el('div');
-  card.append(lane.connmsg, lane.msg);
-  // 実行(1台時の「実行」カードに相当)
+  // クラスは見た目には使わない、uicheck がこのまとまりを読むための識別子
+  lane.msg = el('div', 'lmsg');
+  card.append(lane.msg);
+  // 実行(設定は上、行動は下。原則 §2)
   card.append(el('div', 'subh', '実行'));
   lane.prenote = el('div', 'prenote');
   lane.prenote.style.display = 'none';
@@ -2855,20 +2612,17 @@ function buildLane(d) {
   lane.stopi = el('button', 'danger', '⏹ 今すぐ止める');
   row2.append(lane.run1, lane.run, el('span', 'sep-v'), lane.stopg, lane.stopi);
   card.append(row2);
-  lane.nowplaying = el('div');
-  lane.actmsg = el('div');
+  lane.nowplaying = el('div', 'lnowplaying');
+  lane.actmsg = el('div', 'lactmsg');
   lane.awaitbox = el('div', 'lawait');
   card.append(lane.nowplaying, lane.actmsg, lane.awaitbox);
-  lane.kv = el('dl', 'kv');
-  lane.kv.style.marginTop = '9px';
-  card.append(lane.kv);
   lane.tlhead = el('div', 'subh', 'タイムライン');
   card.append(lane.tlhead);
   lane.tlbox = el('div', 'tl ltl');
   const wrap = el('div', 'tl-wrap');
   wrap.append(lane.tlbox);
   card.append(wrap);
-  lane.tlmsg = el('div');
+  lane.tlmsg = el('div', 'ltlmsg');
   card.append(lane.tlmsg);
   wireLane(lane);
   return lane;
@@ -2877,6 +2631,8 @@ function buildLane(d) {
 function wireLane(lane) {
   lane.proc.onchange = () => {
     localStorage.setItem('laneProc.' + lane.id, lane.proc.value);
+    // 「手順を編集」を開くときの初期候補として、最後に選んだ手順を覚えておく
+    selected = lane.proc.value;
   };
   lane.run1.onclick = () => laneRun(lane, 1);
   lane.run.onclick = () => {
@@ -2894,23 +2650,6 @@ function wireLane(lane) {
   };
   lane.stopi.onclick = async () => {
     await api('/api/stop', 'POST', {mode: 'immediate', dev: lane.name});
-    refresh();
-  };
-  lane.find.onclick = async () => {
-    lane.find.disabled = true;
-    showIn(lane.connmsg, '', '探しています…');
-    const r = await api('/api/discover', 'POST', {dev: lane.name});
-    lane.find.disabled = false;
-    showIn(lane.connmsg, r.error ? 'err' : 'ok', r.error
-           || (r.kept ? `いまの接続先(${r.host})でつながっています`
-                      : `接続先を ${r.host} にしました`));
-    refresh();
-  };
-  lane.conn.onclick = async () => {
-    const r = await api('/api/device', 'POST',
-                        {host: lane.host.value.trim(), dev: lane.name});
-    showIn(lane.connmsg, r.error ? 'err' : 'ok',
-           r.error || `接続先を ${r.host} にしました`);
     refresh();
   };
 }
@@ -3030,32 +2769,31 @@ function updateLane(lane, d) {
   const running = !!d.running;
   const awaiting = !!d.awaiting;
   const runName = (running || awaiting) ? (d.proc || '') : '';
-  if (document.activeElement !== lane.host) lane.host.value = d.host || '';
-  lane.conn.disabled = lane.host.value.trim() === (d.host || '').trim();
   if (d.error) {
-    // つながっていない。枠を目立たせ「探す」を第一操作にする
+    // つながっていない。原因と対処(接続先)は装置パネル側にあるので、
+    // ここでは結論と導線だけ(原則 §1)
     lane.chip.className = 'chip err';
     lane.chip.textContent = '未接続';
-    lane.devbar.className = 'devbar off';
-    lane.find.className = 'small primary';
     showIn(lane.msg, 'err',
-           d.error + ' — すぐ上の「探す」でこの装置を見つけられます');
+           d.error + ' — 装置パネルで接続先を確認してください');
     lane.tlprog.textContent = '';
     for (const b of [lane.run1, lane.run, lane.stopg, lane.stopi]) {
       b.disabled = true;
       b.title = 'つながっていないので送れません';
     }
     lane.awaitbox.textContent = '';
-    lane.kv.classList.add('stale');   // 最後に見えた値のまま薄くする
     return;
   }
-  lane.kv.classList.remove('stale');
-  lane.devbar.className = 'devbar' + (running || awaiting ? ' busy' : '');
-  lane.find.className = 'small';
   showIn(lane.msg, '', '');
+  // ペアリング未完了は装置パネルの詳細で対処するが、結論(⚠)はチップにも
+  // 出す(原則 §1: 結論はレーン、原因・対処は装置カード)
+  const pairIncomplete = 'pair_step' in d
+    && (d.pair_step === 1 || d.pair_step === 2);
   lane.chip.className = 'chip ' + (d.state === 'ERROR' ? 'err'
-                                   : awaiting ? 'warn' : running ? 'ok' : '');
-  lane.chip.textContent = stateJa(d.state);
+                                   : awaiting ? 'warn'
+                                   : running ? 'ok'
+                                   : pairIncomplete ? 'warn' : '');
+  lane.chip.textContent = stateJa(d.state) + (pairIncomplete ? ' ⚠' : '');
   if (d.state === 'ERROR') {
     showIn(lane.msg, 'err', 'この装置が異常を報告しています');
     const b = el('button', null, '異常を解除');
@@ -3223,24 +2961,16 @@ function updateLane(lane, d) {
            + '(手順は動いていません)。自動で戻そうとしましたが効きません'
            + 'でした。本体のリセットを短く押すか、USB を挿し直してください');
   }
-  // 状態欄
-  lane.kv.textContent = '';
-  for (const [k, v] of statusRows(d, runName)) {
-    lane.kv.append(el('dt', null, k), el('dd', null, String(v)));
-  }
   syncLaneTimeline(lane, runName);
   lane.playAt = (d.frames_elapsed !== undefined && (running || awaiting))
     ? mkPlayAt(d) : {live: false};
 }
 
-// 毎秒の状態取得から呼ばれる入口。2台以上ならレーンを出し、従来カードを隠す
+// 毎秒の状態取得から呼ばれる入口。装置台数に関わらず常にレーンを出す
+// (原則 §1 系: 1台と2台は同型)
 function renderLanes() {
   const devs = state.devices || [];
   const multi = devs.length >= 2;
-  document.getElementById('lanes').style.display = multi ? '' : 'none';
-  for (const id of ['conncard', 'runcard', 'tlcard']) {
-    document.getElementById(id).style.display = multi ? 'none' : '';
-  }
   syncTargetSelects(devs, multi);
   // 連結バー・CTA・編成カードの出し引きは装置数に関わらずここで行う
   // (2台→1台に減ったとき、レーンだけ消えて連結バーが残らないように)
@@ -3265,10 +2995,6 @@ function renderLanes() {
     }
   }
   const box = document.getElementById('lanes');
-  if (!multi) {
-    if (laneMap.size) { laneMap.clear(); box.textContent = ''; }
-    return;
-  }
   const seen = new Set();
   for (const d of devs) {
     let lane = laneMap.get(d.name);
@@ -5410,107 +5136,6 @@ document.getElementById('newpart').onclick = async () => {
 };
 // 部品の複製・改名・削除は一覧の行アイコンから(dupPart/renPart/delPart)
 
-// ============ 実行操作 ============
-// 「1回実行」と「周回実行」を分ける。単発の手順を周回欄の残り値のまま
-// 実行して何周も走ってしまう事故を防ぐ(周回欄は周回実行にだけ効く)
-// 前回の描画時に走っていたか(実行の終了を検出して表示を片づけるために使う)
-let wasRunning = false;
-// 「実行中のまま戻らない」を何回続けて見たか(実行終了直後の一瞬と区別する)
-let stuckPolls = 0;
-let stuckFixed = false;   // 自動で戻す指示を送ったか(何度も送らないため)
-
-// 途中から実行したときの起点(手順の先頭から何フレーム目か)。
-// 実機が返す経過はこの起点からの値なので、図と重ねるには足し戻す
-let runOffset = 0;
-
-async function doRun(loops) {
-  // 手動操作したまま実行はできない(実機が受け付けない)。押した意図は
-  // 「実行したい」なので、断るのではなく自動で手動操作を終えてから実行する。
-  // 以前は中途半端な状態(操作中の見た目のまま入力は届かない)になっていた
-  if (manualOn) await setManual(false);
-  const at = document.getElementById('resume').value;
-  {
-    const pt = (timeline && timeline.resume_points || [])
-      .find(p => p.name === at);
-    runOffset = (at && at !== '先頭' && pt) ? (pt.frame || 0) : 0;
-  }
-  const body = {name: selected, loops};
-  if (at && at !== '先頭') body.resume_from = at;
-  show('actmsg', '', '');            // 前の操作の結果を残さない
-  const r = await api('/api/run', 'POST', body);
-  if (r.error) show('actmsg', 'err', r.error);
-  else if (at && at !== '先頭') {
-    show('actmsg', 'ok', `「${at}」から実行しています`);
-  }
-  refresh();
-}
-document.getElementById('run1').onclick = () => doRun(1);
-document.getElementById('run').onclick = () => {
-  // 空欄や変な値は 0(止めるまで)として扱う。|| だと 0 が 1 に化けるので不可
-  const v = parseInt(document.getElementById('loops').value, 10);
-  doRun(Number.isFinite(v) && v >= 0 ? v : 0);
-};
-// 区切り停止は「予約」なので、押しても見た目が変わらないと効いたか分からない。
-// 予約中はボタン自身が目立ち、**同じボタンがそのまま取り消しになる**
-// (間違えて押しても、止まる前ならもう一度押せば済む)
-function setStopgArmed(armed) {
-  const sg = document.getElementById('stopg');
-  sg.classList.toggle('armed', armed);
-  const label = armed ? '↩ 止める予約を取り消す' : '◼ 今の周で止める';
-  if (sg.textContent !== label) sg.textContent = label;   // 毎秒の呼び出しで DOM を無駄に触らない
-  sg.title = armed
-    ? '今の周が終わったら止まります。もう一度押すと予約を取り消します'
-    : '今の周を最後までやってから止まります(ゲームの状態が整う)';
-}
-// 押した直後の見た目は、押した本人の操作を正とする。毎秒の状態取得は
-// 押す前に飛んでいた応答が後から届くことがあり、それに従うとボタンが
-// 一瞬元に戻って「取り消すつもりがもう一度予約」を誘発する
-let stopgIntent = null;   // {armed, until}
-document.getElementById('stopg').onclick = async () => {
-  const cancel = document.getElementById('stopg').classList.contains('armed');
-  setStopgArmed(!cancel);
-  stopgIntent = {armed: !cancel, until: Date.now() + 2500};
-  await api('/api/stop', 'POST', {mode: cancel ? 'cancel' : 'graceful'});
-  refresh();
-};
-document.getElementById('stopi').onclick = async () => {
-  await api('/api/stop', 'POST', {mode: 'immediate'}); refresh();
-};
-document.getElementById('sethost').onclick = async () => {
-  const r = await api('/api/device', 'POST',
-                      {host: document.getElementById('host').value});
-  show('connmsg', r.error ? 'err' : 'ok',
-       r.error || `接続先を ${r.host} にしました`);
-  refresh();
-};
-document.getElementById('host').oninput = () => {
-  document.getElementById('sethost').disabled =
-    document.getElementById('host').value.trim()
-      === ((state && state.host) || '').trim();
-};
-document.getElementById('finddev').onclick = async () => {
-  const btn = document.getElementById('finddev');
-  btn.disabled = true; btn.textContent = '探しています…';
-  show('connmsg', '', '');
-  try {
-    const r = await api('/api/discover', 'POST', {});
-    if (r.error) { show('connmsg', 'err', r.error); return; }
-    if (r.kept) {
-      show('connmsg', 'ok', `いまの接続先(${r.host})でつながっています`);
-    } else {
-      const how = ((r.found || [])[0] || {}).how;
-      show('connmsg', 'ok', `見つけました: ${r.host}`
-           + (how ? `(${how})` : '')
-           + ((r.found || []).length > 1
-              ? ` ／ ほかに ${r.found.length - 1} 台` : ''));
-    }
-    document.getElementById('host').value = r.host;
-    refresh();
-  } finally {
-    btn.disabled = false; btn.textContent = '探す';
-  }
-};
-
 // ============ 手動操作(パススルー) ============
 // ゲームパッドがあればそれを、無ければキーボードを、そのままコントローラー
 // 出力として中継する。人が操作するので通信の遅延は問題にならない。
@@ -5738,34 +5363,16 @@ document.getElementById('recsave').onclick = async () => {
 // ============ 更新ループ ============
 async function refresh() {
   state = await api('/api/state');
-  // 選んでいた手順が消えた・非表示になっていたら選び直す(古い情報を
-  // 出したままにしない。計画 A③: 最初の表示手順へフォールバック)
+  // 「手順を編集」を開くときの初期候補が消えた・非表示になっていたら
+  // 選び直す(実行対象そのものの選択は各レーンの手順プルダウンが持つ)
   const names = visibleProcs().map(p => p.name);
-  if (selected && !names.includes(selected)) { selected = null; timeline = null; }
-  if (!selected && names.length) { selected = names[0]; timeline = null; }
-  if (!names.length) { selected = null; timeline = null; }
-  // 今どこに繋ごうとしているかを欄に出す(編集中は上書きしない)
-  const hostBox = document.getElementById('host');
-  if (document.activeElement !== hostBox) hostBox.value = state.host || '';
-  // 何も変えていないのに押せる「接続」は、押しても何も起きず戸惑うだけ
-  document.getElementById('sethost').disabled =
-    hostBox.value.trim() === (state.host || '').trim();
+  if (selected && !names.includes(selected)) selected = null;
+  if (!selected && names.length) selected = names[0];
   renderDevices();
-  const multi = (state.devices || []).length >= 2;
   if (view === 'home') {
-    renderProcs();
     renderLanes();
-    // 1台のときだけ従来のカード(固定 ID)を描く。2台以上はレーンが担う
-    if (!multi) {
-      renderStatus();
-      notePlayhead();
-      updatePlayhead();
-      if (!timeline) loadTimeline();
-    }
     const logs = await api('/api/logs');
     if (logs.entries) renderLogs(logs.entries);
-  } else if (!multi) {
-    renderStatus();
   }
 }
 refresh();

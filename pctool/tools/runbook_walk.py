@@ -44,6 +44,29 @@ def txt(page, sel):
     return page.inner_text(sel).strip()
 
 
+def lane(page):
+    """常時レーン化後の唯一のレーン(装置台数に関わらず常にこの1本)。"""
+    return page.locator("#lanes .lane").first
+
+
+def chip_text(page):
+    """レーンの状態チップ(結論だけ。連結バッジは除く。原則 §1)。"""
+    return txt(page, "#lanes .lane .chip:not(.runchip)")
+
+
+def dev_row(page, name="1P"):
+    """装置パネルの該当行(接続先・探す・診断・登録解除はこの中の開閉式詳細)。"""
+    return page.locator("#devlist .devrow", has_text=name).first
+
+
+def open_dev_row(page, name="1P"):
+    row = dev_row(page, name)
+    if "open" not in (row.get_attribute("class") or ""):
+        row.locator(".devtoggle").click()
+        page.wait_for_timeout(250)
+    return row
+
+
 def main():
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -98,59 +121,61 @@ def main():
 def walk(page, proj, dev, prompt):
     # ---------------- runbook 2: 接続先 ----------------
     step("2. PC から無線でつながることを確認する")
-    print("     開いた直後の状態:", txt(page, "#devchip"),
-          "／欄のヒント:", page.locator("#host").get_attribute("placeholder"))
+    row = open_dev_row(page)
+    print("     開いた直後の状態:", chip_text(page),
+          "／欄のヒント:", row.locator(".devhost").get_attribute("placeholder"))
     for _ in range(24):                      # runbook: 数秒待つと結果が出る
         page.wait_for_timeout(500)
-        if txt(page, "#devchip") != "確認中…":
+        if chip_text(page) != "確認中…":
             break
-    host = page.locator("#host").input_value()
+    host = row.locator(".devhost").input_value()
     print(f"     結果が出たあとの接続先の欄: {host!r}")
     if not host:
         note("結果が出たあとも接続先の欄が空(何に繋ごうとしているか分からない)")
-    state = txt(page, "#devchip")
-    print(f"     右上の状態: {state}")
+    state = chip_text(page)
+    print(f"     状態チップ: {state}")
     if state != "待機中":
-        print("     → runbook の指示どおり「探す」を押す")
-        page.click("#finddev")
+        print("     → runbook の指示どおり装置パネルの行の「探す」を押す")
+        row.locator("button", has_text="探す").click()
         for _ in range(60):          # 名前を引けない環境では十数秒かかる
             page.wait_for_timeout(500)
-            if txt(page, "#actmsg"):
+            if txt(page, ".devconnmsg"):
                 break
-        print("     結果:", txt(page, "#actmsg"))
+        print("     結果:", txt(page, ".devconnmsg"))
         page.wait_for_timeout(5000)
-        if txt(page, "#devchip") != "待機中":
-            note("「探す」を押しても待機中にならない: " + txt(page, "#devchip"))
+        if chip_text(page) != "待機中":
+            note("「探す」を押しても待機中にならない: " + chip_text(page))
         else:
             ok("「探す」でつながった")
 
-    # runbook 2 の確認表
-    st = txt(page, "#status")
-    for want in ("状態", "ファーム", "方式", "USB"):
-        if want not in st:
-            note(f"runbook 2 の確認表にある「{want}」が画面に出ていない")
+    # runbook 2 の確認表(接続・診断は装置パネルの行の開閉式詳細に集約)
+    row = open_dev_row(page)
+    kv = row.locator(".kv").inner_text()
+    for want in ("ファーム", "方式", "USB"):
+        if want not in kv:
+            note(f"runbook 2 の確認表にある「{want}」が装置行の詳細に出ていない")
     ok("状態表示の項目がそろっている")
 
     # ---------------- runbook 4: サンプルを1回動かす ----------------
     step("4. サンプルを1回動かす")
-    names = page.locator("#procs .proc b").all_inner_texts()
+    l = lane(page)
+    names = l.locator(".lproc option").all_inner_texts()
     print("     手順の一覧:", names)
     if names != ["サンプル"]:
         note(f"init 直後の一覧が「サンプル」だけではない: {names}")
-    page.locator("#procs .proc").first.click()
     page.wait_for_timeout(700)
-    rows = page.locator("#tl .tlrow .nm").all_inner_texts()
+    rows = l.locator(".ltl .tlrow .nm").all_inner_texts()
     print("     タイムラインの行:", rows)
     if not rows:
         note("サンプルのタイムラインが空(runbook 4-2 で確認できない)")
-    page.click("#run1")          # runbook 4: 1回実行(周回欄に関係なく1回)
+    l.locator("button", has_text="1回実行").click()   # runbook 4: 周回欄に関係なく1回
     page.wait_for_timeout(1200)
-    if "実行中" not in txt(page, "#devchip"):
-        note("サンプルの実行が始まらない: " + txt(page, "#devchip")
-             + " / " + txt(page, "#actmsg"))
+    if "実行中" not in chip_text(page):
+        note("サンプルの実行が始まらない: " + chip_text(page)
+             + " / " + txt(page, "#lanes .lane .lactmsg"))
     else:
         ok("サンプルが実行された")
-    page.click("#stopi")
+    l.locator("button", has_text="今すぐ止める").click()
     page.wait_for_timeout(1500)
 
     # ---------------- runbook 5-2: 自分の手順を作る ----------------
@@ -216,12 +241,12 @@ def walk(page, proj, dev, prompt):
     step("5-3(後半) 実行・監視のタイムラインで確かめる")
     page.click("[data-view=home]")
     page.wait_for_timeout(900)
-    sel_before = txt(page, "#procs .proc.sel") if page.locator(
-        "#procs .proc.sel").count() else ""
-    print("     いま選ばれている手順:", sel_before.split("\n")[0])
-    page.locator("#procs .proc", has_text="テスト周回").click()
-    page.wait_for_timeout(900)
-    marks = page.locator("#tl .marks span").all_inner_texts()
+    l = lane(page)
+    sel_before = l.locator(".lproc").input_value()
+    print("     いま選ばれている手順:", sel_before)
+    l.locator(".lproc").select_option("テスト周回")
+    page.wait_for_timeout(1500)
+    marks = l.locator(".ltl .marks span").all_inner_texts()
     print("     タイムラインのラベル:", marks)
     if marks != ["移動", "戦闘"]:
         note(f"付けたラベルがタイムラインに出ない: {marks}")
@@ -230,25 +255,26 @@ def walk(page, proj, dev, prompt):
 
     # ---------------- runbook 5-4: 途中から試す ----------------
     step("5-4. 途中(戦闘)から試す")
-    opts = page.locator("#resume option").all_inner_texts()
+    opts = l.locator(".lresume option").all_inner_texts()
     print("     開始位置の選択肢:", opts)
     if "戦闘" not in opts:
         note(f"開始位置にラベルが出ない: {opts}")
     else:
-        page.select_option("#resume", "戦闘")
-        page.click("#run1")      # runbook 5-4: 1回実行
+        l.locator(".lresume").select_option("戦闘")
+        l.locator("button", has_text="1回実行").click()      # runbook 5-4
         # 戦闘からの残りは約70フレーム(約1.2秒)しかない。待ちすぎると
         # 「実行中」を見る前に完走してしまうので、始まったことを早めに確かめる
         page.wait_for_timeout(400)
-        if "実行中" not in txt(page, "#devchip"):
-            note("途中から実行できない: " + txt(page, "#actmsg"))
+        if "実行中" not in chip_text(page):
+            note("途中から実行できない: " + txt(page, "#lanes .lane .lactmsg"))
         else:
             ok("戦闘から実行できた")
         # 後始末: まだ動いていれば止める(短い手順は既に終わっていることがある)
-        if page.locator("#stopi").is_enabled():
-            page.click("#stopi")
+        stopi = l.locator("button", has_text="今すぐ止める")
+        if stopi.is_enabled():
+            stopi.click()
         page.wait_for_timeout(1200)
-        page.select_option("#resume", "先頭")
+        l.locator(".lresume").select_option("先頭")
 
     # ---------------- runbook 5-6: 部品を作る ----------------
     step("5-6. 「部品を編集」で新しい部品を作る")
@@ -323,21 +349,21 @@ def walk(page, proj, dev, prompt):
     step("6. 放置運転(周回数を上げる)")
     page.click("[data-view=home]")
     page.wait_for_timeout(900)
-    page.locator("#procs .proc", has_text="テスト周回").click()
+    l = lane(page)
+    l.locator(".lproc").select_option("テスト周回")
     page.wait_for_timeout(700)
-    page.fill("#loops", "3")
-    page.click("#run")
+    l.locator(".lloops").fill("3")
+    l.locator("button", has_text="周回実行").click()
     page.wait_for_timeout(1500)
-    st = txt(page, "#status")
-    if "周回" not in st:
-        note("放置運転中に「周回 n / N」が出ない")
+    prog = txt(page, "#lanes .lane .tlprog")
+    if "周" not in prog:
+        note("放置運転中に「n / N 周」が出ない")
     else:
-        ok("周回の進みが見える: "
-           + [x for x in st.split("\n") if "周回" in x][0])
-    page.click("#stopg")
+        ok("周回の進みが見える: " + prog)
+    l.locator("button", has_text="今の周で止める").click()
     page.wait_for_timeout(4000)
-    if txt(page, "#devchip") != "待機中":
-        note("「今の周で止める」で止まらない: " + txt(page, "#devchip"))
+    if chip_text(page) != "待機中":
+        note("「今の周で止める」で止まらない: " + chip_text(page))
     else:
         ok("「今の周で止める」で止まった")
 

@@ -113,29 +113,29 @@ def main() -> int:
 
         shot("1-home")
 
-        # 実行中の様子
-        page.click("#push")
-        page.wait_for_timeout(400)
-        page.fill("#loops", "500")
-        page.click("#run")
+        # レーン(常時表示)で実行中の様子。転送は実行時に自動で行われる
+        lane = page.locator("#lanes .lane").first
+        lane.locator(".lproc").select_option("素材周回")
+        lane.locator(".lloops").fill("500")
+        lane.get_by_role("button", name="周回実行").click()
         page.wait_for_timeout(1500)
         shot("2-running")
-        page.click("#stopi")
+        lane.get_by_role("button", name="今すぐ止める").click()
         page.wait_for_timeout(500)
 
         # 待機分岐で止まっているところ
-        page.click("#procs .proc >> nth=2")   # 選んで進む
-        page.wait_for_timeout(500)
-        page.click("#run")
+        lane.locator(".lproc").select_option("選んで進む")
+        page.wait_for_timeout(300)
+        lane.get_by_role("button", name="1回実行").click()
         page.wait_for_timeout(2500)
         shot("3-awaiting")
-        page.click("#stopi")
+        lane.get_by_role("button", name="今すぐ止める").click()
         page.wait_for_timeout(300)
 
         # 編集画面
         page.click("[data-view=flow]")
         page.wait_for_timeout(400)
-        page.click("#flowlist .proc >> nth=1")   # 素材周回
+        page.click('#flowlist .proc[data-name="素材周回"]')
         page.wait_for_timeout(600)
         shot("4-flow-editor")
 
