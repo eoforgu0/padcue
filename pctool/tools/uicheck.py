@@ -277,6 +277,22 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert "有効化済み" in st, st
     c.check("状態表示に本体の IMU 有効化が出る", t_status_shows_imu)
 
+    def t_pairing_warning():
+        # 登録未完(本体が新規ペアリングを再要求し続けている)を注入すると
+        # ⚠ 行が出ること。この状態は接続・ジャイロが正常のまま全入力が
+        # 無視されるため、表示が無いと外から切り分けられない(2026-08-06)
+        dev.pair_state(reqs=29, step=0x01)
+        page.wait_for_timeout(2500)
+        st = text(page, "#status")
+        assert "コントローラー登録" in st, f"登録未完の警告が出ない: {st!r}"
+        assert "29" in st, st
+        # 健全(既知経路 0x04)へ戻すと行が消えること(表示の引き算)
+        dev.pair_state(reqs=1, step=0x04)
+        page.wait_for_timeout(2500)
+        st = text(page, "#status")
+        assert "コントローラー登録" not in st, f"警告が残留: {st!r}"
+    c.check("登録未完(ペアリング)の警告が出て、回復で消える", t_pairing_warning)
+
     def t_select_switches_timeline():
         page.locator("#procs .proc").nth(1).click()   # 素材周回
         page.wait_for_timeout(600)

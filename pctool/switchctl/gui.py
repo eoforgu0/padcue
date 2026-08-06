@@ -1481,6 +1481,11 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <!-- manualmsg = このカードの操作(手動操作/記録/保存)の結果。
            視線が記録ボタンの近くにあるとき、結果も同じ場所に出す -->
       <div id="manualmsg"></div>
+      <!-- ptmsg = 手動操作の送達エラー(継続状態)。manualmsg と分ける:
+           共用すると保存結果に上書きされた継続エラーが再表示されず、
+           届いていないのに正常の見た目になる(2026-08-06 レビュー)。
+           状態表示なので × は付けない(直れば自動で消える) -->
+      <div id="ptmsg" class="msg err" style="display:none"></div>
       <div class="hint" id="keymap">
         ゲームパッドを PC に繋ぐとそれを使います。無ければキーボード:<br>
         左スティック=<b>WASD</b> / 右スティック=<b>矢印</b> / 十字キー=<b>TFGH</b> /
@@ -2487,6 +2492,16 @@ function statusRows(d, np) {
   if ('imu_enabled' in d) {
     rows.push(['ジャイロ', d.imu_enabled ? '本体が有効化済み'
                                          : '本体からの有効化なし']);
+  }
+  // ペアリング(コントローラー登録)の切り分け(2026-08-06 の教訓)。
+  // 本体にこの個体の登録記録が無いと、本体は新規ペアリング(フェーズ 0x01)
+  // を再要求し続け、完了するまで**全ての入力が無視される**。接続・到達段階・
+  // ジャイロが全部正常のまま操作だけ効かない、という形で現れるので、
+  // 未完のときだけ⚠付きで出す(正常時は行を足さない=表示の引き算)
+  if ('pair_step' in d && (d.pair_step === 1 || d.pair_step === 2)) {
+    rows.push(['⚠ コントローラー登録',
+               `未完(ペアリング要求 ${d.pair_reqs || 0} 回)。` +
+               '本体が登録を完了できず、入力が無視されています']);
   }
   // ずれの実測値は **0 でも出す**。「遅れた回数」だけを条件付きで出していると、
   // 何も出ていないのが「遅れていない」のか「測っていない」のか区別できず、
@@ -5263,7 +5278,7 @@ async function setManual(on) {
   chip.className = 'chip' + (manualOn ? ' ok' : '');
   document.getElementById('padfig').style.display = manualOn ? '' : 'none';
   document.getElementById('manualcard').classList.toggle('on', manualOn);
-  if (!manualOn) { held.clear(); figClear(); }
+  if (!manualOn) { held.clear(); figClear(); ptError(''); }
   return !r.error;
 }
 document.getElementById('manual').onclick = () => setManual(!manualOn);
@@ -5302,6 +5317,16 @@ document.querySelectorAll('#padfig .figc').forEach(g => {
 // 投げっぱなしにすると要求が溜まり、その行列の後ろで他の操作(停止・記録の
 // 保存など)が待たされる。実機は同時1接続なので溜めても速くならない
 let ptBusy = false;
+// 手動操作の送達エラーは「継続状態」として #ptmsg に直接出す(メッセージ欄
+// #manualmsg と共用しない。保存結果に上書きされて再表示されない事故を防ぐ)。
+// 直れば自動で消える。以前はエラーを一切見ておらず、装置へ届いていないのに
+// 「操作中」の見た目のままになっていた(2026-08-06 監査)
+function ptError(text) {
+  const box = document.getElementById('ptmsg');
+  if (!text) { box.style.display = 'none'; box.textContent = ''; return; }
+  if (box.textContent !== text) box.textContent = text;
+  box.style.display = '';
+}
 setInterval(async () => {
   if (!manualOn || ptBusy) return;
   ptBusy = true;
@@ -5311,8 +5336,13 @@ setInterval(async () => {
     const base = document.hasFocus() ? (padState() || keyState())
                                      : {buttons: 0, lx: 0, ly: 0, rx: 0, ry: 0};
     const st = mergeFig(base);
-    await api('/api/passthrough', 'POST',
-              {enable: true, dev: manualDev, ...st});
+    const r = await api('/api/passthrough', 'POST',
+                        {enable: true, dev: manualDev, ...st});
+    ptError(r.error ? '手動操作が届いていません: ' + r.error : '');
+  } catch (e) {
+    // fetch 自体の失敗(操作画面のサーバが落ちた等)は r.error にならない。
+    // ここで拾わないと、再び「操作中の見た目のまま黙る」に戻る
+    ptError('手動操作が届いていません: 操作画面のサーバに繋がりません');
   } finally { ptBusy = false; }
 }, 33);   // 最速で約30Hz(応答が遅い環境では自然に間隔が伸びる)
 

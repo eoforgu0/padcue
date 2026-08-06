@@ -349,6 +349,26 @@ def cmd_stop(args) -> int:
     return 0
 
 
+def _print_pairing(st: dict) -> None:
+    """ペアリングの観測値を表示する(2026-08-06 の教訓)。
+
+    本体側にこの個体の登録記録が無いと、本体は新規ペアリング(フェーズ
+    0x01)を再要求し続け、完了するまで**全ての入力を無視する**。それが
+    起きていることを、この行が無いと外から切り分けられない。"""
+    if "pair_step" not in st:
+        return   # 旧ファーム(フィールドなし)
+    step = int(st.get("pair_step") or 0)
+    reqs = int(st.get("pair_reqs") or 0)
+    if step in (0x01, 0x02):
+        print(f"ペアリング : ⚠ 未完(フェーズ 0x{step:02x}・計 {reqs} 回受信)")
+        print("             本体がコントローラー登録を完了できていません。"
+              "この間は入力が無視されます")
+    elif step:
+        print(f"ペアリング : 受理済み(直近フェーズ 0x{step:02x}・計 {reqs} 回)")
+    else:
+        print("ペアリング : 要求なし(本体からまだ届いていません)")
+
+
 def cmd_status(args) -> int:
     base = _gui_base(_project(args))
     if base:
@@ -369,6 +389,7 @@ def cmd_status(args) -> int:
             print("ジャイロ   : "
                   + ("本体が有効化済み" if d["imu_enabled"]
                      else "本体からの有効化なし(値を送っても読まれません)"))
+        _print_pairing(d)
         if d.get("running"):
             print(f"実行中     : {d.get('proc', '')} "
                   f"{d.get('session_loop')} 周目 / "
@@ -393,6 +414,7 @@ def cmd_status(args) -> int:
             print("ジャイロ   : "
                   + ("本体が有効化済み" if st["imu_enabled"]
                      else "本体からの有効化なし(値を送っても読まれません)"))
+        _print_pairing(st)
         if st.get("running"):
             print(f"実行中     : {st.get('proc', '')} "
                   f"{st.get('session_loop')} 周目 / {st.get('frames_elapsed')} フレーム")
@@ -793,6 +815,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    # Windows のコンソール(cp932)では µ などの文字で print が
+    # UnicodeEncodeError になり、status 表示が途中で落ちる(2026-08-06 実測)。
+    # 表せない文字だけ置換に落とし、表示は最後まで出す
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)

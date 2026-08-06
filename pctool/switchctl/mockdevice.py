@@ -89,6 +89,11 @@ class MockDevice:
     # 駐機の通し番号(装置レベル。実行をまたいでも増え続ける。前の実行に
     # 宛てた SELECT が新しい実行の駐機と偶然一致しないように)
     _await_gen: int = 0
+    # ペアリングの観測値(実機と同形)。既定は「既知本体の記録手渡し(0x04)を
+    # 1回受けて登録済み」の健全な姿。登録未完(step=0x01 のまま回数増)は
+    # テストが pair_state() で注入する
+    _pair_reqs: int = 1
+    _pair_step: int = 0x04
 
     # ---- ライフサイクル ----
 
@@ -561,10 +566,23 @@ class MockDevice:
                     "failed_replies": 0, "dropped_inputs": 0, "bad_reports": 0,
                     "ep_busy": 0, "log_dropped": 0,
                     "usb_mounted": self.usb_mounted, "breadcrumb": 0x3FF,
-                    "imu_enabled": True})   # 実機ファームと応答の形を揃える
+                    "imu_enabled": True,
+                    # ペアリング・入力モード・手動操作の可観測化(実機と同形)。
+                    # 模擬は「既知本体の記録手渡し(0x04)を 1 回受けて登録済み」
+                    # という健全な姿を返す。異常系はテストが pair_state() で注入
+                    "pair_reqs": self._pair_reqs,
+                    "pair_step": self._pair_step,
+                    "input_mode": 0x30,
+                    "manual": self._state == "PASSTHRU"})
         return Message(proto.T_STATUS | proto.T_RESP, obj)
 
     # ---- テスト用の外部操作 ----
+
+    def pair_state(self, reqs: int, step: int) -> None:
+        """ペアリングの観測値を差し替える(登録未完の再現用)。"""
+        with self._lock:
+            self._pair_reqs = reqs
+            self._pair_step = step
 
     def inject_fault(self, reason: str = "ENGINE_FAULT") -> None:
         with self._lock:

@@ -59,3 +59,29 @@ def test_bad_mode_is_rejected(env):
     root, dev = env
     with pytest.raises(SystemExit):
         run(root, "mode", "でたらめ")
+
+
+def test_status_shows_pairing_ok(env, capsys):
+    """登録済み(既知経路 0x04)なら受理済みと出ること。"""
+    root, dev = env
+    assert run(root, "status") == 0
+    out = capsys.readouterr().out
+    assert "ペアリング" in out
+    assert "受理済み" in out
+    assert "未完" not in out
+
+
+def test_status_warns_when_pairing_incomplete(env, capsys):
+    """登録未完(フェーズ 0x01 の再要求が続く)を⚠付きで知らせること。
+
+    2026-08-06 の実測: 本体にこの個体の登録記録が無いと、本体は新規
+    ペアリングを 100〜400ms 間隔で再要求し続け、完了するまで全ての入力を
+    無視する。接続・到達段階・ジャイロが全部正常のまま操作だけ効かない
+    という形で現れるため、この表示が無いと外から切り分けられない。"""
+    root, dev = env
+    dev.pair_state(reqs=29, step=0x01)
+    assert run(root, "status") == 0
+    out = capsys.readouterr().out
+    assert "未完" in out
+    assert "29" in out
+    assert "入力が無視" in out
