@@ -47,7 +47,17 @@ def test_hello(client):
     assert info.state == "IDLE"
 
 
-def test_transfer_and_run(client):
+def test_transfer_and_run():
+    # この検査だけ speed を落とす。2000 倍だと 3 周(実時間 3 秒)が 1.5ms で
+    # 終わり、「開始直後の status で running=True」が往復時間との競争になる
+    # (負荷がかかった時にだけ落ちる。2026-08-06 に全件実行で実際に落ちた)。
+    # 50 倍なら実行は 60ms 続き、往復(1ms 級)に対して十分な余裕がある
+    with MockDevice(speed=50.0) as device, \
+            DeviceClient("127.0.0.1", device.port) as client:
+        _transfer_and_run(client)
+
+
+def _transfer_and_run(client):
     c, blob = compiled_blob()
     h = client.put(c.name, blob)
     assert h == proc_hash(blob)
