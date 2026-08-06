@@ -23,7 +23,10 @@ def procon_exe(tmp_path_factory):
     gcc = find_gcc()
     if gcc is None:
         pytest.skip("gcc が見つかりません")
-    out = tmp_path_factory.mktemp("procon") / "procon_host.exe"
+    del tmp_path_factory
+    # リポジトリ内に置く理由は test_hostc.host_exe と同じ(誤検知対策)
+    out = CORE.parents[2] / "build" / "hosttest" / "procon_host.exe"
+    out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
            "-I", str(CORE / "include"),
            str(CORE / "padctl_procon.c"), str(CORE / "padctl_hidpad.c"),

@@ -34,7 +34,13 @@ def host_exe(tmp_path_factory):
     gcc = find_gcc()
     if gcc is None:
         pytest.skip("gcc が見つかりません")
-    out = tmp_path_factory.mktemp("hostc") / "padctl_host.exe"
+    del tmp_path_factory   # 使わない(下記の理由でリポジトリ内に置く)
+    # ビルド先はリポジトリ内(build/ は非追跡)。%TEMP% に置くと、
+    # ウイルス対策ソフトが「一時フォルダに現れた無署名 exe」を誤検知・
+    # 隔離して 64 件の検査ごと落とすことがある(2026-08-06 に ESET の
+    # 定義更新で実際に発生)。リポジトリを除外設定していれば巻き込まれない
+    out = CORE.parents[2] / "build" / "hosttest" / "padctl_host.exe"
+    out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
            "-I", str(CORE / "include"),
            str(CORE / "padctl_core.c"), str(CORE / "host" / "host_main.c"),
