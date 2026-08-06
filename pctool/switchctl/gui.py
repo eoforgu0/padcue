@@ -395,29 +395,6 @@ class _Handler(BaseHTTPRequestHandler):
             cfg["consoles"] = consoles
             self.project.save_config(cfg)
             return {"ok": True}
-        if path == "/api/identify":
-            # どの Switch がどの装置につながっているかを目で確かめる:
-            # その装置だけに左スティック半分の左右ゆらしを約1秒送る。
-            # 半分なのはメニューのカーソル送りを起こしにくくするため。
-            # 待機中のみ(実行・手動操作と混ざる入力は事故のもと)
-            link = self._pool().get(body.get("dev", ""))
-
-            def _ident(c):
-                if c.status().get("state") != "IDLE":
-                    raise DeviceError(
-                        "BUSY", "本体の確認は待機中の装置にだけ送れます"
-                                "(実行中・手動操作中は入力が混ざるため)")
-                try:
-                    for _ in range(4):
-                        c.passthrough(True, lx=-1024)
-                        time.sleep(0.16)
-                        c.passthrough(True, lx=1024)
-                        time.sleep(0.16)
-                finally:
-                    c.passthrough(False)
-                return c.status()
-            link.write_through(status=link.call(_ident))
-            return {"ok": True}
         if path == "/api/push":
             name = body.get("name", "")
             r, err = self.project.build_safe(name)
@@ -643,6 +620,14 @@ class _Handler(BaseHTTPRequestHandler):
             self.project.save_order(body.get("kind", ""),
                                     [str(n) for n in body.get("names", [])])
             return {"ok": True}
+        if path == "/api/proc_org":
+            # 手順の非表示・フォルダ分けの保存(フォルダ名の重複・空は拒否)
+            try:
+                self.project.save_proc_org(body.get("folders", []),
+                                           body.get("hidden", []))
+            except ValueError as e:
+                return {"error": str(e)}
+            return {"ok": True}
         if path == "/api/flow/rename":
             n = self.project.rename_procedure(body.get("old"), body.get("new"))
             return {"ok": True, "updated": n}
@@ -680,11 +665,14 @@ class _Handler(BaseHTTPRequestHandler):
     # ---- 状態 ----
 
     def _state(self) -> dict:
+        org = self.project.load_proc_org()
+        hidden_set = set(org["hidden"])
         procs = []
         for name in self.project.procedure_names():
             r, err = self.project.build_safe(name)
             if r is None:
-                procs.append({"name": name, "error": err})
+                procs.append({"name": name, "error": err,
+                             "hidden": name in hidden_set})
             else:
                 procs.append({
                     "name": name, "frames": r.total_frames,
@@ -693,10 +681,12 @@ class _Handler(BaseHTTPRequestHandler):
                     # 最初の待機分岐の腕の名前(連結バーの「進む腕」の表示用)
                     "arms": (r.wait_branch_arms[0]
                              if r.wait_branch_arms else []),
+                    "hidden": name in hidden_set,
                 })
         cfg = self.project.load_config()
         out = {"procedures": procs, "host": cfg.get("host", ""),
                "project": str(self.project.root),
+               "proc_folders": org["folders"],
                "consoles": cfg.get("consoles") or {}}
         # 装置プールの収集キャッシュを即答する(装置への I/O はしない)。
         # 片方が無応答でも、その装置の error になるだけで他方は即座に返る
@@ -1010,6 +1000,17 @@ main > .card { min-width:0; }
 .proc:hover .rowops button, .rowops button:focus-visible { opacity:1; }
 .rowops button:hover { background:var(--accent-soft); color:var(--accent); }
 .rowops button.dgr:hover { background:var(--err-bg); color:var(--err); }
+/* 実行・監視の一覧に出さない手順は、編集一覧側で薄く見せる(消したのでは
+   ないと分かるように。目のアイコンでいつでも戻せる) */
+.proc.off { opacity:.55; }
+/* フォルダ(手順を編集の一覧。VSCode のエクスプローラ風)。見出し行は
+   .proc の見た目を借りつつ、開閉の三角ぶんだけ列を1つ増やす */
+.folder-row { grid-template-columns:14px 16px 1fr auto; cursor: default; }
+.foldertoggle { border:0; background:transparent; cursor:pointer;
+  color:var(--muted); padding:0; width:16px; font-size:10px;
+  text-align:center; }
+.folder-row b { font-weight:700; }
+.folder-items { margin-left:20px; }
 .chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:11px;
   border:1px solid var(--line); color:var(--muted); }
 .chip:empty { display:none; }   /* 中身が空のときは枠だけ残さない */
@@ -1599,6 +1600,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <div id="flowlist"></div>
     <div class="row" style="margin-top:8px">
       <button class="small" id="newflow">＋ 新規</button>
+      <button class="small" id="newfolder">＋ フォルダ</button>
     </div>
     <h2 style="margin-top:14px">追加するブロック</h2>
     <div id="palette"></div>
@@ -1662,6 +1664,28 @@ let selected = null, state = null, timeline = null;
 let flowDoc = null, flowName = null, flowSel = null, flowParts = [];
 let flowDirty = false, undoStack = [];
 let partData = null, partName = null, partDirty = false;
+
+// 実行・監視向けの手順一覧(平置き)の並びを作る。「手順を編集」タブの
+// フォルダ表示と同じ考え方で「フォルダ(配列順)→フォルダ外」に並べるが、
+// ここではフォルダの入れ物そのものは出さず、順序だけ反映する
+// (計画 B「実行・監視の一覧は平置きのまま」)
+function orderedProcs() {
+  if (!state) return [];
+  const byName = new Map(state.procedures.map(p => [p.name, p]));
+  const used = new Set();
+  const out = [];
+  for (const f of (state.proc_folders || [])) {
+    for (const n of f.items) {
+      const p = byName.get(n);
+      if (p && !used.has(n)) { out.push(p); used.add(n); }
+    }
+  }
+  for (const p of state.procedures) if (!used.has(p.name)) out.push(p);
+  return out;
+}
+// 実行・監視の一覧・レーンの手順プルダウン・反復テストが使う「見える手順」
+// (計画 A「目のトグルで実行・監視の一覧から除外」)
+function visibleProcs() { return orderedProcs().filter(p => !p.hidden); }
 
 const BUTTONS = ['A','B','X','Y','L','R','ZL','ZR','DU','DD','DL','DR',
                  'PLUS','MINUS','HOME','CAPTURE','LS','RS'];
@@ -1955,6 +1979,13 @@ const ICON_SVG = {
        + '<path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2"/>'
        + '<line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0'
+     + ' 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0'
+     + ' 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/>'
+     + '<path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/>'
+     + '<path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0'
+     + '-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
 };
 function iconSvg(name, size) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"`
@@ -2017,7 +2048,7 @@ const LOG_JA = {
     const hex = v => (v >>> 0).toString(16).padStart(8, '0');
     const hi = hex(a) + hex(b);
     const nm = (state && state.consoles || {})[hi];
-    return `本体を確認: ${hex(a)} ${hex(b)}`
+    return `本体情報: ${hex(a)} ${hex(b)}`
       + (nm ? `(=「${nm}」)` : '(装置カードの「本体に命名」で名前を付けられます)');
   },
   AWAIT_TIMEOUT: (a, b) => b
@@ -2174,22 +2205,6 @@ function renderDevices() {
     // 泣き別れ、毎秒の状態変化でカードの高さがガタつくのを防ぐ)
     const ops = el('span');
     ops.style.cssText = 'display:inline-flex; gap:6px; flex:none;';
-    const ident = el('button', 'small', '本体を確認');
-    if (d.error) {
-      ident.disabled = true;
-      ident.title = 'つながっていないので送れません';
-    } else {
-      ident.title = 'この装置がどの Switch 本体に挿さっているかを実物で'
-        + '確かめます。押すと、この装置へ「左スティックを半分だけ1秒ゆらす」'
-        + '入力が送られます(待機中のみ)。画面が動いた本体が接続先です';
-    }
-    ident.onclick = async () => {
-      const r = await api('/api/identify', 'POST', {dev: d.name});
-      show('devmsg', r.error ? 'err' : 'ok', r.error
-           || `${d.name} へ確認用の入力を送りました。`
-              + '画面が動いた Switch がこの装置の本体です');
-    };
-    ops.append(ident);
     if (multi) {
       // 1台だけのときは出さない(従来の1台運用で誤って台帳を空にしない。
       // どうしても外すときは CLI の device remove)
@@ -2316,9 +2331,9 @@ let procsKey = '';
 function renderProcs(force) {
   const box = document.getElementById('procs');
   if (dragging) return;
+  const shown = visibleProcs();
   const key = JSON.stringify([
-    state.procedures.map(p => [p.name, p.frames, p.seconds, p.warnings,
-                               p.error || '']),
+    shown.map(p => [p.name, p.frames, p.seconds, p.warnings, p.error || '']),
     selected, runningProc()]);
   if (!force && key === procsKey && box.childElementCount) return;
   procsKey = key;
@@ -2327,7 +2342,12 @@ function renderProcs(force) {
     box.append(el('div', 'msg warn', '手順がありません。「手順を編集」タブで作れます'));
     return;
   }
-  for (const p of state.procedures) {
+  if (!shown.length) {
+    box.append(el('div', 'msg warn',
+      '表示する手順がありません(「手順を編集」の目のアイコンで選べます)'));
+    return;
+  }
+  for (const p of shown) {
     const d = el('div', 'proc' + (p.name === selected ? ' sel' : ''));
     d.dataset.name = p.name;
     const g = el('span', 'grab', '⠿');
@@ -2835,13 +2855,9 @@ function buildLane(d) {
   lane.find.title = 'LAN からこの装置(個体IDが一致する実機)を探して接続先にします';
   lane.conn = el('button', 'small', '接続');
   lane.conn.title = '入力した接続先に切り替えます';
-  lane.ident = el('button', 'small', '本体を確認');
-  lane.ident.title = 'この装置がどの Switch 本体に挿さっているかを実物で'
-    + '確かめます。押すと、この装置へ「左スティックを半分だけ1秒ゆらす」'
-    + '入力が送られます(待機中のみ)。画面が動いた本体が接続先です';
   const lbl = el('label', 'lbl', '接続先');
   bar.append(el('span', 'lbl', '装置'), lane.chip, el('span', 'sep'),
-             lbl, lane.host, lane.find, lane.conn, lane.ident);
+             lbl, lane.host, lane.find, lane.conn);
   card.append(bar);
   lane.connmsg = el('div');
   lane.msg = el('div');
@@ -2952,11 +2968,6 @@ function wireLane(lane) {
            r.error || `接続先を ${r.host} にしました`);
     refresh();
   };
-  lane.ident.onclick = async () => {
-    const r = await api('/api/identify', 'POST', {dev: lane.name});
-    showIn(lane.connmsg, r.error ? 'err' : 'ok', r.error
-           || '確認用の入力を送りました。画面が動いた Switch がこの装置の本体です');
-  };
 }
 
 async function laneRun(lane, loops) {
@@ -2991,13 +3002,14 @@ function setLaneStopgArmed(lane, armed) {
 
 // レーンの手順選択を一覧に追従させる。実行中はその手順で固定
 function syncLaneProc(lane, d, runName) {
-  const names = state.procedures.map(p => p.name);
+  const shown = visibleProcs();
+  const names = shown.map(p => p.name);
   const key = names.join('\n');
   if (lane.procKey !== key) {
     lane.procKey = key;
     const keep = lane.proc.value;
     lane.proc.textContent = '';
-    for (const p of state.procedures) {
+    for (const p of shown) {
       const o = new Option(p.error ? `${p.name}(エラー)` : p.name, p.name);
       if (p.error) o.disabled = true;
       lane.proc.append(o);
@@ -3087,7 +3099,6 @@ function updateLane(lane, d) {
     lane.chip.textContent = '未接続';
     lane.devbar.className = 'devbar off';
     lane.find.className = 'small primary';
-    lane.ident.disabled = true;
     showIn(lane.msg, 'err',
            d.error + ' — すぐ上の「探す」でこの装置を見つけられます');
     lane.tlprog.textContent = '';
@@ -3102,8 +3113,6 @@ function updateLane(lane, d) {
   lane.kv.classList.remove('stale');
   lane.devbar.className = 'devbar' + (running || awaiting ? ' busy' : '');
   lane.find.className = 'small';
-  lane.ident.disabled = false;
-  lane.ident.title = 'この装置だけに小さな入力を送ります';
   showIn(lane.msg, '', '');
   lane.chip.className = 'chip ' + (d.state === 'ERROR' ? 'err'
                                    : awaiting ? 'warn' : running ? 'ok' : '');
@@ -4483,27 +4492,298 @@ function renderFlow(dirty, keepProps) {
     info.className = 'chip warn';
   }
 }
+// フォルダ(配列順)→フォルダ外の順に描く(VSCode のエクスプローラ風。計画 B)
 function renderFlowList() {
   const box = document.getElementById('flowlist');
   box.textContent = '';
-  for (const p of (state ? state.procedures : [])) {
-    const d = el('div', 'proc' + (p.name === flowName ? ' sel' : ''));
-    d.dataset.name = p.name;
-    const g = el('span', 'grab', '⠿');
-    g.title = 'ドラッグで並べ替え(実行・監視と共通の並び)';
-    bindRowDrag(g, d, 'procedures', p.name,
-                async () => { await refresh(); renderFlowList(); });
-    d.append(g);
-    d.append(el('b', null, p.name));
-    const ops = el('span', 'rowops');
-    ops.append(
-      rowIcon('pencil', 'この手順の名前を変える', false, () => renFlow(p.name)),
-      rowIcon('copy', 'この手順をコピーして作る', false, () => dupFlow(p.name)),
-      rowIcon('trash', 'この手順を削除', true, () => delFlow(p.name)));
-    d.append(ops);
-    d.onclick = () => loadFlow(p.name);
-    box.append(d);
+  if (!state) return;
+  const byName = new Map(state.procedures.map(p => [p.name, p]));
+  const inFolder = new Set();
+  for (const f of (state.proc_folders || [])) for (const n of f.items) inFolder.add(n);
+  for (const f of (state.proc_folders || [])) {
+    box.append(renderFolderRow(f));
+    if (f.open) {
+      const cont = el('div', 'folder-items');
+      cont.dataset.folder = f.name;
+      for (const n of f.items) {
+        const p = byName.get(n);
+        if (p) cont.append(renderProcRow(p));
+      }
+      box.append(cont);
+    }
   }
+  for (const p of state.procedures) {
+    if (!inFolder.has(p.name)) box.append(renderProcRow(p));
+  }
+}
+function renderProcRow(p) {
+  const d = el('div', 'proc' + (p.name === flowName ? ' sel' : '')
+                      + (p.hidden ? ' off' : ''));
+  d.dataset.name = p.name;
+  const g = el('span', 'grab', '⠿');
+  g.title = 'ドラッグで並べ替え・フォルダへ移動(実行・監視と共通の並び)';
+  bindOrgDrag(g, d, 'proc', p.name);
+  d.append(g);
+  d.append(el('b', null, p.name));
+  const ops = el('span', 'rowops');
+  ops.append(
+    rowIcon('pencil', 'この手順の名前を変える', false, () => renFlow(p.name)),
+    rowIcon('copy', 'この手順をコピーして作る', false, () => dupFlow(p.name)),
+    rowIcon('trash', 'この手順を削除', true, () => delFlow(p.name)),
+    rowIcon(p.hidden ? 'eye-off' : 'eye',
+            '実行・監視の一覧に出す/出さない(編集はいつでもできる)', false,
+            () => toggleProcHidden(p.name)));
+  d.append(ops);
+  d.onclick = () => loadFlow(p.name);
+  return d;
+}
+function renderFolderRow(f) {
+  const d = el('div', 'proc folder-row');
+  d.dataset.folder = f.name;
+  const g = el('span', 'grab', '⠿');
+  g.title = 'ドラッグでフォルダを並べ替え(フォルダ間の入れ子はできません)';
+  bindOrgDrag(g, d, 'folder', f.name);
+  d.append(g);
+  const tgl = el('button', 'foldertoggle', f.open ? '▾' : '▸');
+  tgl.title = f.open ? 'たたむ' : '開く';
+  tgl.onclick = (e) => { e.stopPropagation(); toggleFolderOpen(f.name); };
+  d.append(tgl);
+  d.append(el('b', null, f.name));
+  const ops = el('span', 'rowops');
+  ops.append(
+    rowIcon('pencil', 'フォルダの名前を変える', false, () => renFolder(f.name)),
+    rowIcon('trash', 'フォルダを解体(中の手順は外に出ます。手順は消えません)',
+            true, () => delFolder(f.name)));
+  d.append(ops);
+  return d;
+}
+
+// ---- フォルダ・非表示の保存(手順一覧の整理。計画 A/B) ----
+function cloneFolders() {
+  return (state.proc_folders || []).map(f =>
+    ({name: f.name, open: f.open, items: [...f.items]}));
+}
+function currentHidden() {
+  return (state.procedures || []).filter(p => p.hidden).map(p => p.name);
+}
+async function saveProcOrg(folders, hidden) {
+  const r = await api('/api/proc_org', 'POST', {folders, hidden});
+  if (r.error) { show('flowmsg', 'err', r.error); return false; }
+  return true;
+}
+async function toggleProcHidden(name) {
+  const hidden = new Set(currentHidden());
+  hidden.has(name) ? hidden.delete(name) : hidden.add(name);
+  if (await saveProcOrg(cloneFolders(), [...hidden])) { await refresh(); renderFlowList(); }
+}
+async function toggleFolderOpen(name) {
+  const folders = cloneFolders();
+  const f = folders.find(x => x.name === name);
+  if (!f) return;
+  f.open = !f.open;
+  if (await saveProcOrg(folders, currentHidden())) { await refresh(); renderFlowList(); }
+}
+document.getElementById('newfolder').onclick = async () => {
+  const name = prompt('新しいフォルダの名前');
+  if (!name) return;
+  const folders = cloneFolders();
+  folders.push({name, open: true, items: []});
+  if (await saveProcOrg(folders, currentHidden())) { await refresh(); renderFlowList(); }
+};
+async function renFolder(old) {
+  const name = prompt(`「${old}」の新しい名前`, old);
+  if (!name || name === old) return;
+  const folders = cloneFolders();
+  const f = folders.find(x => x.name === old);
+  if (!f) return;
+  f.name = name;
+  if (await saveProcOrg(folders, currentHidden())) { await refresh(); renderFlowList(); }
+}
+async function delFolder(name) {
+  if (!confirm(`フォルダ「${name}」を解体します(中の手順は外に出ます。`
+              + '手順は消えません)。よろしいですか?')) return;
+  const folders = cloneFolders().filter(f => f.name !== name);
+  if (await saveProcOrg(folders, currentHidden())) { await refresh(); renderFlowList(); }
+}
+
+// ---- 手順を編集タブ専用の D&D(フォルダ対応) ----
+// 上の bindRowDrag はフラットな並びしか扱えないため、フォルダを持つこの
+// 一覧だけ専用に用意する(掴む・6px しきい値・挿入線という考え方は同じ。
+// ドラッグ中は他の画面と同時に動かないので dropLine を使い回してよい)
+let orgDrag = null;   // {kind:'proc'|'folder', name}
+
+function folderItemsEl(name) {
+  for (const c of document.getElementById('flowlist').children) {
+    if (c.classList.contains('folder-items') && c.dataset.folder === name) return c;
+  }
+  return null;
+}
+// #flowlist の行を「開いているフォルダの中身も展開した1本の並び」で返す
+// (proc をどこへ落とすかの判定に使う。フォルダの見出し行自体も候補に含む)
+function orgRowScan() {
+  const box = document.getElementById('flowlist');
+  const out = [];
+  for (const child of box.children) {
+    if (child.classList.contains('folder-row')) {
+      out.push({el: child, kind: 'folderHeader', folder: child.dataset.folder});
+    } else if (child.classList.contains('folder-items')) {
+      for (const item of child.children) {
+        out.push({el: item, kind: 'item', folder: child.dataset.folder});
+      }
+    } else if (child.classList.contains('proc')) {
+      out.push({el: child, kind: 'item', folder: null});
+    }
+  }
+  return out;
+}
+function bindOrgDrag(handle, row, kind, name) {
+  let start = null;
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    start = {x: e.clientX, y: e.clientY};
+  });
+  handle.addEventListener('pointermove', e => {
+    if (!start) return;
+    if (!orgDrag) {
+      // 6px 動くまではドラッグにしない(押しただけで挿入線が出るのを防ぐ)
+      if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6) return;
+      orgDrag = {kind, name};
+      row.classList.add('dragging');
+    }
+    if (kind === 'folder') placeFolderDropLine(computeFolderTarget(e.clientY, row));
+    else placeOrgDropLine(computeOrgTarget(e.clientY, row));
+  });
+  const finish = async (commit) => {
+    start = null;
+    if (!orgDrag) return;
+    const drag = orgDrag;
+    orgDrag = null;
+    row.classList.remove('dragging');
+    if (commit && dropLine.parentElement) {
+      if (drag.kind === 'folder') await commitFolderDrop(drag.name);
+      else await commitProcDrop(drag.name);
+    } else {
+      dropLine.remove();
+    }
+  };
+  handle.addEventListener('pointerup', () => finish(true));
+  handle.addEventListener('pointercancel', () => finish(false));
+}
+// 手順をどこへ落とすか: フォルダの見出しの上=そのフォルダの末尾、
+// 開いているフォルダの中の行間=その位置、それ以外=フォルダ外のその位置
+function computeOrgTarget(clientY, dragRow) {
+  const rows = orgRowScan().filter(r => r.el !== dragRow);
+  for (const r of rows) {
+    const b = r.el.getBoundingClientRect();
+    if (r.kind === 'folderHeader') {
+      if (clientY >= b.top && clientY < b.bottom) return {folder: r.folder, header: true};
+      continue;
+    }
+    if (clientY < b.top + b.height / 2) return {folder: r.folder, before: r.el};
+  }
+  const last = rows[rows.length - 1];
+  return last ? {folder: last.folder, atEnd: true} : {folder: null, atEnd: true};
+}
+function placeOrgDropLine(target) {
+  if (target.before) {
+    target.before.parentElement.insertBefore(dropLine, target.before);
+    return;
+  }
+  if (target.folder) {
+    const cont = folderItemsEl(target.folder);
+    if (cont) { cont.append(dropLine); return; }
+    // 閉じたフォルダの見出しへ: 見出しの直後に置く(そこは「末尾」の印)
+    const header = [...document.getElementById('flowlist').children].find(
+      c => c.classList.contains('folder-row') && c.dataset.folder === target.folder);
+    if (header) { header.after(dropLine); return; }
+  }
+  document.getElementById('flowlist').append(dropLine);
+}
+// フォルダ自体の並べ替え: フォルダの見出し同士の間だけを候補にする
+// (フォルダ間の入れ子はできない仕様のため)
+function computeFolderTarget(clientY, dragRow) {
+  const rows = orgRowScan().filter(r => r.kind === 'folderHeader' && r.el !== dragRow);
+  for (const r of rows) {
+    const b = r.el.getBoundingClientRect();
+    if (clientY < b.top + b.height / 2) return {before: r.el};
+  }
+  return {atEnd: true};
+}
+function placeFolderDropLine(target) {
+  const box = document.getElementById('flowlist');
+  if (target.before) { box.insertBefore(dropLine, target.before); return; }
+  const firstOutside = [...box.children].find(c => c !== dropLine
+    && !c.classList.contains('folder-row') && !c.classList.contains('folder-items'));
+  if (firstOutside) box.insertBefore(dropLine, firstOutside); else box.append(dropLine);
+}
+async function commitProcDrop(name) {
+  const box = document.getElementById('flowlist');
+  const parent = dropLine.parentElement;
+  let targetFolder = null;
+  if (parent.classList.contains('folder-items')) {
+    targetFolder = parent.dataset.folder;
+  } else if (dropLine.previousElementSibling
+             && dropLine.previousElementSibling.classList.contains('folder-row')) {
+    targetFolder = dropLine.previousElementSibling.dataset.folder;
+  }
+  const folders = cloneFolders();
+  for (const f of folders) f.items = f.items.filter(n => n !== name);
+  let newFlatOrder = null;   // フォルダ外へ出た/動いたときだけ使う
+  if (targetFolder != null) {
+    const f = folders.find(x => x.name === targetFolder);
+    if (f) {
+      let idx = f.items.length;   // 既定は末尾(閉じたフォルダの見出しへ落とした場合)
+      if (parent.classList.contains('folder-items')) {
+        idx = 0;
+        for (const c of parent.children) {
+          if (c === dropLine) break;
+          if (c.classList.contains('proc') && c.dataset.name !== name) idx++;
+        }
+      }
+      f.items.splice(idx, 0, name);
+    }
+  } else {
+    // フォルダ外の位置。#flowlist 直下の手順行を dropLine の位置で並べ替え、
+    // フォルダに入っている名前は元の相対位置のまま order.json 全体へ反映する
+    let idx = 0;
+    for (const c of box.children) {
+      if (c === dropLine) break;
+      if (c.classList.contains('proc') && !c.classList.contains('folder-row')
+          && c.dataset.name && c.dataset.name !== name) idx++;
+    }
+    const outsideNames = [...box.children]
+      .filter(c => c.classList.contains('proc') && !c.classList.contains('folder-row')
+             && c.dataset.name && c.dataset.name !== name)
+      .map(c => c.dataset.name);
+    outsideNames.splice(idx, 0, name);
+    const inFolderNow = new Set(folders.flatMap(f => f.items));
+    const flat = state.procedures.map(p => p.name);
+    let oi = 0;
+    newFlatOrder = flat.map(n => (inFolderNow.has(n) ? n : outsideNames[oi++]));
+  }
+  dropLine.remove();
+  const ok = await saveProcOrg(folders, currentHidden());
+  if (ok && newFlatOrder) {
+    await api('/api/reorder', 'POST', {kind: 'procedures', names: newFlatOrder});
+  }
+  await refresh();
+  renderFlowList();
+}
+async function commitFolderDrop(name) {
+  const box = document.getElementById('flowlist');
+  let idx = 0;
+  for (const c of box.children) {
+    if (c === dropLine) break;
+    if (c.classList.contains('folder-row') && c.dataset.folder !== name) idx++;
+  }
+  dropLine.remove();
+  const folders = cloneFolders();
+  const at = folders.findIndex(f => f.name === name);
+  if (at < 0) return;
+  const [f] = folders.splice(at, 1);
+  folders.splice(idx, 0, f);
+  if (await saveProcOrg(folders, currentHidden())) { await refresh(); renderFlowList(); }
 }
 
 // 行アイコンから使う操作。開いていない手順にも行える(開いている手順に
@@ -5557,8 +5837,9 @@ document.getElementById('recsave').onclick = async () => {
 // ============ 更新ループ ============
 async function refresh() {
   state = await api('/api/state');
-  // 選んでいた手順が消えていたら選び直す(古い情報を出したままにしない)
-  const names = state.procedures.map(p => p.name);
+  // 選んでいた手順が消えた・非表示になっていたら選び直す(古い情報を
+  // 出したままにしない。計画 A③: 最初の表示手順へフォールバック)
+  const names = visibleProcs().map(p => p.name);
   if (selected && !names.includes(selected)) { selected = null; timeline = null; }
   if (!selected && names.length) { selected = names[0]; timeline = null; }
   if (!names.length) { selected = null; timeline = null; }

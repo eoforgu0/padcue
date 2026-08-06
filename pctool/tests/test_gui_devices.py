@@ -6,7 +6,6 @@
  - 追加・改名は即座にプールへ反映され、/api/state の devices に現れる
  - 実行中の装置は台帳から外せない(実機が動き続けるのに止める手段が
    画面から消えるため)
- - 識別は待機中の装置にだけ送れる(実行・手動操作と入力が混ざらない)
 """
 import json
 import threading
@@ -202,21 +201,3 @@ def test_host_info_shown_and_console_named(env):
     assert post(base, "/api/console_name",
                 {"host_info": "0100005e0053013c", "name": ""}).get("ok")
     assert "0100005e0053013c" not in get(base, "/api/state")["consoles"]
-
-
-def test_identify_only_when_idle(env):
-    proj, d1, base = env
-    wait_until(lambda: "fw" in get(base, "/api/state")["devices"][0])
-    # 待機中: 送れる(左スティックのゆらしを送り、終わったら中立へ戻す)
-    r = post(base, "/api/identify", {"dev": "1P"})
-    assert r.get("ok"), r
-    st = get(base, "/api/state")["devices"][0]
-    assert st.get("state") == "IDLE", "識別のあと手動操作状態が残った"
-    # 実行中: 入力が混ざるので拒否
-    assert post(base, "/api/push", {"name": "サンプル"}).get("ok")
-    assert post(base, "/api/run",
-                {"name": "サンプル", "loops": 100000}).get("ok")
-    wait_until(lambda: get(base, "/api/state")["devices"][0].get("running"))
-    r = post(base, "/api/identify", {"dev": "1P"})
-    assert "待機中" in str(r.get("error", "")), r
-    post(base, "/api/stop", {"mode": "immediate"})

@@ -204,3 +204,40 @@ def test_gui_reports_compile_error(guiserver, proj):
     st = http_get(guiserver + "/api/state")
     broken = next(p for p in st["procedures"] if p["name"] == "壊れた")
     assert "未知のボタン名" in broken["error"]
+
+
+def test_gui_state_reports_hidden_and_folders_default(guiserver):
+    """order.json が無ければ非表示なし・フォルダなし(旧プロジェクト互換)。"""
+    st = http_get(guiserver + "/api/state")
+    assert st["procedures"][0]["hidden"] is False
+    assert st["proc_folders"] == []
+
+
+def test_gui_proc_org_save_reflects_in_state(guiserver, proj):
+    r = http_post(guiserver + "/api/proc_org", {
+        "folders": [{"name": "フォルダ1", "open": True, "items": ["サンプル"]}],
+        "hidden": [],
+    })
+    assert r.get("ok")
+    st = http_get(guiserver + "/api/state")
+    assert st["proc_folders"] == [
+        {"name": "フォルダ1", "open": True, "items": ["サンプル"]}]
+
+    r = http_post(guiserver + "/api/proc_org",
+                  {"folders": [], "hidden": ["サンプル"]})
+    assert r.get("ok")
+    st = http_get(guiserver + "/api/state")
+    assert st["procedures"][0]["hidden"] is True
+
+
+def test_gui_proc_org_rejects_duplicate_or_empty_folder_name(guiserver):
+    r = http_post(guiserver + "/api/proc_org", {
+        "folders": [{"name": "同名", "items": []},
+                    {"name": "同名", "items": []}],
+        "hidden": [],
+    })
+    assert r.get("error")
+
+    r = http_post(guiserver + "/api/proc_org",
+                  {"folders": [{"name": " ", "items": []}], "hidden": []})
+    assert r.get("error")

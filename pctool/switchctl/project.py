@@ -274,6 +274,100 @@ class Project:
         self._order_path().write_text(
             json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
 
+    # ---- 手順の整理(非表示・フォルダ) ----
+    # order.json に procedures/parts と同居させる:
+    #   hidden: [手順名, ...]                       実行・監視の一覧に出さない
+    #   folders: [{name, open, items: [手順名,...]}] フォルダ(表示専用の入れ物。
+    #                                                実体は procedures/ 直下のまま)
+    # 表示順は「フォルダ(配列順)→フォルダ外(procedures 順)」、どこにも
+    # 載っていない手順は名前順で末尾(既存の並び順規則の延長)。
+    # 存在しない手順名の参照は読み込み時に無視する(改名・削除の残骸対策)
+
+    def load_proc_org(self) -> dict:
+        d = self._load_order()
+        names = set(self.procedure_names())
+        hidden_raw = d.get("hidden")
+        hidden = ([n for n in hidden_raw if isinstance(n, str) and n in names]
+                  if isinstance(hidden_raw, list) else [])
+        folders = []
+        folders_raw = d.get("folders")
+        if isinstance(folders_raw, list):
+            for f in folders_raw:
+                if not isinstance(f, dict):
+                    continue
+                fname = f.get("name")
+                if not isinstance(fname, str) or not fname.strip():
+                    continue
+                items_raw = f.get("items")
+                items = ([n for n in items_raw if isinstance(n, str) and n in names]
+                         if isinstance(items_raw, list) else [])
+                folders.append({"name": fname, "open": bool(f.get("open", True)),
+                                "items": items})
+        return {"folders": folders, "hidden": hidden}
+
+    def save_proc_org(self, folders: list, hidden: list) -> None:
+        seen_names = set()
+        norm_folders = []
+        used_items = set()
+        for f in folders:
+            if not isinstance(f, dict):
+                raise ValueError("フォルダの形式が不正です")
+            fname = str(f.get("name", "")).strip()
+            if not fname:
+                raise ValueError("フォルダ名を入力してください")
+            if fname in seen_names:
+                raise ValueError(f"フォルダ「{fname}」が重複しています")
+            seen_names.add(fname)
+            items = []
+            for n in (f.get("items") or []):
+                n = str(n)
+                if n in used_items:
+                    continue    # 1手順は最大1フォルダ(先に出た方を優先)
+                used_items.add(n)
+                items.append(n)
+            norm_folders.append({"name": fname, "open": bool(f.get("open", True)),
+                                 "items": items})
+        d = self._load_order()
+        d["folders"] = norm_folders
+        d["hidden"] = [str(n) for n in hidden]
+        self._order_path().write_text(
+            json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def _update_org_refs(self, old: str, new: str | None) -> None:
+        """order.json の hidden/folders 内の手順名を改名・削除に追従させる。
+
+        rename_procedure/delete_procedure から呼ぶ。フォルダ所属や非表示は
+        名前をキーに持つため、改名で放置すると別物として消えてしまう
+        (単純な並び順と違い、フィルタで落とすだけでは意味が変わる)。
+        new が None なら削除(参照を取り除く)、それ以外は改名(名前を差し替え)。
+        """
+        d = self._load_order()
+        changed = False
+        hidden = d.get("hidden")
+        if isinstance(hidden, list) and old in hidden:
+            i = hidden.index(old)
+            if new is None:
+                hidden.pop(i)
+            else:
+                hidden[i] = new
+            changed = True
+        folders = d.get("folders")
+        if isinstance(folders, list):
+            for f in folders:
+                if not isinstance(f, dict):
+                    continue
+                items = f.get("items")
+                if isinstance(items, list) and old in items:
+                    i = items.index(old)
+                    if new is None:
+                        items.pop(i)
+                    else:
+                        items[i] = new
+                    changed = True
+        if changed:
+            self._order_path().write_text(
+                json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+
     # ---- 手順 ----
 
     def procedure_names(self) -> list[str]:
@@ -469,6 +563,7 @@ class Project:
         self.save_flow_doc(new, doc)
         self.flow_path(old).unlink(missing_ok=True)
         (self.root / "build" / f"{old}.bin").unlink(missing_ok=True)
+        self._update_org_refs(old, new)
         return self._rewrite_refs("call", old, new)
 
     def rename_part(self, old: str, new: str) -> int:
@@ -504,6 +599,7 @@ class Project:
     def delete_procedure(self, name: str) -> None:
         self.flow_path(name).unlink(missing_ok=True)
         (self.root / "build" / f"{name}.bin").unlink(missing_ok=True)
+        self._update_org_refs(name, None)
 
     def delete_part(self, name: str) -> None:
         self.part_path(name).unlink(missing_ok=True)

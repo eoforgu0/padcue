@@ -1408,6 +1408,76 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert "素材周回" in procs, "関係ない手順まで消えた"
     c.check("手順の新規作成と削除", t_new_and_delete_flow)
 
+    def t_proc_hide_toggle():
+        """目のトグルで実行・監視の一覧から消え、戻せること(計画 A)。"""
+        target = "選んで進む"
+        row_icon(page, "#flowlist", target, 3).click()   # 目(隠す)
+        page.wait_for_timeout(500)
+        row = page.locator("#flowlist .proc", has_text=target).first
+        assert "off" in (row.get_attribute("class") or ""), \
+            "非表示にしても一覧の見た目が変わらない"
+        page.click("[data-view=home]")
+        page.wait_for_timeout(900)
+        home = [t.split("▶")[0] for t in
+                page.locator("#procs .proc b").all_inner_texts()]
+        assert target not in home, f"実行・監視の一覧から消えていない: {home}"
+        page.click("[data-view=flow]")
+        page.wait_for_timeout(500)
+        row_icon(page, "#flowlist", target, 3).click()   # 目(戻す)
+        page.wait_for_timeout(500)
+        page.click("[data-view=home]")
+        page.wait_for_timeout(900)
+        home = [t.split("▶")[0] for t in
+                page.locator("#procs .proc b").all_inner_texts()]
+        assert target in home, f"戻しても実行・監視の一覧に出ない: {home}"
+        page.click("[data-view=flow]")
+        page.wait_for_timeout(500)
+    c.check("目のトグルで実行・監視の一覧から消え、戻せる", t_proc_hide_toggle)
+
+    def t_proc_folder_dnd():
+        """フォルダに入れて開閉でき、改名・解体が効くこと(計画 B)。"""
+        prompt_value[0] = "テスト置き場"
+        page.click("#newfolder")
+        page.wait_for_timeout(600)
+        folder = page.locator("#flowlist .folder-row", has_text="テスト置き場")
+        assert folder.count() == 1, page.locator("#flowlist").inner_text()
+        target = "周回で変える"
+        g = page.locator("#flowlist .proc", has_text=target).first.locator(".grab")
+        fb = folder.bounding_box()
+        drag(page, g.bounding_box(), fb["x"] + 40, fb["y"] + fb["height"] / 2)
+        page.wait_for_timeout(600)
+        items = page.locator(
+            "#flowlist .folder-items[data-folder='テスト置き場'] .proc b"
+        ).all_inner_texts()
+        assert target in items, f"フォルダに入っていない: {items}"
+        # 閉じると隠れ、開くと出る
+        folder.locator(".foldertoggle").click()
+        page.wait_for_timeout(300)
+        assert page.locator("#flowlist .folder-items").count() == 0, \
+            "閉じても中身が残っている"
+        folder.locator(".foldertoggle").click()
+        page.wait_for_timeout(300)
+        assert target in page.locator(
+            "#flowlist .folder-items[data-folder='テスト置き場'] .proc b"
+        ).all_inner_texts()
+        # ✎ で改名
+        prompt_value[0] = "テスト置き場改"
+        folder.locator(".rowops button").nth(0).click()
+        page.wait_for_timeout(500)
+        prompt_value[0] = "自動テスト"
+        assert page.locator("#flowlist .folder-row",
+                            has_text="テスト置き場改").count() == 1
+        # 🗑 で解体(中の手順は外に出る。手順自体は消えない)
+        page.locator("#flowlist .folder-row", has_text="テスト置き場改") \
+            .locator(".rowops button").nth(1).click()
+        page.wait_for_timeout(500)
+        assert page.locator("#flowlist .folder-row").count() == 0, \
+            "解体してもフォルダが残っている"
+        names = page.locator("#flowlist .proc b").all_inner_texts()
+        assert target in names, f"解体で手順ごと消えた: {names}"
+        assert proj.load_proc_org()["folders"] == [], proj.load_proc_org()
+    c.check("フォルダに入れて開閉でき、改名・解体が効く", t_proc_folder_dnd)
+
     # ================= 部品を編集 =================
     print("[部品を編集]", flush=True)
 
@@ -2122,28 +2192,6 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         lane(0).locator("button", has_text="1P を今すぐ止める").click()
         wait_lane_state(0, "待機中")
     c.check("今すぐ止めるは押したレーンだけ(相方は継続)", t_stop_2p_keeps_1p)
-
-    def t_identify_idle_and_busy():
-        lane(1).locator("button", has_text="本体を確認").click()
-        page.wait_for_function(
-            "() => {"
-            "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
-            "  return l2 && l2.textContent.includes('確認用の入力を送りました'); }",
-            timeout=8000)
-        wait_lane_state(1, "待機中")     # 確認のあと手動操作状態が残らない
-        lane(1).locator(".lloops").fill("50")
-        lane(1).locator("button", has_text="2P だけ周回実行").click()
-        wait_lane_state(1, "実行中")
-        lane(1).locator("button", has_text="本体を確認").click()
-        page.wait_for_function(
-            "() => {"
-            "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
-            "  return l2 && l2.textContent.includes('待機中の装置にだけ'); }",
-            timeout=8000)
-        lane(1).locator("button", has_text="2P を今すぐ止める").click()
-        wait_lane_state(1, "待機中")
-    c.check("本体の確認は待機中だけ(実行中は理由が出て断られる)",
-            t_identify_idle_and_busy)
 
     def t_wait_branch_in_lane():
         lane(1).locator(".lproc").select_option("選んで進む")
