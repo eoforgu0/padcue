@@ -75,11 +75,10 @@ def build_timeline(blob: bytes) -> dict:
 
 class _Handler(BaseHTTPRequestHandler):
     project: Project = None      # type: ignore[assignment]
-    lock = threading.Lock()      # 記録(recorder)・反復統計など PC 側共有物の直列化
+    lock = threading.Lock()      # 記録(recorder)など PC 側共有物の直列化
     pool = None                  # DevicePool(装置への接続・収集の唯一の窓口)
     coupler = None               # Coupler(連結・セット実行・自動合流の持ち主)
     recorder: Recorder | None = None   # 手動操作の記録中だけ存在する
-    trials: list = []                  # 反復統計の成否記録
 
     def log_message(self, *args):
         pass   # アクセスログは出さない
@@ -531,32 +530,10 @@ class _Handler(BaseHTTPRequestHandler):
                         "data": self.project.load_formation(
                             body.get("name", ""))}
             except (OSError, ValueError) as e:
-                return {"error": f"編成を読めません: {e}"}
+                return {"error": f"プリセットを読めません: {e}"}
         if path == "/api/formation_delete":
             self.project.delete_formation(body.get("name", ""))
             return {"ok": True}
-        if path == "/api/trial":
-            # 反復統計: 同じ手順を繰り返し、成功/失敗を人が記録して分布を見る
-            # (A-1 のばらつきは複数回試す以外に確かめる方法がないため)
-            action = body.get("action")
-            if action == "reset":
-                _Handler.trials = []
-                return {"ok": True, "trials": []}
-            if action == "mark":
-                ok = bool(body.get("success"))
-                # ○×に「何を試したか」を添える(ペア反復では手順の版と
-                # 開始ズレも成功率の文脈になる。計画 §2c)
-                entry = {"ok": ok,
-                         "target": str(body.get("target", "")),
-                         "skew_ms": body.get("skew_ms"),
-                         "hash": str(body.get("hash", ""))}
-                _Handler.trials = list(self.trials) + [entry]
-                n = len(self.trials)
-                s = sum(1 for x in self.trials if x["ok"])
-                return {"ok": True, "count": n, "success": s,
-                        "rate": round(100 * s / n, 1) if n else 0.0,
-                        "trials": self.trials}
-            return {"error": "不正な操作です"}
         if path == "/api/record":
             action = body.get("action")
             if action == "start":
@@ -898,13 +875,6 @@ header { position:relative; }
   cursor:pointer; font-size:12.5px; }
 .tab.on { background:var(--accent-soft); color:var(--accent); font-weight:700;
   border-color:transparent; }
-/* ヘッダの装置チップ(装置2台以上のときだけ)。どのタブにいても実行状態が
-   見える。1台のときは従来どおり接続カードの表示だけ(見た目を変えない) */
-.devchips { display:flex; gap:6px; flex-wrap:wrap; }
-.hchip { display:inline-flex; align-items:center; gap:6px;
-  border:1px solid var(--line); border-radius:99px; padding:2px 10px;
-  font-size:11.5px; color:var(--muted); }
-.hchip b { color:var(--ink); font-weight:700; font-size:11.5px; }
 /* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常・未接続専用。
    ふだんの実行中・待機中を黄や赤にしない(色が警告の意味を失う) */
 .dot { width:9px; height:9px; border-radius:50%; background:var(--muted);
@@ -1057,8 +1027,13 @@ input, select { font:inherit; padding:3px 7px; border:1px solid var(--line);
 input[type=number] { width:88px; }
 label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
   color:var(--muted); margin-bottom:8px; }
-.kv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:12.5px; }
-.kv dt { color:var(--muted); }
+/* 項目名+値のペアを2組ずつ1行に並べる(行数が奇数でも最後の1組が
+   崩れない。auto-flow の row 方向で4列を順に埋めるだけで、
+   dt1,dd1,dt2,dd2 → dt3,dd3,dt4,dd4 … と自然にペアが揃う) */
+.kv { display:grid;
+  grid-template-columns:max-content 1fr max-content 1fr;
+  column-gap:24px; row-gap:2px; font-size:12.5px; }
+.kv dt { color:var(--muted); margin-right:8px; }
 .kv dd { margin:0; font-variant-numeric:tabular-nums; }
 /* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
 .prenote { font-size:12.5px; color:var(--ink); background:var(--accent-soft);
@@ -1300,9 +1275,6 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <button class="tab" data-view="flow">手順を編集</button>
     <button class="tab" data-view="part">部品を編集</button>
   </div>
-  <!-- 装置が2台以上のときだけ、どのタブでも実行状態が見えるチップを出す
-       (1台のときは従来どおり=接続カードの表示だけ) -->
-  <span id="devchips" class="devchips"></span>
   <div class="thememenu">
     <button id="themebtn" class="iconbtn" title="画面の配色を選ぶ"
             aria-haspopup="true" aria-expanded="false">◐</button>
@@ -1347,23 +1319,18 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <h2>Switch 本体</h2>
       <div id="consolelist"></div>
       <div id="consolemsg"></div>
-      <div class="hint">マイコンを挿した Switch 本体を、名乗られた識別子で
-        見分けて記録します。✎ で名前を付けると、装置の欄にも
-        「どの本体に繋がっているか」が名前で出ます</div>
     </div>
-    <!-- 編成 = 盤面(連結・装置×手順×周回×開始位置・合流の腕)のスナップ
+    <!-- プリセット = 盤面(連結・装置×手順×周回×開始位置・合流の腕)のスナップ
          ショット。2台以上のときだけ出る -->
     <div class="card" id="formcard" style="display:none">
-      <h2>編成(残した組み合わせ)</h2>
+      <h2>プリセット</h2>
       <div id="formlist"></div>
       <div class="row" style="margin-top:8px">
         <button class="small" id="formsave"
-                title="いまの盤面(連結・手順・周回・開始位置・合流の腕)に名前を付けて残します">
-          今の盤面を保存</button>
+                title="いまの割り当て(連結・手順・周回・開始ラベル・合流の腕)に名前を付けて残します">
+          今の割り当てを保存</button>
       </div>
       <div id="formmsg"></div>
-      <div class="hint">呼び出す → 右の盤面で全容を確かめる → 連結バーの
-        ▶ で開始。呼び出したあとに盤面を触ると、連結バーの編成名に * が付きます</div>
     </div>
   </div>
   <div class="stack v-home">
@@ -1374,14 +1341,19 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <span class="lbl">⧉ 連結</span>
         <span class="chip link">連結中</span>
         <span class="chip" id="cformation" style="display:none"
-              title="呼び出した編成。盤面(手順・周回・合流)を編成から変えると * が付きます"></span>
+              title="呼び出したプリセットの名前"></span>
+        <span class="chip warn" id="cformdirty" style="display:none"
+              title="割り当て(手順・周回・合流)がこのプリセットの保存内容と違います">未保存の変更</span>
+        <button class="small" id="cformoverwrite" style="display:none"
+                title="いまの割り当てを、このプリセットに同じ名前で保存し直します">
+          上書き保存</button>
         <span class="sep-v"></span>
         <button class="primary" id="crun1"
                 title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
         <button class="primary" id="crun"
                 title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
         <button id="cagain"
-                title="直前と同じ条件(手順・周回・開始位置)でもう一度まとめて開始します。検証の反復用">⟲ もう一回(同じ条件)</button>
+                title="直前と同じ条件(手順・周回・開始ラベル)でもう一度まとめて開始します">⟲ もう一回(同じ条件)</button>
         <span class="sep-v"></span>
         <button id="cstopg"
                 title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
@@ -1395,7 +1367,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0"
                title="両方が待機分岐に着いたら、右の腕を自動で選んで同時に進めます。片方の異常(装置の異常報告・約5秒見えない)では相方も止めます">
           <input type="checkbox" id="cauto">自動合流</label>
-        <label title="自動合流が選ぶ側。編成にも保存されます">進む腕
+        <label title="自動合流が選ぶ側。プリセットにも保存されます">進む腕
           <select id="carm"></select></label>
         <button id="coneshot"
                 title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">✋ 次の合流は自分で選ぶ(1回だけ)</button>
@@ -1414,7 +1386,6 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div class="row">
         <button id="clink"
                 title="まとめて開始・自動合流・連動停止・両方へ同時に選ぶ、は連結したときにだけ現れます">⧉ 連結する</button>
-        <span class="hint" style="margin:0">いま 2 台は連結していません。それぞれのレーンから別々に動かせます</span>
       </div>
     </div>
     <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
@@ -1453,15 +1424,15 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
                 title="周回の指定に関係なく、この手順を1回だけ実行します">▶ 1回実行</button>
         <button class="primary" id="run"
                 title="右の周回数だけくり返して実行します">⟳ 周回実行</button>
-        <label>周回 <input type="number" id="loops" value="0" min="0" max="100000">
+        <label>周回 <input type="number" id="loops" value="0" min="0" max="100000"
+          title="実行中に変えた値は次の開始から効きます">
           <span style="color:var(--muted); font-size:11px">0=止めるまで</span></label>
-        <label title="選択肢は、手順に置いた「ラベル」ブロックです">開始位置 <select id="resume"></select></label>
+        <label>開始ラベル <select id="resume"></select></label>
         <button id="stopg" title="今の周を最後までやってから止まります(ゲームの状態が整う)">
           ◼ 今の周で止める</button>
         <button id="stopi" class="danger"
                 title="その場で全ボタンを離して止めます(ゲームは操作の途中で放置される)">
           ⏹ 今すぐ止める</button>
-        <button id="push" title="装置へ転送するだけ(実行はしない)">転送のみ</button>
       </div>
       <!-- 実行中の手順を編集したときだけ出る注意。ボタンより下に置いて、
            出たり消えたりしてもボタンの位置が動かないようにする -->
@@ -1475,30 +1446,12 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <dl class="kv" id="status" style="margin-top:9px"></dl>
     </div>
     <div class="card" id="tlcard">
-      <h2>タイムライン(選択中の手順)<span id="tlprog" class="tlprog"></span></h2>
+      <h2>タイムライン<span id="tlprog" class="tlprog"></span></h2>
       <div class="tl-wrap"><div class="tl" id="tl"></div></div>
       <div id="tlmsg"></div>
     </div>
-    <div class="card">
-      <h2>反復テスト</h2>
-      <div class="row">
-        <!-- 対象は装置2台以上のときだけ出る(1台なら選ぶ意味がない) -->
-        <label id="trialdevwrap" style="display:none"
-               title="どの装置で1回実行して判定するかを選びます">対象
-          <select id="trialdev"></select></label>
-        <button id="trialrun" title="1回だけ実行します。結果を見て ○成功 / ×失敗 を押してください">▶ 1回実行して判定</button>
-        <button id="trialok">○ 成功</button>
-        <button id="trialng">× 失敗</button>
-        <button id="trialreset">成績を消す</button>
-        <span id="trialchip" class="chip">未実施</span>
-      </div>
-      <div id="trialmsg"></div>
-      <div class="hint">
-        1フレーム差が効く操作はどうしてもばらつきます。何度も試して成功率を確かめてください
-      </div>
-    </div>
     <div class="card" id="manualcard">
-      <h2>手動操作(Joy-Con を繋がずに自分で動かす)</h2>
+      <h2>手動操作(PC 経由)</h2>
       <div class="row">
         <!-- 対象は装置2台以上のときだけ出る。手動操作は一度に1台 -->
         <label id="manualdevwrap" style="display:none"
@@ -1520,12 +1473,13 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
            状態表示なので × は付けない(直れば自動で消える) -->
       <div id="ptmsg" class="msg err" style="display:none"></div>
       <div class="hint" id="keymap">
-        ゲームパッドを PC に繋ぐとそれを使います。無ければキーボード:<br>
-        左スティック=<b>WASD</b> / 右スティック=<b>矢印</b> / 十字キー=<b>TFGH</b> /
+        PC に繋いだゲームパッド、またはキーボードで操作します。キーボードの
+        ときは、この画面をクリックしてから操作してください。<br>
+        キー割り当て: 左スティック=<b>WASD</b> / 右スティック=<b>矢印</b> /
+        十字キー=<b>TFGH</b> /
         A=<b>L</b> B=<b>K</b> X=<b>O</b> Y=<b>I</b> /
         L=<b>Q</b> R=<b>E</b> ZL=<b>1</b> ZR=<b>2</b> /
-        ＋=<b>Enter</b> −=<b>Backspace</b><br>
-        キーボードを使う場合は、この画面をクリックしてから操作してください。
+        ＋=<b>Enter</b> −=<b>Backspace</b>
       </div>
       <div id="padfig" style="display:none">
         <svg viewBox="0 0 560 300" width="560" height="300"
@@ -1683,7 +1637,7 @@ function orderedProcs() {
   for (const p of state.procedures) if (!used.has(p.name)) out.push(p);
   return out;
 }
-// 実行・監視の一覧・レーンの手順プルダウン・反復テストが使う「見える手順」
+// 実行・監視の一覧・レーンの手順プルダウンが使う「見える手順」
 // (計画 A「目のトグルで実行・監視の一覧から除外」)
 function visibleProcs() { return orderedProcs().filter(p => !p.hidden); }
 
@@ -2069,7 +2023,7 @@ const LOG_JA = {
   PC_LINK_STOP:  (a, b, c, e) => '連動停止: '
     + ((e && e.why) || '相方の異常') + `(${a ? 'その場で' : '今の周で'})`,
   PC_WAIT_LATE:  (a) => `⚠ 相方待ちが ${a} 秒続いています`
-    + '(この編成のいつもの待ちを超えました)',
+    + '(このプリセットのいつもの待ちを超えました)',
 };
 // app_state_t の並び(firmware/main/app_state.h)
 const STATE_NAMES = ['起動中', 'WiFi 接続中', '待機中', '実行中', '選択待ち',
@@ -2154,25 +2108,17 @@ function renderDevices() {
   document.getElementById('logdevwrap').style.display =
     multi ? 'inline-flex' : 'none';
   document.getElementById('devhint').style.display = multi ? 'none' : '';
+  // 登録は2台まで(未検証のため)。上限に達したら追加ボタンを封じる
+  const devaddBtn = document.getElementById('devadd');
+  devaddBtn.disabled = multi;
+  devaddBtn.title = multi ? 'いまは2台までです(3台以上は未検証)'
+    : 'LAN からマイコンを探して、まだ登録していない実機を登録します';
   const key = JSON.stringify([devs.map(d => [d.name, d.id, d.host, d.state,
                                              d.error || '', d.proc || '',
                                              d.host_info || '']),
                               state.consoles || {}]);
   if (key === devsKey) return;
   devsKey = key;
-  // ヘッダのチップ(2台以上のときだけ。1台なら従来どおり接続カードで足りる)
-  const chips = document.getElementById('devchips');
-  chips.textContent = '';
-  if (multi) {
-    for (const d of devs) {
-      const c = el('span', 'hchip');
-      c.title = d.error || (`${d.host} ・ ${devIdJa(d.id)}`
-        + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : ''));
-      c.append(el('span', 'dot ' + devDot(d)), el('b', null, d.name),
-               document.createTextNode(devStateJa(d)));
-      chips.append(c);
-    }
-  }
   // ログの絞り込みの選択肢を台帳に追従させる(選んでいたものは保つ)
   const sel = document.getElementById('logdev');
   const cur = sel.value;
@@ -2198,8 +2144,9 @@ function renderDevices() {
     }));
     row.append(dot, el('b', null, d.name), rops);
     const meta = el('div', 'meta');
-    meta.append(el('span', null, devStateJa(d)
-      + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`
+    // 生きた状態(実行中の手順など)はレーン側だけに出す。ここは装置の
+    // 登録と名づけの情報(個体IDと、繋がる本体の名前)だけにする
+    meta.append(el('span', null, devIdJa(d.id)
       + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
     // ボタン群は1つの折返し単位にまとめる(状態文の長さ次第でボタン対が
     // 泣き別れ、毎秒の状態変化でカードの高さがガタつくのを防ぐ)
@@ -2209,7 +2156,7 @@ function renderDevices() {
       // 1台だけのときは出さない(従来の1台運用で誤って台帳を空にしない。
       // どうしても外すときは CLI の device remove)
       const rm = el('button', 'small', '登録を解除');
-      rm.title = '台帳から外します(装置は消えません。あとで再登録できます)';
+      rm.title = '装置は消えません。あとで再登録できます';
       rm.onclick = async () => {
         if (!confirm(`「${d.name}」の登録を解除します`
                      + '(装置は消えません。あとで再登録できます)。'
@@ -2261,8 +2208,10 @@ function renderConsoles(devs) {
     }));
     row.append(dot, el('b', null, consoleJa(hi)), rops);
     const meta = el('div', 'meta');
-    meta.append(el('span', null, `識別子 ${hi}`
-      + (conn.length ? ` ・ ${conn.join(' と ')} が接続中` : '')));
+    const idSpan = el('span', null, devIdJa(hi)
+      + (conn.length ? ` ・ ${conn.join(' と ')} が接続中` : ''));
+    idSpan.title = hi;   // フル識別子は title に(表示は下4桁)
+    meta.append(idSpan);
     row.append(meta);
     box.append(row);
   }
@@ -2427,7 +2376,7 @@ function renderStatus() {
     show('msg', 'err', (state.device_error || '接続できません')
          + ' — すぐ上の「探す」でマイコンを見つけられます');
     dl.classList.add('stale');
-    for (const id of ['run','run1','push','stopg','stopi','manual','trialrun',
+    for (const id of ['run','run1','stopg','stopi','manual',
                       'rec']) {
       document.getElementById(id).disabled = true;
     }
@@ -2487,7 +2436,7 @@ function renderStatus() {
   const cur = state.procedures.find(p => p.name === selected);
   const broken = !!(cur && cur.error);
   const btnTitle = broken ? 'この手順は変換できません(一覧のエラーを参照)' : '';
-  for (const id of ['run', 'run1', 'push', 'trialrun']) {
+  for (const id of ['run', 'run1']) {
     const b = document.getElementById(id);
     b.disabled = busy || !!blocked || broken || !selected;
     b.title = btnTitle || blocked;
@@ -2801,25 +2750,20 @@ async function loadTimeline() {
   }
   timeline = await api('/api/timeline?name=' + encodeURIComponent(selected));
   renderTimeline();
-  // 開始位置(ラベルが再開点になる。長い手順の後半だけ試せる)
+  // 開始ラベル(ラベルが再開点になる。長い手順の後半だけ試せる)
   const sel = document.getElementById('resume');
   const keep = sel.value;
   sel.textContent = '';
   for (const p of (timeline.resume_points || [])) {
-    const o = el('option', null, p.name === '先頭' ? '先頭から' : p.name);
+    const o = el('option', null, p.name === '先頭' ? '―(先頭から)' : p.name);
     o.value = p.name;
     sel.append(o);
   }
   if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
-  // 選べるものが「先頭」しかないなら選択肢として意味がない。押しても何も
-  // 起きない欄を置いたままにせず、どうすれば使えるようになるかを示す
-  // (長い手順の後半だけ試すための機能。区切りに「ラベル」を置くと選べる)
-  const only = sel.options.length <= 1;
-  sel.disabled = only;
-  sel.title = only
-    ? '手順の区切りに「ラベル」ブロックを置くと、そこから実行できます'
-      + '(長い手順の後半だけ試したいときに使います)'
-    : '選んだラベルの位置から実行します(前半は飛ばします)';
+  // ラベルの無い手順では選択肢が「先頭」だけになり意味がないので押せなくする。
+  // 説明の title は付けない: 欄名が「開始ラベル」なので、無効=この手順に
+  // ラベルが無い、は名前から察せる(名前で分からせたことを説明し直さない)
+  sel.disabled = sel.options.length <= 1;
 }
 
 // ============ レーン(装置2台以上の実行・監視画面。案C) ============
@@ -2884,24 +2828,22 @@ function buildLane(d) {
   lane.loops.value = '0';
   lane.loops.min = '0';
   lane.loops.max = '100000';
-  const loopsHint = el('span', null, '0=止めるまで・次の開始から効く');
+  lane.loops.title = '実行中に変えた値は次の開始から効きます';
+  const loopsHint = el('span', null, '0=止めるまで');
   loopsHint.style.cssText = 'color:var(--muted);font-size:11px';
   loopsLab.append(lane.loops, document.createTextNode(' '), loopsHint);
-  const resLab = el('label', null, '開始位置 ');
-  resLab.title = '次に開始するときに使います。選択肢は手順の「ラベル」ブロック';
+  const resLab = el('label', null, '開始ラベル ');
   lane.resume = document.createElement('select');
   lane.resume.className = 'lresume';
   resLab.append(lane.resume);
   row1.append(procLab, lane.pushWarn, loopsLab, resLab);
   card.append(row1);
   const row2 = el('div', 'row');
-  lane.run1 = el('button', 'primary', `▶ ${d.name} だけ1回実行`);
-  lane.run = el('button', 'primary', `⟳ ${d.name} だけ周回実行`);
-  lane.stopg = el('button', null, `◼ ${d.name} を今の周で止める`);
-  lane.stopi = el('button', 'danger', `⏹ ${d.name} を今すぐ止める`);
-  lane.push = el('button', null, '転送のみ');
-  lane.push.title = '実機へ転送するだけ(実行はしない)';
-  row2.append(lane.run1, lane.run, lane.stopg, lane.stopi, lane.push);
+  lane.run1 = el('button', 'primary', '▶ 1回実行');
+  lane.run = el('button', 'primary', '⟳ 周回実行');
+  lane.stopg = el('button', null, '◼ 今の周で止める');
+  lane.stopi = el('button', 'danger', '⏹ 今すぐ止める');
+  row2.append(lane.run1, lane.run, lane.stopg, lane.stopi);
   card.append(row2);
   lane.nowplaying = el('div');
   lane.actmsg = el('div');
@@ -2931,13 +2873,6 @@ function wireLane(lane) {
     // 空欄や変な値は 0(止めるまで)。|| だと 0 が 1 に化けるので不可
     const v = parseInt(lane.loops.value, 10);
     laneRun(lane, Number.isFinite(v) && v >= 0 ? v : 0);
-  };
-  lane.push.onclick = async () => {
-    const r = await api('/api/push', 'POST',
-                        {name: lane.proc.value, dev: lane.name});
-    showIn(lane.actmsg, r.error ? 'err' : 'ok',
-           r.error || `転送しました(${r.hash})`);
-    refresh();
   };
   lane.stopg.onclick = async () => {
     const cancel = lane.stopg.classList.contains('armed');
@@ -2991,8 +2926,7 @@ async function laneRun(lane, loops) {
 // 区切り停止の予約表示(1台時の setStopgArmed と同じ規則をレーンで)
 function setLaneStopgArmed(lane, armed) {
   lane.stopg.classList.toggle('armed', armed);
-  const label = armed ? `↩ ${lane.name} の止める予約を取り消す`
-                      : `◼ ${lane.name} を今の周で止める`;
+  const label = armed ? '↩ 止める予約を取り消す' : '◼ 今の周で止める';
   if (lane.stopg.textContent !== label) lane.stopg.textContent = label;
   lane.stopg.title = armed
     ? '今の周が終わったら止まります。もう一度押すと予約を取り消します'
@@ -3027,8 +2961,6 @@ function syncLaneProc(lane, d, runName) {
 // 手順の編集(ハッシュ変化)でも読み直す
 async function syncLaneTimeline(lane, runName) {
   const want = runName || lane.proc.value;
-  lane.tlhead.textContent =
-    want ? `タイムライン(この装置の手順: ${want})` : 'タイムライン';
   const sp = state.procedures.find(p => p.name === want);
   const hash = (sp && sp.hash) || '';
   if (!want || (lane.tlName === want && lane.tlHash === hash)
@@ -3057,7 +2989,7 @@ async function syncLaneTimeline(lane, runName) {
     const keep = lane.resume.value;
     lane.resume.textContent = '';
     for (const p of (tl.resume_points || [])) {
-      const o = el('option', null, p.name === '先頭' ? '先頭から' : p.name);
+      const o = el('option', null, p.name === '先頭' ? '―(先頭から)' : p.name);
       o.value = p.name;
       lane.resume.append(o);
     }
@@ -3073,11 +3005,8 @@ async function syncLaneTimeline(lane, runName) {
       }
       lane.pendingResume = undefined;
     }
-    const only = lane.resume.options.length <= 1;
-    lane.resume.disabled = only;
-    lane.resume.title = only
-      ? '手順の区切りに「ラベル」ブロックを置くと、そこから実行できます'
-      : '選んだラベルの位置から実行します(前半は飛ばします)';
+    // 説明の title は付けない(1台側の resume と同じ理由)
+    lane.resume.disabled = lane.resume.options.length <= 1;
     const notes = [];
     for (const w of tl.warnings || []) notes.push(`${w.line}番目: ${w.msg}`);
     if (notes.length) showIn(lane.tlmsg, 'warn', notes.join('  /  '));
@@ -3102,7 +3031,7 @@ function updateLane(lane, d) {
     showIn(lane.msg, 'err',
            d.error + ' — すぐ上の「探す」でこの装置を見つけられます');
     lane.tlprog.textContent = '';
-    for (const b of [lane.run1, lane.run, lane.stopg, lane.stopi, lane.push]) {
+    for (const b of [lane.run1, lane.run, lane.stopg, lane.stopi]) {
       b.disabled = true;
       b.title = 'つながっていないので送れません';
     }
@@ -3134,8 +3063,7 @@ function updateLane(lane, d) {
   const cur = state.procedures.find(p => p.name === lane.proc.value);
   const broken = !!(cur && cur.error);
   for (const [b, base] of [[lane.run1, 'この装置だけを1回実行します'],
-                           [lane.run, 'この装置だけを周回実行します'],
-                           [lane.push, '実機へ転送するだけ(実行はしない)']]) {
+                           [lane.run, 'この装置だけを周回実行します']]) {
     b.disabled = busy || !!blocked || broken || !lane.proc.value;
     b.title = broken ? 'この手順は変換できません(一覧のエラーを参照)'
                      : (blocked || base);
@@ -3227,7 +3155,7 @@ function updateLane(lane, d) {
         if (late) {
           lane.awaitbox.append(el('div', 'msg warn',
             `相方(${c.run.late.partner})が来ません`
-            + '(この編成のいつもの待ちを超えました)。相方のレーンの状態を'
+            + '(このプリセットのいつもの待ちを超えました)。相方のレーンの状態を'
             + '確かめてください'));
         } else {
           lane.waitMsg = el('div', 'msg wait', '');
@@ -3349,20 +3277,7 @@ function renderLanes() {
     const card = laneMap.get(d.name).card;
     if (box.children[i] !== card) box.insertBefore(card, box.children[i] || null);
   });
-  // 共有カード(反復テスト・手動操作)のボタン抑止は「対象」装置の状態で決める
-  const tsel = document.getElementById('trialdev');
-  if (tsel.value === '__pair__') {
-    // ペア反復(連結して1回=1試行)は、どちらかが動いていると試せない
-    document.getElementById('trialrun').disabled = devs.slice(0, 2)
-      .some(d => !d.error && (d.running || d.awaiting));
-  } else {
-    const t = devs.find(x => x.name === tsel.value) || devs[0];
-    const tBusy = !!t && !t.error && (t.running || t.awaiting
-      || t.state === 'RUNNING' || t.state === 'AWAITING');
-    const tLane = t && laneMap.get(t.name);
-    document.getElementById('trialrun').disabled =
-      !t || !!t.error || tBusy || !(tLane && tLane.proc.value);
-  }
+  // 共有カード(手動操作)のボタン抑止は「対象」装置の状態で決める
   const msel = document.getElementById('manualdev');
   const m = devs.find(x => x.name === msel.value) || devs[0];
   const mBusy = !!m && !m.error && (m.running || m.awaiting);
@@ -3376,28 +3291,19 @@ function renderLanes() {
   }
 }
 
-// 反復テスト・手動操作の「対象」選択肢(2台以上のときだけ出す)
+// 手動操作の「対象」選択肢(2台以上のときだけ出す)
 function syncTargetSelects(devs, multi) {
-  document.getElementById('trialdevwrap').style.display = multi ? '' : 'none';
   document.getElementById('manualdevwrap').style.display = multi ? '' : 'none';
   if (!multi) return;
-  const paired = !!(cpl() && cpl().on);
-  const key = devs.map(x => x.name).join('\n') + (paired ? '|p' : '');
-  for (const selId of ['trialdev', 'manualdev']) {
+  const key = devs.map(x => x.name).join('\n');
+  for (const selId of ['manualdev']) {
     const sel = document.getElementById(selId);
     if (sel.dataset.key === key) continue;
     sel.dataset.key = key;
     const keep = sel.value;
     sel.textContent = '';
-    if (selId === 'trialdev' && paired) {
-      // ペア反復: 連結の1回実行(2台の組)を1試行として数える
-      sel.append(new Option(
-        `連結(${devs.slice(0, 2).map(d => d.name).join('+')} で1試行)`,
-        '__pair__'));
-    }
     for (const x of devs) sel.append(new Option(x.name, x.name));
     if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
-    else if (selId === 'trialdev' && paired) sel.value = '__pair__';
     else {
       // 既定は「動いていない装置」(実機の誤操作防止)
       const idle = devs.find(x => !x.error && !x.running && !x.awaiting);
@@ -3513,7 +3419,17 @@ document.addEventListener('keydown', async e => {
   }
 });
 
-// 盤面が呼び出した編成と食い違っているか(* 表示に使う)
+// 割り当てが呼び出したプリセットと食い違っているか(「未保存の変更」チップに使う)
+// プリセットの装置解決。正は個体ID(改名に耐える)だが、練習の mock は
+// 設計上 ID を学習しない(台帳の id が空)ため、空 ID 同士で引くと全エントリが
+// 1台目に一致して「ずれ判定が直らない・別の装置に適用される」が起きる
+// (2026-08-06 uicheck で実証)。ID が空のときだけ名前で引く
+function formationDevice(fd) {
+  const devs = state.devices || [];
+  return fd.id ? devs.find(x => x.id === fd.id)
+               : devs.find(x => x.name === fd.name);
+}
+
 function formationDirty() {
   if (!loadedFormation) return false;
   const f = (state.formations || []).find(x => x.name === loadedFormation);
@@ -3522,7 +3438,7 @@ function formationDirty() {
   if (!!f.linked !== !!c.on || !!f.auto_join !== !!c.auto_join
       || (f.arm | 0) !== (c.arm | 0)) return true;
   for (const fd of f.devices || []) {
-    const d = (state.devices || []).find(x => x.id === fd.id);
+    const d = formationDevice(fd);
     const lane = d && laneMap.get(d.name);
     if (!lane) return true;
     const v = parseInt(lane.loops.value, 10) || 0;
@@ -3534,18 +3450,19 @@ function formationDirty() {
 }
 
 async function applyFormation(f) {
-  // 実行中の呼び出しはガード(盤面が実行と食い違うと誤読のもと)
+  // 実行中の呼び出しはガード(割り当てが実行と食い違うと誤読のもと)
   const busy = (state.devices || []).some(d => !d.error
     && (d.running || d.awaiting));
   if (busy) {
-    show('formmsg', 'err', '実行中は編成を呼び出せません。止めてから呼び出してください');
+    show('formmsg', 'err', '実行中はプリセットを呼び出せません。止めてから呼び出してください');
     return;
   }
   for (const fd of f.devices || []) {
-    const d = (state.devices || []).find(x => x.id === fd.id);
+    const d = formationDevice(fd);
     if (!d) {
-      show('formmsg', 'err', `この編成の装置(ID 下4桁 ${String(fd.id)
-        .slice(-4).toUpperCase()})が台帳にいません`);
+      show('formmsg', 'err', `このプリセットの装置(${fd.id
+        ? 'ID 下4桁 ' + String(fd.id).slice(-4).toUpperCase()
+        : '名前 ' + (fd.name || '不明')})が台帳にいません`);
       return;
     }
     const lane = laneMap.get(d.name);
@@ -3563,7 +3480,7 @@ async function applyFormation(f) {
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
   loadedFormation = f.name;
-  show('formmsg', 'ok', `「${f.name}」を盤面に反映しました。開始はしていません`
+  show('formmsg', 'ok', `「${f.name}」を割り当てに反映しました。開始はしていません`
        + '(連結バーの ▶ で開始)');
   refresh();
 }
@@ -3581,8 +3498,7 @@ function renderFormations() {
   const forms = state.formations || [];
   if (!forms.length) {
     box.append(el('div', 'hint',
-      'まだありません。盤面(連結・手順・周回)を作って'
-      + '「今の盤面を保存」を押すと、ここに並びます'));
+      '装置ごとの手順・周回・連結の割り当てを保存できます'));
     return;
   }
   for (const f of forms) {
@@ -3591,8 +3507,9 @@ function renderFormations() {
                el('span', 'rowops'));
     const meta = el('div', 'meta');
     const parts = (f.devices || []).map(fd => {
-      const d = devs.find(x => x.id === fd.id);
-      const nm = d ? d.name : `ID ${String(fd.id).slice(-4).toUpperCase()}`;
+      const d = formationDevice(fd);
+      const nm = d ? d.name
+                   : (fd.name || `ID ${String(fd.id).slice(-4).toUpperCase()}`);
       return `${nm} ${fd.proc}×${fd.loops || '∞'}`;
     });
     const arms = armLabels();
@@ -3601,13 +3518,13 @@ function renderFormations() {
       + (f.auto_join ? ` ・ 合流: ${arms[f.arm] || `腕${(f.arm | 0) + 1}`}`
                      : ' ・ 合流: 手動')));
     const use = el('button', 'small', '呼び出す');
-    use.title = '盤面(連結・手順・周回・合流)をこの内容にします。開始はしません';
+    use.title = '割り当て(連結・手順・周回・合流)をこの内容にします。開始はしません';
     use.onclick = () => applyFormation(f);
     meta.append(use);
     const del = el('button', 'small', '削除');
-    del.title = 'この編成を消します(手順や記録は消えません)';
+    del.title = 'このプリセットを消します(手順や記録は消えません)';
     del.onclick = async () => {
-      if (!confirm(`編成「${f.name}」を消します。よろしいですか?`)) return;
+      if (!confirm(`プリセット「${f.name}」を消します。よろしいですか?`)) return;
       await api('/api/formation_delete', 'POST', {name: f.name});
       if (loadedFormation === f.name) loadedFormation = '';
       refresh();
@@ -3618,24 +3535,43 @@ function renderFormations() {
   }
 }
 
-document.getElementById('formsave').onclick = async () => {
-  const name = prompt('編成の名前', loadedFormation || '');
-  if (!name) return;
+// いまの割り当て(連結・手順・周回・開始位置・合流の腕)をプリセットの保存形に
+// まとめる(新規保存・上書き保存の両方から使う)
+function buildFormationData() {
   const c = cpl() || {};
   const data = {linked: !!c.on, auto_join: !!c.auto_join, arm: c.arm | 0,
                 devices: []};
   for (const d of state.devices || []) {
     const lane = laneMap.get(d.name);
-    if (!lane) return;
+    if (!lane) return null;
     const at = lane.resume.value;
-    data.devices.push({id: d.id, proc: lane.proc.value,
+    data.devices.push({id: d.id, name: d.name, proc: lane.proc.value,
                        loops: parseInt(lane.loops.value, 10) || 0,
                        resume: at === '先頭' ? '' : at});
   }
+  return data;
+}
+
+document.getElementById('formsave').onclick = async () => {
+  const name = prompt('プリセットの名前', loadedFormation || '');
+  if (!name) return;
+  const data = buildFormationData();
+  if (!data) return;
   const r = await api('/api/formation_save', 'POST', {name, data});
   if (r.error) { show('formmsg', 'err', r.error); return; }
   loadedFormation = name;
   show('formmsg', 'ok', `「${name}」として残しました`);
+  refresh();
+};
+
+document.getElementById('cformoverwrite').onclick = async () => {
+  const name = loadedFormation;
+  if (!name) return;
+  const data = buildFormationData();
+  if (!data) return;
+  const r = await api('/api/formation_save', 'POST', {name, data});
+  if (r.error) { show('cactmsg', 'err', r.error); return; }
+  show('cactmsg', 'ok', `「${name}」に上書き保存しました`);
   refresh();
 };
 
@@ -3662,14 +3598,22 @@ function renderCoupling() {
   if (!c.on) return;
   const run = c.run || {};
   const active = !!run.active;
-  // 盤面の全容1行(編成名+*)。編成を使っていないときは出さない
+  // プリセット名チップ(手順エディタの現在名表示と同じ作法)+
+  // 割り当てがずれたときだけ「未保存の変更」チップと「上書き保存」を出す。
+  // プリセットを使っていないときはどちらも出さない
   const fchip = document.getElementById('cformation');
+  const fdirty = document.getElementById('cformdirty');
+  const foverwrite = document.getElementById('cformoverwrite');
   if (loadedFormation) {
     fchip.style.display = '';
-    fchip.textContent = '編成: ' + loadedFormation
-      + (formationDirty() ? ' *' : '');
+    fchip.textContent = loadedFormation;
+    const dirty = formationDirty();
+    fdirty.style.display = dirty ? '' : 'none';
+    foverwrite.style.display = dirty ? '' : 'none';
   } else {
     fchip.style.display = 'none';
+    fdirty.style.display = 'none';
+    foverwrite.style.display = 'none';
   }
   // 実行系ボタン
   const someBusy = devs.slice(0, 2).some(d => !d.error
@@ -3785,7 +3729,7 @@ function renderCoupling() {
     t.append(row);
     m.append(t);
     const x = el('button', 'msgclose', '×');
-    x.title = '閉じる(再開の操作は編成・レーンからもできます)';
+    x.title = '閉じる(再開の操作はプリセット・レーンからもできます)';
     x.onclick = () => {
       cplStopSeen = ls.at;
       box.dataset.key = '';
@@ -5486,11 +5430,6 @@ document.getElementById('run').onclick = () => {
   const v = parseInt(document.getElementById('loops').value, 10);
   doRun(Number.isFinite(v) && v >= 0 ? v : 0);
 };
-document.getElementById('push').onclick = async () => {
-  const r = await api('/api/push', 'POST', {name: selected});
-  show('actmsg', r.error ? 'err' : 'ok', r.error || `転送しました(${r.hash})`);
-  refresh();
-};
 // 区切り停止は「予約」なので、押しても見た目が変わらないと効いたか分からない。
 // 予約中はボタン自身が目立ち、**同じボタンがそのまま取り消しになる**
 // (間違えて押しても、止まる前ならもう一度押せば済む)
@@ -5697,7 +5636,6 @@ setInterval(async () => {
   } finally { ptBusy = false; }
 }, 33);   // 最速で約30Hz(応答が遅い環境では自然に間隔が伸びる)
 
-// 反復テスト(成功率の分布を見る)
 // デバイスの状態を日本語にする(画面の表記を英語のままにしない)
 const STATE_JA = {
   BOOT: '起動中', WIFI_CONNECTING: 'WiFi 接続中', IDLE: '待機中',
@@ -5705,63 +5643,6 @@ const STATE_JA = {
   PASSTHRU: '手動操作中',
 };
 function stateJa(s) { return STATE_JA[s] || s; }
-
-function showTrial(r) {
-  const chip = document.getElementById('trialchip');
-  if (!r || !r.count) { chip.textContent = '未実施'; chip.className = 'chip'; return; }
-  chip.textContent = `${r.success} / ${r.count} 回成功(${r.rate}%)`;
-  chip.className = 'chip ' + (r.rate >= 90 ? 'ok' : r.rate >= 50 ? 'warn' : 'err');
-}
-document.getElementById('trialrun').onclick = async () => {
-  if (manualOn) await setManual(false);   // 実行の前に手動操作を終える(doRun と同じ)
-  // 2台以上のときは「対象」装置のレーンの手順・開始位置で1回実行する。
-  // 対象「連結」なら2台の組を1試行としてまとめて開始する
-  const devs = state.devices || [];
-  if (devs.length >= 2) {
-    const target = document.getElementById('trialdev').value;
-    if (target === '__pair__') {
-      await coupleRun(true);
-      return;
-    }
-    const d = devs.find(x => x.name === target) || devs[0];
-    const lane = d && laneMap.get(d.name);
-    if (!lane) return;
-    await laneRun(lane, 1);
-    return;
-  }
-  const at = document.getElementById('resume').value;
-  const body = {name: selected, loops: 1};
-  if (at && at !== '先頭') body.resume_from = at;
-  const r = await api('/api/run', 'POST', body);
-  // 成功時も必ず書き換える。前回の失敗理由が残ると、今回も失敗したように読める
-  show('trialmsg', r.error ? 'err' : '', r.error || '');
-};
-// ○×に「何を試したか」を添える。ペア反復は開始ズレmsと手順の版が
-// 成功率の文脈になる(計画 §2c)
-function trialCtx() {
-  const devs = state.devices || [];
-  if (devs.length < 2) return {target: ''};
-  const target = document.getElementById('trialdev').value;
-  const ctx = {target};
-  if (target === '__pair__') {
-    const run = (cpl() || {}).run;
-    if (run && run.skew_ms != null) ctx.skew_ms = run.skew_ms;
-    ctx.hash = devs.slice(0, 2).map(d => {
-      const lane = laneMap.get(d.name);
-      const p = lane && state.procedures.find(x => x.name === lane.proc.value);
-      return p ? p.hash : '';
-    }).join('+');
-  }
-  return ctx;
-}
-document.getElementById('trialok').onclick = async () =>
-  showTrial(await api('/api/trial', 'POST',
-                      {action: 'mark', success: true, ...trialCtx()}));
-document.getElementById('trialng').onclick = async () =>
-  showTrial(await api('/api/trial', 'POST',
-                      {action: 'mark', success: false, ...trialCtx()}));
-document.getElementById('trialreset').onclick = async () =>
-  showTrial(await api('/api/trial', 'POST', {action: 'reset'}));
 
 // 手動操作の記録 → 部品の下書き
 let recOn = false;

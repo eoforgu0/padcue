@@ -94,7 +94,6 @@ def main() -> int:
 
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    gui._Handler.trials = []
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_port}"

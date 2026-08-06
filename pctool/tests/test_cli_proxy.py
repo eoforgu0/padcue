@@ -31,7 +31,6 @@ def env(tmp_path):
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    gui._Handler.trials = []
     if gui._Handler.coupler is not None:
         gui._Handler.coupler.close()
         gui._Handler.coupler = None

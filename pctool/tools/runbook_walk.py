@@ -59,7 +59,6 @@ def main():
 
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    gui._Handler.trials = []
     # 前回の装置プールが残っていたら閉じる(P2-1 で接続は _Handler.pool に
     # 一本化された。プロジェクト差し替え時の作法は uicheck と同じ)
     if gui._Handler.pool is not None:

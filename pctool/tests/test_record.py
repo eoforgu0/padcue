@@ -124,15 +124,3 @@ def test_record_save_without_data_is_reported(server):
     base, _proj = server
     post(f"{base}/api/record", {"action": "start"})
     assert "error" in post(f"{base}/api/record", {"action": "save", "name": "空"})
-
-
-# ---- 反復テスト(成功率の記録) ----
-
-def test_trial_tally(server):
-    base, _proj = server
-    post(f"{base}/api/trial", {"action": "reset"})
-    for ok in (True, True, False, True):
-        r = post(f"{base}/api/trial", {"action": "mark", "success": ok})
-    assert r["count"] == 4 and r["success"] == 3 and r["rate"] == 75.0
-    r = post(f"{base}/api/trial", {"action": "reset"})
-    assert r["trials"] == []

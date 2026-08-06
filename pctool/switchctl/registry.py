@@ -20,6 +20,8 @@ def add_device(project, host: str, name: str = "", port=None,
     """
     cfg = project.load_config()
     devs = cfg.get("devices", [])
+    if len(devs) >= 2:
+        return False, "いまは2台までです(3台以上は未検証)"
     name = (name or "").strip() or f"{len(devs) + 1}P"
     if any(d.get("name") == name for d in devs):
         return False, f"名前「{name}」は使用済みです"

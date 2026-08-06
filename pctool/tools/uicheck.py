@@ -197,7 +197,6 @@ def main() -> int:
 
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    gui._Handler.trials = []
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_port}"
@@ -304,22 +303,23 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_resume_options():
         opts = page.locator("#resume option").all_inner_texts()
-        assert opts == ["先頭から", "移動", "戦闘", "回収"], opts
-    c.check("開始位置にラベルが並ぶ", t_resume_options)
-
-    def t_push():
-        page.click("#push")
-        page.wait_for_timeout(900)
-        msg = text(page, "#actmsg")
-        assert "転送しました" in msg, msg
-    c.check("転送のみ → 転送できたと出る", t_push)
+        assert opts == ["―(先頭から)", "移動", "戦闘", "回収"], opts
+    c.check("開始ラベルにラベルが並ぶ", t_resume_options)
 
     def t_message_persists():
+        # 「転送のみ」ボタンは撤去した(実行時に自動転送されるため)ので、
+        # 開始位置つき実行の結果メッセージで確認する
+        page.select_option("#resume", label="移動")
+        page.click("#run1")
+        wait_state(page, "実行中")
         first = text(page, "#actmsg")
-        assert "転送" in first, f"転送の結果が出ていない: {first!r}"
+        assert "実行しています" in first, f"実行結果が出ていない: {first!r}"
         page.wait_for_timeout(2600)      # 状態更新が2回以上走る間
         assert text(page, "#actmsg") == first, \
             "操作の結果メッセージが状態更新で消えている"
+        page.click("#stopi")
+        wait_state(page, "待機中")
+        page.select_option("#resume", label="―(先頭から)")
     c.check("操作の結果メッセージが消えない", t_message_persists)
 
     def t_device_controls_are_grouped():
@@ -351,7 +351,6 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         wait_state(page, "実行中")
         assert page.locator("#play").is_visible(), "実行中に再生位置が出ない"
         assert page.locator("#run").is_disabled(), "実行中に実行が押せる"
-        assert page.locator("#push").is_disabled(), "実行中に転送が押せる"
         assert page.locator("#manual").is_disabled(), "実行中に手動操作が押せる"
         assert page.locator("#stopi").is_enabled(), "実行中に即時停止が押せない"
         page.wait_for_timeout(1200)
@@ -629,20 +628,19 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("前提条件は実行ボタンの上に出る", t_prenote_above_buttons)
 
     def t_resume_hint_when_no_labels():
-        """ラベルが無い手順では開始位置を押せなくし、使い方を添える。"""
+        """ラベルが無い手順では開始ラベルを押せなくする(説明は足さない。
+        欄名が「開始ラベル」なので、無効=ラベルが無い、は名前から察せる)。"""
         page.locator("#procs .proc", has_text="選んで進む").click()
         page.wait_for_timeout(800)
         sel = page.locator("#resume")
         n = sel.evaluate("s => s.options.length")
         if n <= 1:
             assert sel.is_disabled(), "選べないのに押せる状態のままになっている"
-            assert "ラベル" in (sel.get_attribute("title") or ""), \
-                "どうすれば使えるようになるかの説明がない"
         page.locator("#procs .proc", has_text="素材周回").click()
         page.wait_for_timeout(800)
         assert not page.locator("#resume").is_disabled(), \
-            "ラベルのある手順で開始位置が選べない"
-    c.check("開始位置: 選べないときは理由が分かる", t_resume_hint_when_no_labels)
+            "ラベルのある手順で開始ラベルが選べない"
+    c.check("開始ラベル: ラベルが無い手順では押せない", t_resume_hint_when_no_labels)
 
     def t_msg_close():
         """メッセージに × があり、押すと消えて高さを返すこと。"""
@@ -713,20 +711,6 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.select_option("#resume", "先頭")
     c.check("部分実行はすぐ動き出す(前半ぶん待たされない)",
             t_resume_starts_immediately)
-
-    def t_trial():
-        page.click("#trialok")
-        page.wait_for_timeout(300)
-        page.click("#trialok")
-        page.wait_for_timeout(300)
-        page.click("#trialng")
-        page.wait_for_timeout(400)
-        chip = text(page, "#trialchip")
-        assert "2 / 3" in chip and "66.7%" in chip, chip
-        page.click("#trialreset")
-        page.wait_for_timeout(300)
-        assert text(page, "#trialchip") == "未実施", text(page, "#trialchip")
-    c.check("反復テスト: 成功率の集計とクリア", t_trial)
 
     def t_manual():
         page.click("#manual")
@@ -885,17 +869,6 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.locator("#msg button", has_text="異常を解除").click()
         wait_state(page, "待機中")
     c.check("異常 → 解除できる", t_error_state)
-
-    def t_trial_run_once():
-        page.click("[data-view=home]")
-        page.wait_for_timeout(600)
-        page.locator("#procs .proc").nth(1).click()   # 素材周回
-        page.wait_for_timeout(500)
-        page.click("#trialrun")
-        wait_state(page, "実行中")
-        page.click("#stopi")
-        wait_state(page, "待機中")
-    c.check("反復テスト: 1回実行して判定 が実行される", t_trial_run_once)
 
     def t_branch_timeline():
         """分岐を含む手順でもタイムラインが描ける(空にならない)。"""
@@ -2079,8 +2052,6 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             "2台なのに従来の接続カードが見えている"
         assert not page.locator("#runcard").is_visible()
         assert not page.locator("#tlcard").is_visible()
-        assert page.locator("#devchips .hchip").count() == 2, "ヘッダチップが2つない"
-        assert page.locator("#trialdevwrap").is_visible(), "反復テストの対象が出ない"
         assert page.locator("#manualdevwrap").is_visible(), "手動操作の対象が出ない"
         rows = page.locator("#devlist .devrow")
         assert rows.count() == 2, "装置カードが2行にならない"
@@ -2091,11 +2062,12 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         h1 = lane(0).locator("h2").inner_text()
         h2 = lane(1).locator("h2").inner_text()
         assert "1P" in h1 and "2P" in h2, (h1, h2)
-        for name, i in (("1P", 0), ("2P", 1)):
+        # ボタンの文言に装置名は付かない(レーンの見出しに出ているため)
+        for i in (0, 1):
             btns = lane(i).locator("button").all_inner_texts()
-            assert any(f"{name} だけ1回実行" in b for b in btns), btns
-            assert any(f"{name} を今の周で止める" in b for b in btns), btns
-            assert any(f"{name} を今すぐ止める" in b for b in btns), btns
+            assert any("1回実行" in b for b in btns), btns
+            assert any("今の周で止める" in b for b in btns), btns
+            assert any("今すぐ止める" in b for b in btns), btns
             assert lane(i).locator(".lproc").count() == 1, "手順の選択が無い"
             assert lane(i).locator(".lloops").count() == 1, "周回の欄が無い"
             subhs = lane(i).locator(".subh").all_inner_texts()
@@ -2105,19 +2077,23 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
     def t_untransferred_chip_then_push():
         # 登録したての 2P は何も転送していない → 未転送の変更が出る。
-        # 「転送のみ」で消える
+        # 「転送のみ」ボタンは撤去した(実行時に自動転送されるため)ので、
+        # 1回実行して自動転送で消えることを確認する
         lane(1).locator(".lproc").select_option("素材周回")
         page.wait_for_timeout(1500)
         assert lane(1).locator(".chip.warn", has_text="未転送").is_visible(), \
             "未転送の装置にチップが出ない"
-        lane(1).locator("button", has_text="転送のみ").click()
+        lane(1).locator(".lloops").fill("1")
+        lane(1).locator("button", has_text="1回実行").click()
         page.wait_for_function(
             "() => {"
             "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
             "  const ch = [...l2.querySelectorAll('.chip.warn')]"
             "    .find(x => x.textContent.includes('未転送'));"
             "  return ch && ch.style.display === 'none'; }", timeout=8000)
-    c.check("未転送の変更チップ: 登録直後は出て、転送すると消える",
+        wait_lane_state(1, "実行中")
+        wait_lane_state(1, "待機中")     # 1周で完走する
+    c.check("未転送の変更チップ: 登録直後は出て、実行すると消える",
             t_untransferred_chip_then_push)
 
     def t_lane_procs_independent():
@@ -2126,17 +2102,20 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         page.wait_for_timeout(1500)
         assert lane(0).locator(".lproc").input_value() == "素材周回"
         assert lane(1).locator(".lproc").input_value() == "周回で変える"
-        heads = [lane(i).locator(".subh", has_text="タイムライン").inner_text()
-                 for i in (0, 1)]
-        assert "素材周回" in heads[0] and "周回で変える" in heads[1], heads
+        # 見出しは「タイムライン」だけ(手順名はプルダウンで分かる)なので、
+        # 図の追従は図そのものの中身で確かめる(ラベルの無い手順もあるため
+        # .marks でなく .tl 全体を比べる)
+        tls = [lane(i).locator(".tl").inner_text() for i in (0, 1)]
+        assert "移動" in tls[0], tls
+        assert tls[0] != tls[1], "レーンの図が選んだ手順に追従していない"
     c.check("レーンごとに別の手順を選べて図も追従する", t_lane_procs_independent)
 
     def t_run_2p_only():
         lane(1).locator(".lloops").fill("50")
-        lane(1).locator("button", has_text="2P だけ周回実行").click()
+        lane(1).locator("button", has_text="周回実行").click()
         wait_lane_state(1, "実行中")
         assert lane_chip(0) == "待機中", "2P の実行が 1P に波及した"
-        assert lane(0).locator("button", has_text="1P だけ1回実行").is_enabled(), \
+        assert lane(0).locator("button", has_text="1回実行").is_enabled(), \
             "2P 実行中に 1P の実行が押せない(非干渉が壊れている)"
         page.wait_for_timeout(1500)
         tp = lane(1).locator(".tlprog").inner_text()
@@ -2150,21 +2129,9 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("2P だけ周回実行 → 進捗・再生位置・抑止が 2P だけに出る",
             t_run_2p_only)
 
-    def t_header_chips_follow():
-        chips = page.locator("#devchips .hchip").all_inner_texts()
-        assert any("2P" in x and "実行中" in x for x in chips), chips
-        assert any("1P" in x and "待機中" in x for x in chips), chips
-        page.click(".tab[data-view='flow']")
-        page.wait_for_timeout(400)
-        assert page.locator("#devchips .hchip").first.is_visible(), \
-            "編集タブでヘッダチップが消える"
-        page.click(".tab[data-view='home']")
-        page.wait_for_timeout(400)
-    c.check("ヘッダチップが実行状態を映し、全タブで見える", t_header_chips_follow)
-
     def t_both_run_independently():
         lane(0).locator(".lloops").fill("50")
-        lane(0).locator("button", has_text="1P だけ周回実行").click()
+        lane(0).locator("button", has_text="周回実行").click()
         wait_lane_state(0, "実行中")
         assert lane_chip(1) == "実行中", "1P の開始で 2P が止まった"
         tps = [lane(i).locator(".tlprog").inner_text() for i in (0, 1)]
@@ -2172,7 +2139,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("2台を同時に別の手順で走らせられる", t_both_run_independently)
 
     def t_stopg_armed_per_lane():
-        lane(1).locator("button", has_text="2P を今の周で止める").click()
+        lane(1).locator("button", has_text="今の周で止める").click()
         page.wait_for_timeout(600)
         b2 = lane(1).locator("button", has_text="止める予約を取り消す")
         assert b2.count() == 1, "2P の停止予約が armed 表示にならない"
@@ -2180,23 +2147,23 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             .count() == 0, "1P まで予約表示になった"
         b2.click()                       # 取り消し
         page.wait_for_timeout(900)
-        assert lane(1).locator("button", has_text="2P を今の周で止める") \
+        assert lane(1).locator("button", has_text="今の周で止める") \
             .count() == 1, "予約の取り消しが効かない"
         assert lane_chip(1) == "実行中", "取り消したのに止まった"
     c.check("停止予約と取り消しはそのレーンだけに効く", t_stopg_armed_per_lane)
 
     def t_stop_2p_keeps_1p():
-        lane(1).locator("button", has_text="2P を今すぐ止める").click()
+        lane(1).locator("button", has_text="今すぐ止める").click()
         wait_lane_state(1, "待機中")
         assert lane_chip(0) == "実行中", "2P を止めたら 1P まで止まった"
-        lane(0).locator("button", has_text="1P を今すぐ止める").click()
+        lane(0).locator("button", has_text="今すぐ止める").click()
         wait_lane_state(0, "待機中")
     c.check("今すぐ止めるは押したレーンだけ(相方は継続)", t_stop_2p_keeps_1p)
 
     def t_wait_branch_in_lane():
         lane(1).locator(".lproc").select_option("選んで進む")
         lane(1).locator(".lloops").fill("1")
-        lane(1).locator("button", has_text="2P だけ周回実行").click()
+        lane(1).locator("button", has_text="周回実行").click()
         wait_lane_state(1, "選択待ち")
         assert lane_chip(0) == "待機中", "2P の選択待ちが 1P に波及"
         btns = lane(1).locator(".lawait button").all_inner_texts()
@@ -2231,21 +2198,6 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("手動操作は選んだ装置だけに届き、操作中は対象を固定",
             t_manual_targets_selected_device)
 
-    def t_trial_targets_selected_device():
-        lane(1).locator(".lproc").select_option("素材周回")
-        page.wait_for_timeout(1200)
-        page.select_option("#trialdev", "2P")
-        page.wait_for_timeout(200)
-        page.click("#trialrun")
-        wait_lane_state(1, "実行中")
-        assert lane_chip(0) == "待機中", "対象でない 1P まで実行された"
-        tp = lane(1).locator(".tlprog").inner_text()
-        assert "/ 1 周" in tp, f"1回になっていない: {tp!r}"
-        lane(1).locator("button", has_text="2P を今すぐ止める").click()
-        wait_lane_state(1, "待機中")
-    c.check("反復テストの1回実行は対象の装置のレーンで走る",
-            t_trial_targets_selected_device)
-
     def t_rename_follows_everywhere():
         prompt_value[0] = "サブ"
         row = page.locator("#devlist .devrow").nth(1)
@@ -2253,11 +2205,12 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         page.wait_for_function(
             "() => document.querySelectorAll('#lanes .lane h2')[1]"
             "      .textContent.includes('サブ')", timeout=8000)
-        chips = page.locator("#devchips .hchip").all_inner_texts()
-        assert any("サブ" in x for x in chips), chips
-        btns = lane(1).locator("button").all_inner_texts()
-        assert any("サブ を今すぐ止める" in b for b in btns), \
-            f"レーンのボタン文言が旧名のまま: {btns}"
+        # ボタンの文言に装置名は付かない(見出しに出る)ので、title 属性で
+        # 旧名が残っていないことを確認する
+        title = lane(1).locator("button", has_text="今すぐ止める") \
+            .get_attribute("title")
+        assert "サブ" in (title or ""), \
+            f"レーンのボタンの title が旧名のまま: {title!r}"
         prompt_value[0] = "2P"
         page.locator("#devlist .devrow").nth(1) \
             .locator(".rowops button").first.click()
@@ -2275,8 +2228,11 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         page.wait_for_function(
             "() => document.getElementById('consolecard').style.display"
             " !== 'none'", timeout=10000)
-        assert "識別子 0100005e0053013c" in text(page, "#consolelist"), \
+        assert "ID 4C3C" in text(page, "#consolelist"), \
             text(page, "#consolelist")
+        idspan = page.locator("#consolelist .meta span").first
+        assert idspan.get_attribute("title") == "0100005e0053013c", \
+            "フル識別子が title に無い"
         assert "1P が接続中" in text(page, "#consolelist"), \
             text(page, "#consolelist")
         prompt_value[0] = "リビングのSwitch2"
@@ -2296,10 +2252,10 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         wait_lane_state(1, "未接続", timeout_ms=15000)
         assert "見つけられます" in lane(1).inner_text(), \
             "未接続の復旧導線(探す誘導)が出ない"
-        assert lane(1).locator("button", has_text="2P だけ1回実行") \
+        assert lane(1).locator("button", has_text="1回実行") \
             .is_disabled(), "未接続なのに実行が押せる"
         assert lane_chip(0) == "待機中", "2P の未接続が 1P に波及"
-        assert lane(0).locator("button", has_text="1P だけ1回実行") \
+        assert lane(0).locator("button", has_text="1回実行") \
             .is_enabled(), "2P 未接続で 1P の操作まで塞がった"
     c.check("未接続のレーンだけが赤くなり、相方は無傷",
             t_unreachable_lane_isolated)
@@ -2311,9 +2267,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             "() => document.querySelector('#conncard').style.display !== 'none'",
             timeout=10000)
         assert page.locator("#lanes .lane").count() == 0, "レーンが残っている"
-        assert page.locator("#devchips .hchip").count() == 0, \
-            "1台に戻ったのにヘッダチップが残る"
-        assert not page.locator("#trialdevwrap").is_visible(), \
+        assert not page.locator("#manualdevwrap").is_visible(), \
             "1台に戻ったのに対象選択が残る"
         assert text(page, "#devchip") == "待機中", "従来の接続カードが戻らない"
     c.check("2台目を外すと従来の1台の画面に戻る", t_remove_returns_to_solo)
@@ -2324,7 +2278,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
 def run_coupling(c: Checker, page, proj: Project,
                  prompt_value: list, dialogs: list):
-    """連結バー(案C・P3/P4): まとめて開始・自動合流・連動停止・編成。"""
+    """連結バー(案C・P3/P4): まとめて開始・自動合流・連動停止・プリセット。"""
     print("[連結(2台をまとめて動かす)]", flush=True)
     c1 = MockDevice(speed=1.0, device_id="mockcp100000")
     c2 = MockDevice(speed=1.0, device_id="mockcp200000")
@@ -2402,7 +2356,7 @@ def run_coupling(c: Checker, page, proj: Project,
                      "連結を外す", "自動合流", "進む腕",
                      "次の合流は自分で選ぶ", "両方へ同時に選ぶ"):
             assert want in bar, f"連結バーに「{want}」が無い"
-        assert page.locator("#formcard").is_visible(), "編成カードが出ない"
+        assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
     c.check("連結すると連結バーの一式が現れる", t_link_shows_bar)
 
     def t_unlink_and_relink():
@@ -2494,7 +2448,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
             "  d => d.running || d.awaiting)", timeout=10000)
-        lane(1).locator("button", has_text="2P を今すぐ止める").click()
+        lane(1).locator("button", has_text="今すぐ止める").click()
         wait_lane_state(1, "待機中")
         page.wait_for_timeout(3000)      # 1P は止まらず(合流もソロで進む)
         assert page.evaluate(
@@ -2531,7 +2485,7 @@ def run_coupling(c: Checker, page, proj: Project,
             timeout=10000)
         badge = lane(0).locator(".runchip").inner_text()
         assert "単独" in badge, f"ソロ再開なのにバッジが: {badge}"
-        lane(0).locator("button", has_text="1P を今すぐ止める").click()
+        lane(0).locator("button", has_text="今すぐ止める").click()
         wait_lane_state(0, "待機中")
     c.check("異常の連動停止: 理由と再開・片方だけ続けるがその場に出る",
             t_linked_stop_banner)
@@ -2563,19 +2517,36 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.querySelector('#formlist')"
             ".textContent.includes('いつもの')", timeout=8000)
         row = page.locator("#formlist .devrow", has_text="いつもの")
-        assert "連結" in row.inner_text(), "編成の概要に連結が出ない"
-        # 盤面を変えると * が付く
-        lane(0).locator(".lloops").fill("9")
+        assert "連結" in row.inner_text(), "プリセットの概要に連結が出ない"
+        # 名前チップが出る
         page.wait_for_function(
             "() => document.querySelector('#cformation')"
-            ".textContent.includes('*')", timeout=8000)
-        # 呼び出すと盤面が戻り、* が消える
+            ".textContent.includes('いつもの')", timeout=8000)
+        # 割り当てを変えると「未保存の変更」チップと「上書き保存」が出る
+        lane(0).locator(".lloops").fill("9")
+        page.wait_for_function(
+            "() => document.querySelector('#cformdirty')"
+            ".offsetParent !== null", timeout=8000)
+        assert page.locator("#cformoverwrite").is_visible(), \
+            "未保存の変更のときに上書き保存が出ない"
+        # 上書き保存を押すと、この内容(周回9)でプリセットが更新されチップが消える
+        page.click("#cformoverwrite")
+        page.wait_for_function(
+            "() => document.querySelector('#cformdirty').offsetParent === null",
+            timeout=8000)
+        assert not page.locator("#cformoverwrite").is_visible(), \
+            "上書き保存のあとも上書き保存ボタンが残る"
+        # 割り当てを再び動かしてから呼び出すと、上書き保存した内容(9)に戻る
+        lane(0).locator(".lloops").fill("5")
+        page.wait_for_function(
+            "() => document.querySelector('#cformdirty')"
+            ".offsetParent !== null", timeout=8000)
         row.locator("button", has_text="呼び出す").click()
         page.wait_for_function(
-            "() => !document.querySelector('#cformation')"
-            ".textContent.includes('*')", timeout=8000)
-        assert lane(0).locator(".lloops").input_value() == "5", \
-            "呼び出しても周回が戻らない"
+            "() => document.querySelector('#cformdirty').offsetParent === null",
+            timeout=8000)
+        assert lane(0).locator(".lloops").input_value() == "9", \
+            "呼び出しても上書き保存した割り当てに戻らない"
         # 実行中の呼び出しは断られる
         page.click("#crun1")
         page.wait_for_function(
@@ -2587,24 +2558,8 @@ def run_coupling(c: Checker, page, proj: Project,
             ".textContent.includes('実行中')", timeout=8000)
         wait_idle()
         prompt_value[0] = "自動テスト"
-    c.check("編成: 保存・*表示・呼び出し・実行中ガード", t_formation_roundtrip)
-
-    def t_pair_trial():
-        opts = page.locator("#trialdev option").all_inner_texts()
-        assert any("連結" in o for o in opts), f"対象に連結が無い: {opts}"
-        page.select_option("#trialdev", "__pair__")
-        page.click("#trialreset")
-        page.wait_for_timeout(300)
-        page.click("#trialrun")
-        page.wait_for_function(
-            "() => (state.devices || []).slice(0, 2).every("
-            "  d => d.running || d.awaiting)", timeout=10000)
-        wait_idle()
-        page.click("#trialok")
-        page.wait_for_function(
-            "() => document.querySelector('#trialchip')"
-            ".textContent.includes('1 / 1')", timeout=8000)
-    c.check("ペア反復: 連結の1回実行を1試行として数える", t_pair_trial)
+    c.check("プリセット: 保存・上書き保存・呼び出し・実行中ガード",
+            t_formation_roundtrip)
 
     def t_f10_again():
         page.keyboard.press("F10")
@@ -2617,7 +2572,7 @@ def run_coupling(c: Checker, page, proj: Project,
         wait_idle()
     c.check("F10 でもう一回(同じ条件)", t_f10_again)
 
-    # あと片づけ: 編成を消し、1台に戻す
+    # あと片づけ: プリセットを消し、1台に戻す
     row = page.locator("#formlist .devrow", has_text="いつもの")
     if row.count():
         row.locator("button", has_text="削除").click()

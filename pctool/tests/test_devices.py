@@ -222,9 +222,11 @@ def test_cli_device_add_list_rename(tmp_path, capsys):
         assert _cli(tmp_path, "device", "add", "127.0.0.1", "2号機") == 0
         out = capsys.readouterr().out
         assert "cccc00000003" in out
-        # 同じ個体の二重登録は断られる
+        # ここで既に2台(既定の1台目+2号機)。3台目は個体の異同を見るまでも
+        # なく上限で断られる(2台までの制限。test_add_device_rejects_third
+        # が2台超過そのものの検証、こちらは既存の CLI 経路の確認)
         assert _cli(tmp_path, "device", "add", "127.0.0.1", "3号機") == 1
-        assert "登録済み" in capsys.readouterr().out
+        assert "2台まで" in capsys.readouterr().out
         assert _cli(tmp_path, "device", "list") == 0
         out = capsys.readouterr().out
         assert "1P" in out and "2号機" in out
@@ -237,6 +239,27 @@ def test_cli_device_add_list_rename(tmp_path, capsys):
         cfg = p.load_config()
         two = next(x for x in cfg["devices"] if x["name"] == "2P")
         assert two["id"] == "cccc00000003"
+
+
+def test_add_device_rejects_third(tmp_path):
+    """登録は2台まで(3台以上は未検証)。3台目は拒否される。
+
+    新規 Project は移行後の既定で装置1台("1P"の仮枠)を既に持つため、
+    2台目を登録した時点で上限に達する。
+    """
+    from switchctl import registry
+    with MockDevice(device_id="bbbb00000002") as d2, \
+         MockDevice(device_id="cccc00000003") as d3:
+        p = Project(tmp_path)
+        cfg = p.load_config()
+        assert len(cfg["devices"]) == 1   # 既定の1台目(仮枠)
+        ok, msg = registry.add_device(p, "127.0.0.1", "2P", port=d2.port)
+        assert ok, msg
+        ok, msg = registry.add_device(p, "127.0.0.1", "3P", port=d3.port)
+        assert not ok
+        assert "2台まで" in msg
+        cfg = p.load_config()
+        assert len(cfg["devices"]) == 2
 
 
 def test_cli_device_flag_selects_registered_device(tmp_path, capsys):

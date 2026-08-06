@@ -32,7 +32,6 @@ def env(tmp_path):
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    gui._Handler.trials = []
     if gui._Handler.pool is not None:
         gui._Handler.pool.close()
         gui._Handler.pool = None

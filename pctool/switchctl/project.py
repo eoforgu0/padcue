@@ -406,6 +406,9 @@ class Project:
                    "arm": int(data.get("arm", 0)),
                    "devices": [
                        {"id": str(x.get("id", "")),
+                        # 名前は ID が空のときの解決の綱(練習の mock は設計上
+                        # ID を学習しないため、ID だけだと装置を引けない)
+                        "name": str(x.get("name", "")),
                         "proc": str(x.get("proc", "")),
                         "loops": max(0, int(x.get("loops", 0))),
                         "resume": str(x.get("resume", ""))}
