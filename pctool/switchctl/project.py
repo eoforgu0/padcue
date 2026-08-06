@@ -424,6 +424,21 @@ class Project:
     def delete_formation(self, name: str) -> None:
         self._formation_path(name).unlink(missing_ok=True)
 
+    def rename_formation(self, old: str, new: str) -> None:
+        """プリセットの名前を変える(ファイル改名+中身の name も書き換え)。"""
+        old, new = validate_name(old), validate_name(new)
+        if old == new:
+            return
+        if not self._formation_path(old).is_file():
+            raise ValueError(f"プリセット「{old}」がありません")
+        if self._formation_path(new).exists():
+            raise ValueError(f"「{new}」は既にあります")
+        data = self.load_formation(old)
+        data["name"] = new
+        self._formation_path(new).write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._formation_path(old).unlink(missing_ok=True)
+
     def build(self, name: str) -> BuildResult:
         c = compile_flow(self.root, name)
         blob = binfmt.encode(c.name, c.events, c.total_frames)

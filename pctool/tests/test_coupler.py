@@ -331,6 +331,22 @@ def test_couple_again_and_formations(env):
     assert "検証A" in names, names
     r = post(base, "/api/formation_load", {"name": "検証A"})
     assert r["data"]["devices"][0]["loops"] == 5
-    assert post(base, "/api/formation_delete", {"name": "検証A"}).get("ok")
+    # 改名(格納庫の行アイコン ✎ から呼ぶ API。ファイル改名+中身の name も書き換え)
+    assert post(base, "/api/formation_rename",
+                {"old": "検証A", "new": "検証B"}).get("ok")
     names = [f["name"] for f in get(base, "/api/state")["formations"]]
-    assert "検証A" not in names, names
+    assert "検証B" in names and "検証A" not in names, names
+    r = post(base, "/api/formation_load", {"name": "検証B"})
+    assert r["data"]["name"] == "検証B"
+    assert r["data"]["devices"][0]["loops"] == 5
+    # 重複・空は拒否
+    assert post(base, "/api/formation_save",
+                {"name": "検証C", "data": data}).get("ok")
+    assert post(base, "/api/formation_rename",
+                {"old": "検証B", "new": "検証C"}).get("error")
+    assert post(base, "/api/formation_rename",
+                {"old": "検証B", "new": ""}).get("error")
+    assert post(base, "/api/formation_delete", {"name": "検証C"}).get("ok")
+    assert post(base, "/api/formation_delete", {"name": "検証B"}).get("ok")
+    names = [f["name"] for f in get(base, "/api/state")["formations"]]
+    assert "検証A" not in names and "検証B" not in names, names

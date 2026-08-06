@@ -859,7 +859,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.locator("#awaitmsg button").first.click()
         page.wait_for_timeout(900)
         assert "選択待ち" not in text(page, "#devchip"), text(page, "#devchip")
-    c.check("待機分岐: 選択待ち → 腕を選んで続行", t_wait_branch)
+    c.check("待機分岐: 選択待ち → 選択肢を選んで続行", t_wait_branch)
 
     def t_error_state():
         dev.inject_fault()
@@ -1322,8 +1322,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.locator("#flowbody .nest > .head", has_text="待って選ぶ").click()
         page.wait_for_timeout(350)
         props = text(page, "#props")
-        assert "腕の名前" in props, props
-    c.check("待機分岐が腕ごとに表示・編集できる", t_wait_branch_editor)
+        assert "選択肢の名前" in props, props
+    c.check("待機分岐が選択肢ごとに表示・編集できる", t_wait_branch_editor)
 
     def t_edit_inside_wait_branch_arm():
         page.locator("#flowbody .arm .blk").first.click()
@@ -1336,13 +1336,13 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         arm0.locator(".delx.cpy").click()
         page.wait_for_timeout(300)
         assert page.locator("#flowbody .arm .blk").count() == before + 1, \
-            "腕の中で複製できない"
+            "選択肢の中で複製できない"
         arm0 = page.locator("#flowbody .arm .blk").first
         arm0.hover()
         arm0.locator(".delx:not(.cpy)").click()
         page.wait_for_timeout(300)
         assert page.locator("#flowbody .arm .blk").count() == before
-    c.check("待機分岐の腕の中を編集できる", t_edit_inside_wait_branch_arm)
+    c.check("待機分岐の選択肢の中を編集できる", t_edit_inside_wait_branch_arm)
 
     def t_counter_branch_editor():
         page.locator("#flowlist .proc").nth(0).click()   # 周回で変える
@@ -1351,8 +1351,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert any("周ごとの 1 周目" in a for a in arms), arms
         page.locator("#flowbody .nest > .head", has_text="周回で分岐").click()
         page.wait_for_timeout(350)
-        assert "腕の数" in text(page, "#props"), text(page, "#props")
-    c.check("周回分岐が腕ごとに表示・編集できる", t_counter_branch_editor)
+        assert "選択肢の数" in text(page, "#props"), text(page, "#props")
+    c.check("周回分岐が選択肢ごとに表示・編集できる", t_counter_branch_editor)
 
     def t_add_into_loop():
         page.locator("#flowbody .nest > .head", has_text="くり返し").first.click()
@@ -2075,27 +2075,6 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             assert any("タイムライン" in s for s in subhs), subhs
     c.check("レーンは装置名入りのボタンと実行一式を持つ", t_lane_layout)
 
-    def t_untransferred_chip_then_push():
-        # 登録したての 2P は何も転送していない → 未転送の変更が出る。
-        # 「転送のみ」ボタンは撤去した(実行時に自動転送されるため)ので、
-        # 1回実行して自動転送で消えることを確認する
-        lane(1).locator(".lproc").select_option("素材周回")
-        page.wait_for_timeout(1500)
-        assert lane(1).locator(".chip.warn", has_text="未転送").is_visible(), \
-            "未転送の装置にチップが出ない"
-        lane(1).locator(".lloops").fill("1")
-        lane(1).locator("button", has_text="1回実行").click()
-        page.wait_for_function(
-            "() => {"
-            "  const l2 = document.querySelectorAll('#lanes .lane')[1];"
-            "  const ch = [...l2.querySelectorAll('.chip.warn')]"
-            "    .find(x => x.textContent.includes('未転送'));"
-            "  return ch && ch.style.display === 'none'; }", timeout=8000)
-        wait_lane_state(1, "実行中")
-        wait_lane_state(1, "待機中")     # 1周で完走する
-    c.check("未転送の変更チップ: 登録直後は出て、実行すると消える",
-            t_untransferred_chip_then_push)
-
     def t_lane_procs_independent():
         lane(0).locator(".lproc").select_option("素材周回")
         lane(1).locator(".lproc").select_option("周回で変える")
@@ -2171,7 +2150,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         lane(1).locator(".lawait button").first.click()
         wait_lane_state(1, "実行中")
         wait_lane_state(1, "待機中")     # 1周で完走する
-    c.check("待機分岐はレーン内で選ぶ(腕ボタンに宛先の装置名)",
+    c.check("待機分岐はレーン内で選ぶ(選択肢ボタンに宛先の装置名)",
             t_wait_branch_in_lane)
 
     def t_logs_have_device_column():
@@ -2197,6 +2176,59 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             "() => state.devices[1].state === 'IDLE'", timeout=8000)
     c.check("手動操作は選んだ装置だけに届き、操作中は対象を固定",
             t_manual_targets_selected_device)
+
+    def t_lane_resume_refreshes_on_return():
+        """「手順を編集」でラベルだけを足して保存 → 実行・監視へ戻ったとき、
+        レーンの開始ラベルにも新しいラベルが出ること(選び直さなくても)。
+
+        ラベルの追加だけではボタン入力(blob)が変わらずハッシュが同じに
+        なりうるため、syncLaneTimeline のハッシュ一致キャッシュだけに頼ると
+        古い開始ラベルのままになる(2026-08-06 に実際に起きたバグ)。タブへ
+        戻ったこと自体で読み直す作りになっているかを確かめる。
+        """
+        assert lane(0).locator(".lproc").input_value() == "素材周回", \
+            "検証の前提が崩れた(1P の選択がずれている)"
+        page.click(".tab[data-view='flow']")
+        page.wait_for_timeout(400)
+        page.locator("#flowlist .proc", has_text="素材周回").click()
+        page.wait_for_timeout(600)
+        page.locator("#flowbody .blk").first.click()   # ラベル「移動」を選ぶ
+        page.wait_for_timeout(200)
+        page.locator("#palette .pal", has_text="ラベル").click()
+        page.wait_for_timeout(300)
+        inp = page.locator("#props input").first
+        inp.click()
+        page.keyboard.press("Control+a")
+        page.keyboard.type("拠点", delay=60)
+        page.wait_for_timeout(300)
+        page.click("#saveflow")
+        page.wait_for_timeout(500)
+        page.click(".tab[data-view='home']")
+        page.wait_for_function(
+            "() => document.querySelectorAll('#lanes .lane').length === 2",
+            timeout=8000)
+        assert lane(0).locator(".lproc").input_value() == "素材周回", \
+            "戻ったら 1P の手順選択が変わった"
+        page.wait_for_function(
+            "() => { const l = document.querySelectorAll('#lanes .lane')[0];"
+            "  const opts = [...l.querySelectorAll('.lresume option')]"
+            "    .map(o => o.value); return opts.includes('拠点'); }",
+            timeout=8000)
+        # 後始末: 足したラベルを消して元の手順に戻す
+        page.click(".tab[data-view='flow']")
+        page.wait_for_timeout(400)
+        page.locator("#flowlist .proc", has_text="素材周回").click()
+        page.wait_for_timeout(600)
+        blk_icon(page, 1, "del").click()
+        page.wait_for_timeout(250)
+        page.click("#saveflow")
+        page.wait_for_timeout(500)
+        page.click(".tab[data-view='home']")
+        page.wait_for_function(
+            "() => document.querySelectorAll('#lanes .lane').length === 2",
+            timeout=8000)
+    c.check("ラベルだけの追加(ハッシュ不変)でも、戻ったら開始ラベルに出る",
+            t_lane_resume_refreshes_on_return)
 
     def t_rename_follows_everywhere():
         prompt_value[0] = "サブ"
@@ -2353,7 +2385,7 @@ def run_coupling(c: Checker, page, proj: Project,
         bar = page.locator("#coupler").inner_text()
         for want in ("連結中", "1回実行", "周回実行", "もう一回",
                      "両方を今の周で止める", "両方を今すぐ止める",
-                     "連結を外す", "自動合流", "進む腕",
+                     "連結を外す", "自動合流", "進む先",
                      "次の合流は自分で選ぶ", "両方へ同時に選ぶ"):
             assert want in bar, f"連結バーに「{want}」が無い"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
@@ -2511,42 +2543,56 @@ def run_coupling(c: Checker, page, proj: Project,
     c.check("連結のログが日本語で読める", t_pc_logs_readable)
 
     def t_formation_roundtrip():
+        # 保存の作法は連結バーに一本化(原則 §4)。未使用時は #cformsave が
+        # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に化ける
         prompt_value[0] = "いつもの"
-        page.click("#formsave")
+        page.click("#cformsave")
         page.wait_for_function(
             "() => document.querySelector('#formlist')"
             ".textContent.includes('いつもの')", timeout=8000)
         row = page.locator("#formlist .devrow", has_text="いつもの")
         assert "連結" in row.inner_text(), "プリセットの概要に連結が出ない"
-        # 名前チップが出る
+        # 名前チップと「保存済み」バッジが出る(手順・部品エディタと同型)
         page.wait_for_function(
             "() => document.querySelector('#cformation')"
             ".textContent.includes('いつもの')", timeout=8000)
-        # 割り当てを変えると「未保存の変更」チップと「上書き保存」が出る
+        page.wait_for_function(
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '保存済み'", timeout=8000)
+        # 割り当てを変えると「未保存の変更」バッジに変わる
         lane(0).locator(".lloops").fill("9")
         page.wait_for_function(
-            "() => document.querySelector('#cformdirty')"
-            ".offsetParent !== null", timeout=8000)
-        assert page.locator("#cformoverwrite").is_visible(), \
-            "未保存の変更のときに上書き保存が出ない"
-        # 上書き保存を押すと、この内容(周回9)でプリセットが更新されチップが消える
-        page.click("#cformoverwrite")
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '未保存の変更'", timeout=8000)
+        # 保存(=このプリセットへの上書き)を押すと、この内容(周回9)で
+        # 更新され「保存済み」に戻る。成功の文は出ない(原則 §3・§5)
+        page.click("#cformsave")
         page.wait_for_function(
-            "() => document.querySelector('#cformdirty').offsetParent === null",
-            timeout=8000)
-        assert not page.locator("#cformoverwrite").is_visible(), \
-            "上書き保存のあとも上書き保存ボタンが残る"
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '保存済み'", timeout=8000)
+        assert page.locator("#formmsg").inner_text().strip() == "", \
+            "上書き保存で文が出ている(バッジで伝えるはず)"
         # 割り当てを再び動かしてから呼び出すと、上書き保存した内容(9)に戻る
         lane(0).locator(".lloops").fill("5")
         page.wait_for_function(
-            "() => document.querySelector('#cformdirty')"
-            ".offsetParent !== null", timeout=8000)
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '未保存の変更'", timeout=8000)
         row.locator("button", has_text="呼び出す").click()
         page.wait_for_function(
-            "() => document.querySelector('#cformdirty').offsetParent === null",
-            timeout=8000)
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '保存済み'", timeout=8000)
         assert lane(0).locator(".lloops").input_value() == "9", \
             "呼び出しても上書き保存した割り当てに戻らない"
+        # 改名(格納庫の行アイコン ✎)。連結バーの名前チップも追従する
+        prompt_value[0] = "いつものB"
+        row_icon(page, "#formlist", "いつもの", 0).click()
+        page.wait_for_function(
+            "() => document.querySelector('#formlist')"
+            ".textContent.includes('いつものB')", timeout=8000)
+        page.wait_for_function(
+            "() => document.querySelector('#cformation')"
+            ".textContent.includes('いつものB')", timeout=8000)
+        row = page.locator("#formlist .devrow", has_text="いつものB")
         # 実行中の呼び出しは断られる
         page.click("#crun1")
         page.wait_for_function(
@@ -2558,7 +2604,7 @@ def run_coupling(c: Checker, page, proj: Project,
             ".textContent.includes('実行中')", timeout=8000)
         wait_idle()
         prompt_value[0] = "自動テスト"
-    c.check("プリセット: 保存・上書き保存・呼び出し・実行中ガード",
+    c.check("プリセット: 保存・上書き保存・改名・呼び出し・実行中ガード",
             t_formation_roundtrip)
 
     def t_f10_again():
@@ -2572,10 +2618,10 @@ def run_coupling(c: Checker, page, proj: Project,
         wait_idle()
     c.check("F10 でもう一回(同じ条件)", t_f10_again)
 
-    # あと片づけ: プリセットを消し、1台に戻す
-    row = page.locator("#formlist .devrow", has_text="いつもの")
+    # あと片づけ: プリセットを消し、1台に戻す(改名後の名前で消す)
+    row = page.locator("#formlist .devrow", has_text="いつものB")
     if row.count():
-        row.locator("button", has_text="削除").click()
+        row_icon(page, "#formlist", "いつものB", 1).click()
         page.wait_for_timeout(600)
     (proj.root / "procedures" / "選んで進む(遅).flow.json").unlink(
         missing_ok=True)

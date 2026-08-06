@@ -404,8 +404,8 @@ class _Handler(BaseHTTPRequestHandler):
                 c.put(r.name, r.blob)
                 c.commit(r.name)
                 return {e["name"]: e["hash"] for e in c.list()}
-            # 一覧キャッシュへ書き戻す(次の収集を待つと、直後の画面更新が
-            # 「未転送」のまま最大1秒残る)
+            # 一覧キャッシュへ書き戻す(次の収集を待つと、直後の画面更新の
+            # listing が古いまま最大1秒残る)
             link.write_through(listing=link.call(_push))
             return {"ok": True, "hash": r.hash}
         if path == "/api/run":
@@ -534,6 +534,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/formation_delete":
             self.project.delete_formation(body.get("name", ""))
             return {"ok": True}
+        if path == "/api/formation_rename":
+            # 例外(重複・空)は do_POST の共通ハンドラで {"error": ...} に化ける
+            self.project.rename_formation(body.get("old", ""),
+                                          body.get("new", ""))
+            return {"ok": True}
         if path == "/api/record":
             action = body.get("action")
             if action == "start":
@@ -655,7 +660,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "name": name, "frames": r.total_frames,
                     "seconds": round(r.seconds, 1), "hash": r.hash,
                     "warnings": len(r.warnings), "pre": r.pre,
-                    # 最初の待機分岐の腕の名前(連結バーの「進む腕」の表示用)
+                    # 最初の待機分岐の選択肢の名前(連結バーの「進む先」の表示用)
                     "arms": (r.wait_branch_arms[0]
                              if r.wait_branch_arms else []),
                     "hidden": name in hidden_set,
@@ -687,8 +692,8 @@ class _Handler(BaseHTTPRequestHandler):
                     "partition": l.info.partition,
                     "rolled_back": l.info.rolled_back,
                     "frame_period_ns": l.info.frame_period_ns,
-                    # 手順名→ハッシュ(この装置に転送済みの版)。レーンの
-                    # 「未転送の変更」表示が装置ごとに要る
+                    # 手順名→ハッシュ(この装置に転送済みの版)。実行中の
+                    # 手順が転送後に編集された警告(nowplaying)の判定に使う
                     "listing": dict(l.listing),
                     **l.status,
                 })
@@ -1320,33 +1325,31 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div id="consolelist"></div>
       <div id="consolemsg"></div>
     </div>
-    <!-- プリセット = 盤面(連結・装置×手順×周回×開始位置・合流の腕)のスナップ
-         ショット。2台以上のときだけ出る -->
+    <!-- プリセット = 盤面(連結・装置×手順×周回×開始位置・合流の選択肢)のスナップ
+         ショット。2台以上のときだけ出る。保存の作法は連結バー側に一本化
+         (原則 §4)。ここは一覧と改名・削除・呼び出しだけ(原則 §3) -->
     <div class="card" id="formcard" style="display:none">
       <h2>プリセット</h2>
       <div id="formlist"></div>
-      <div class="row" style="margin-top:8px">
-        <button class="small" id="formsave"
-                title="いまの割り当て(連結・手順・周回・開始ラベル・合流の腕)に名前を付けて残します">
-          今の割り当てを保存</button>
-      </div>
       <div id="formmsg"></div>
     </div>
   </div>
   <div class="stack v-home">
     <!-- 連結バー: 2台をまとめる唯一の場所。連結中にだけ存在し、外すと
-         語彙ごと消える(案C の中核。モードや状態を覚えさせない) -->
+         語彙ごと消える(案C の中核。モードや状態を覚えさせない)。
+         プリセットの保存作法も、割り当てを編集する場所であるここに一本化する
+         (原則 §4: 編集エディタ・部品エディタと同型) -->
     <div class="card coupler" id="coupler" style="display:none">
       <div class="row">
         <span class="lbl">⧉ 連結</span>
         <span class="chip link">連結中</span>
         <span class="chip" id="cformation" style="display:none"
               title="呼び出したプリセットの名前"></span>
-        <span class="chip warn" id="cformdirty" style="display:none"
-              title="割り当て(手順・周回・合流)がこのプリセットの保存内容と違います">未保存の変更</span>
-        <button class="small" id="cformoverwrite" style="display:none"
-                title="いまの割り当てを、このプリセットに同じ名前で保存し直します">
-          上書き保存</button>
+        <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
+        <span class="chip" id="cforminfo" style="display:none"></span>
+        <button class="small" id="cformsave"
+                title="いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)を保存します">
+          保存</button>
         <span class="sep-v"></span>
         <button class="primary" id="crun1"
                 title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
@@ -1365,9 +1368,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       </div>
       <div class="row" style="margin-top:7px">
         <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0"
-               title="両方が待機分岐に着いたら、右の腕を自動で選んで同時に進めます。片方の異常(装置の異常報告・約5秒見えない)では相方も止めます">
+               title="両方が待機分岐に着いたら、右の選択肢を自動で選んで同時に進めます。片方の異常(装置の異常報告・約5秒見えない)では相方も止めます">
           <input type="checkbox" id="cauto">自動合流</label>
-        <label title="自動合流が選ぶ側。プリセットにも保存されます">進む腕
+        <label title="自動合流が選ぶ側。プリセットにも保存されます">進む先
           <select id="carm"></select></label>
         <button id="coneshot"
                 title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">✋ 次の合流は自分で選ぶ(1回だけ)</button>
@@ -1419,15 +1422,20 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
            付いている案内で、実行中に出たり消えたりしないため、ここにあっても
            操作の途中でボタンの位置が動くことはない(2026-08-02 ユーザー指摘) -->
       <div id="prenote" class="prenote" style="display:none"></div>
+      <!-- 設定は上、行動は下(原則 §2)。読み順 = どれだけ(周回)→
+           どこから(開始ラベル)→ 押す(実行・停止) -->
       <div class="row">
-        <button class="primary" id="run1"
-                title="周回の指定に関係なく、この手順を1回だけ実行します">▶ 1回実行</button>
-        <button class="primary" id="run"
-                title="右の周回数だけくり返して実行します">⟳ 周回実行</button>
         <label>周回 <input type="number" id="loops" value="0" min="0" max="100000"
           title="実行中に変えた値は次の開始から効きます">
           <span style="color:var(--muted); font-size:11px">0=止めるまで</span></label>
         <label>開始ラベル <select id="resume"></select></label>
+      </div>
+      <div class="row" style="margin-top:7px">
+        <button class="primary" id="run1"
+                title="周回の指定に関係なく、この手順を1回だけ実行します">▶ 1回実行</button>
+        <button class="primary" id="run"
+                title="右の周回数だけくり返して実行します">⟳ 周回実行</button>
+        <span class="sep-v"></span>
         <button id="stopg" title="今の周を最後までやってから止まります(ゲームの状態が整う)">
           ◼ 今の周で止める</button>
         <button id="stopi" class="danger"
@@ -1810,6 +1818,12 @@ for (const t of document.querySelectorAll('.tab')) {
       // 実行中の手順を編集した場合も「編集後の内容」を見せる(実機は転送
       // 時点の内容で動き続けるので、そのずれは実行パネルの警告で知らせる)
       timeline = null;
+      // レーン(2台以上)側も同じく読み直す。syncLaneTimeline は blob の
+      // ハッシュ変化で読み直す作りだが、ラベルだけの追加はハッシュが
+      // 変わらない(ラベルはボタン入力に影響しない付随情報のため)。
+      // ハッシュ一致でも「戻ってきた」ことそのもので古さを疑い、
+      // 1台側と同じく強制的に読み直す
+      for (const lane of laneMap.values()) { lane.tlName = ''; lane.tlHash = ''; }
       refresh().then(loadTimeline);
     }
   };
@@ -2006,7 +2020,7 @@ const LOG_JA = {
       + (nm ? `(=「${nm}」)` : '(装置カードの「本体に命名」で名前を付けられます)');
   },
   AWAIT_TIMEOUT: (a, b) => b
-    ? `待機分岐の待ちが上限に達したので、腕${b}へ自動で進みました`
+    ? `待機分岐の待ちが上限に達したので、選択肢${b}へ自動で進みました`
       + `(${a} フレーム待った)`
     : `⚠ 待機分岐の待ちが上限に達したので中断しました(${a} フレーム待った)`,
   // ---- PC 側の合成ログ(連結。ms は装置間のズレ、装置内の µs とは別物) ----
@@ -2016,10 +2030,10 @@ const LOG_JA = {
     + (b ? `・開始ズレ ${b}ms` : '') + ')',
   PC_AUTO_JOIN:  (a, b, c) => c
     ? '自動合流(ソロ進行): 相方は手で止められているので、待たずに進みました'
-    : `自動合流: 両方そろったので「${armLabels()[a] || `腕${a + 1}`}」を`
+    : `自動合流: 両方そろったので「${armLabels()[a] || `選択肢${a + 1}`}」を`
       + `選びました(ズレ ${b}ms)`,
   PC_SELECT_BOTH: (a, b) => `両方へ同時に選択: 「${armLabels()[a]
-    || `腕${a + 1}`}」(ズレ ${b}ms)`,
+    || `選択肢${a + 1}`}」(ズレ ${b}ms)`,
   PC_LINK_STOP:  (a, b, c, e) => '連動停止: '
     + ((e && e.why) || '相方の異常') + `(${a ? 'その場で' : '今の周で'})`,
   PC_WAIT_LATE:  (a) => `⚠ 相方待ちが ${a} 秒続いています`
@@ -2575,13 +2589,13 @@ function blockedReason(d) {
   }[d.state] || '';
 }
 
-// 待機分岐の腕ボタンの行。dev = 装置名(1台目は '')。errBox = 失敗の表示先。
-// レーンでは「{腕}({装置名} へ)」と書き、どの装置へ効くかを明示する
+// 待機分岐の選択肢ボタンの行。dev = 装置名(1台目は '')。errBox = 失敗の表示先。
+// レーンでは「{選択肢}({装置名} へ)」と書き、どの装置へ効くかを明示する
 function armRow(d, dev, errBox) {
   const names = d.arm_names || [];
   const row = el('div', 'row');
   for (let i = 0; i < (d.await_arms || names.length); i++) {
-    const label = (names[i] || `腕${i + 1}`) + (dev ? `(${dev} へ)` : '');
+    const label = (names[i] || `選択肢${i + 1}`) + (dev ? `(${dev} へ)` : '');
     const b = el('button', 'primary', label);
     b.onclick = async () => {
       const r = await api('/api/select', 'POST', {arm: i, dev});
@@ -2817,10 +2831,6 @@ function buildLane(d) {
   lane.proc = document.createElement('select');
   lane.proc.className = 'lproc';
   procLab.append(lane.proc);
-  lane.pushWarn = el('span', 'chip warn', '未転送の変更');
-  lane.pushWarn.title = 'この手順は実機の中身と違います(未転送か編集ずみ)。'
-    + '次の開始のときに自動で送ります';
-  lane.pushWarn.style.display = 'none';
   const loopsLab = el('label', null, '周回 ');
   lane.loops = document.createElement('input');
   lane.loops.className = 'lloops';
@@ -2836,14 +2846,14 @@ function buildLane(d) {
   lane.resume = document.createElement('select');
   lane.resume.className = 'lresume';
   resLab.append(lane.resume);
-  row1.append(procLab, lane.pushWarn, loopsLab, resLab);
+  row1.append(procLab, loopsLab, resLab);
   card.append(row1);
   const row2 = el('div', 'row');
   lane.run1 = el('button', 'primary', '▶ 1回実行');
   lane.run = el('button', 'primary', '⟳ 周回実行');
   lane.stopg = el('button', null, '◼ 今の周で止める');
   lane.stopi = el('button', 'danger', '⏹ 今すぐ止める');
-  row2.append(lane.run1, lane.run, lane.stopg, lane.stopi);
+  row2.append(lane.run1, lane.run, el('span', 'sep-v'), lane.stopg, lane.stopi);
   card.append(row2);
   lane.nowplaying = el('div');
   lane.actmsg = el('div');
@@ -3080,12 +3090,12 @@ function updateLane(lane, d) {
   lane.stopi.disabled = !busy;
   lane.stopi.title = `${lane.name} だけ、その場で全ボタンを離して止めます`
     + '(相方は止めません)';
-  // 「未転送の変更」チップ: いま図に出している手順が実機の中身と違う
+  // 実行時に自動転送されるので、装置側の版のずれを事前に知らせる意味は無い
+  // (実行すれば常に PC の今の版が走る)。ただし実行中の手順が転送後に
+  // 編集された場合だけは「動いているのはどの版か」が実機と食い違うので
+  // 知らせる(1台時の nowplaying と同じ)
   const shown = runName || lane.proc.value;
   const sp = state.procedures.find(p => p.name === shown);
-  lane.pushWarn.style.display =
-    (sp && sp.hash && d.listing && d.listing[shown] !== sp.hash) ? '' : 'none';
-  // 実行中の手順が転送後に編集された警告(1台時の nowplaying と同じ)
   lane.nowplaying.textContent = '';
   if (runName && sp && sp.hash && d.listing
       && d.listing[runName] && d.listing[runName] !== sp.hash) {
@@ -3194,7 +3204,7 @@ function updateLane(lane, d) {
     // 経過秒だけを書き換える(DOM は作り直さない)
     const sec = Math.max(0, Math.round(
       (Date.now() - (lane.parkedAt || Date.now())) / 1000));
-    const armName = armLabels()[c.arm | 0] || `腕${(c.arm | 0) + 1}`;
+    const armName = armLabels()[c.arm | 0] || `選択肢${(c.arm | 0) + 1}`;
     lane.waitMsg.textContent =
       `相方待ち ${sec}秒 — 相方が同じ待機分岐に着いたら、自動で`
       + `「${armName}」を選んで両方いっしょに進みます(異常ではありません)`;
@@ -3331,7 +3341,7 @@ function laneByName(name) {
   return d ? laneMap.get(d.name) : null;
 }
 
-// 「進む腕」の名前。レーンの手順の最初の待機分岐から取る(無ければ相方から)
+// 「進む先」の名前。レーンの手順の最初の待機分岐から取る(無ければ相方から)
 function armLabels() {
   for (const d of state.devices || []) {
     const lane = laneMap.get(d.name);
@@ -3480,8 +3490,9 @@ async function applyFormation(f) {
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
   loadedFormation = f.name;
-  show('formmsg', 'ok', `「${f.name}」を割り当てに反映しました。開始はしていません`
-       + '(連結バーの ▶ で開始)');
+  // 成功は文で言わない(原則 §3・§5)。運転席が連結バーへ切り替わり、
+  // 名前チップ(cformation)が出ること自体で「反映した」が伝わる
+  show('formmsg', '', '');
   refresh();
 }
 
@@ -3502,9 +3513,19 @@ function renderFormations() {
     return;
   }
   for (const f of forms) {
+    // 行アイコン作法(手順・部品・装置と同型): ドットは無し(格納庫に
+    // 生きた状態を並べない §3 と同じ理由で、プリセットにも進行状態は無い)
     const row = el('div', 'proc devrow');
-    row.append(el('span', 'dot'), el('b', null, f.name),
-               el('span', 'rowops'));
+    const rops = el('span', 'rowops');
+    rops.append(
+      rowIcon('pencil', 'このプリセットの名前を変える', false, () => renFormation(f.name)),
+      rowIcon('trash', 'このプリセットを削除', true, async () => {
+        if (!confirm(`プリセット「${f.name}」を消します。よろしいですか?`)) return;
+        await api('/api/formation_delete', 'POST', {name: f.name});
+        if (loadedFormation === f.name) loadedFormation = '';
+        refresh();
+      }));
+    row.append(el('b', null, f.name), rops);
     const meta = el('div', 'meta');
     const parts = (f.devices || []).map(fd => {
       const d = formationDevice(fd);
@@ -3515,27 +3536,27 @@ function renderFormations() {
     const arms = armLabels();
     meta.append(el('span', null,
       (f.linked ? '連結 ・ ' : '') + parts.join(' ＋ ')
-      + (f.auto_join ? ` ・ 合流: ${arms[f.arm] || `腕${(f.arm | 0) + 1}`}`
+      + (f.auto_join ? ` ・ 合流: ${arms[f.arm] || `選択肢${(f.arm | 0) + 1}`}`
                      : ' ・ 合流: 手動')));
     const use = el('button', 'small', '呼び出す');
     use.title = '割り当て(連結・手順・周回・合流)をこの内容にします。開始はしません';
     use.onclick = () => applyFormation(f);
     meta.append(use);
-    const del = el('button', 'small', '削除');
-    del.title = 'このプリセットを消します(手順や記録は消えません)';
-    del.onclick = async () => {
-      if (!confirm(`プリセット「${f.name}」を消します。よろしいですか?`)) return;
-      await api('/api/formation_delete', 'POST', {name: f.name});
-      if (loadedFormation === f.name) loadedFormation = '';
-      refresh();
-    };
-    meta.append(del);
     row.append(meta);
     box.append(row);
   }
 }
+async function renFormation(old) {
+  const name = prompt(`「${old}」の新しい名前`, old);
+  if (!name || name === old) return;
+  const r = await api('/api/formation_rename', 'POST', {old, new: name});
+  if (r.error) { show('formmsg', 'err', r.error); return; }
+  if (loadedFormation === old) loadedFormation = name;
+  show('formmsg', 'ok', `「${old}」を「${name}」に変えました`);
+  refresh();
+}
 
-// いまの割り当て(連結・手順・周回・開始位置・合流の腕)をプリセットの保存形に
+// いまの割り当て(連結・手順・周回・開始位置・合流の選択肢)をプリセットの保存形に
 // まとめる(新規保存・上書き保存の両方から使う)
 function buildFormationData() {
   const c = cpl() || {};
@@ -3552,26 +3573,23 @@ function buildFormationData() {
   return data;
 }
 
-document.getElementById('formsave').onclick = async () => {
-  const name = prompt('プリセットの名前', loadedFormation || '');
-  if (!name) return;
+// 保存の作法(原則 §4): プリセット未使用時は名前を聞いて新規保存、
+// 使用中は同名で上書き。成功はバッジの点滅で伝える(文は出さない)
+document.getElementById('cformsave').onclick = async () => {
   const data = buildFormationData();
   if (!data) return;
-  const r = await api('/api/formation_save', 'POST', {name, data});
-  if (r.error) { show('formmsg', 'err', r.error); return; }
-  loadedFormation = name;
-  show('formmsg', 'ok', `「${name}」として残しました`);
-  refresh();
-};
-
-document.getElementById('cformoverwrite').onclick = async () => {
-  const name = loadedFormation;
-  if (!name) return;
-  const data = buildFormationData();
-  if (!data) return;
+  let name = loadedFormation;
+  if (!name) {
+    name = prompt('プリセットの名前');
+    if (!name) return;
+  }
   const r = await api('/api/formation_save', 'POST', {name, data});
   if (r.error) { show('cactmsg', 'err', r.error); return; }
-  show('cactmsg', 'ok', `「${name}」に上書き保存しました`);
+  loadedFormation = name;
+  const info = document.getElementById('cforminfo');
+  info.textContent = '保存済み'; info.className = 'chip ok';
+  info.style.display = '';
+  flashChip('cforminfo');
   refresh();
 };
 
@@ -3598,22 +3616,24 @@ function renderCoupling() {
   if (!c.on) return;
   const run = c.run || {};
   const active = !!run.active;
-  // プリセット名チップ(手順エディタの現在名表示と同じ作法)+
-  // 割り当てがずれたときだけ「未保存の変更」チップと「上書き保存」を出す。
-  // プリセットを使っていないときはどちらも出さない
+  // プリセット名チップ+保存状態バッジ(手順エディタ・部品エディタと同型。
+  // 原則 §4)。未使用時はどちらも出さない(保存済み/未保存の概念が無い)
   const fchip = document.getElementById('cformation');
-  const fdirty = document.getElementById('cformdirty');
-  const foverwrite = document.getElementById('cformoverwrite');
+  const finfo = document.getElementById('cforminfo');
+  const fsave = document.getElementById('cformsave');
   if (loadedFormation) {
     fchip.style.display = '';
     fchip.textContent = loadedFormation;
     const dirty = formationDirty();
-    fdirty.style.display = dirty ? '' : 'none';
-    foverwrite.style.display = dirty ? '' : 'none';
+    finfo.style.display = '';
+    finfo.textContent = dirty ? '未保存の変更' : '保存済み';
+    finfo.className = 'chip' + (dirty ? ' warn' : ' ok');
+    fsave.title = 'いまの割り当てを、このプリセットに同じ名前で保存し直します';
   } else {
     fchip.style.display = 'none';
-    fdirty.style.display = 'none';
-    foverwrite.style.display = 'none';
+    finfo.style.display = 'none';
+    fsave.title = 'いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)に'
+                 + '名前を付けて保存します';
   }
   // 実行系ボタン
   const someBusy = devs.slice(0, 2).some(d => !d.error
@@ -3640,7 +3660,7 @@ function renderCoupling() {
   if (armSel.dataset.key !== armKey) {
     armSel.dataset.key = armKey;
     armSel.textContent = '';
-    (arms.length ? arms : ['腕1', '腕2']).forEach((a, i) =>
+    (arms.length ? arms : ['選択肢1', '選択肢2']).forEach((a, i) =>
       armSel.append(new Option(a, String(i))));
   }
   if (armSel !== document.activeElement) armSel.value = String(c.arm | 0);
@@ -3655,7 +3675,7 @@ function renderCoupling() {
   if (both.dataset.key !== bKey) {
     both.dataset.key = bKey;
     both.textContent = '';
-    (arms.length ? arms : ['腕1', '腕2']).forEach((a, i) => {
+    (arms.length ? arms : ['選択肢1', '選択肢2']).forEach((a, i) => {
       const b = el('button', 'small', `${a}(両方へ)`);
       b.disabled = !ready;
       b.title = ready ? '両方へ同時に SELECT を送ります'
@@ -3898,7 +3918,7 @@ function deleteBtn(path) {
   return b;
 }
 // ============ ブロックの D&D(入れ子対応) ============
-// つまみ(⠿)を掴んで任意の .blocks(トップ・くり返しの中・分岐の腕の中)へ
+// つまみ(⠿)を掴んで任意の .blocks(トップ・くり返しの中・分岐の選択肢の中)へ
 // 挿入できる。挿入位置は drop-line でリアルタイム表示。パレットからの
 // ドラッグも同じ仕組みで、新しいブロックをその場に作る
 let bDrag = null;   // {path, elem} | {palette: type} 。開始判定前は pending
@@ -4079,7 +4099,7 @@ function renderBlocks(arr, prefix, parent) {
           wrap.append(renderBlocks(arm, path.concat([ai]), n));
           nest.append(wrap);
         });
-      } else {   // wait_branch(名前つきの腕)
+      } else {   // wait_branch(名前つきの選択肢)
         Object.keys(n.arms || {}).forEach((label, ai) => {
           const wrap = el('div', 'arm');
           wrap.append(el('div', 't', `「${label}」を選んだとき`));
@@ -4296,12 +4316,12 @@ function renderProps() {
         });
         n.arms = next;
       });
-      box.append(field('選べる腕の名前(カンマ区切り・最大4つ)', t));
+      box.append(field('選択肢の名前(カンマ区切り・最大4つ)', t));
       const to = el('input'); to.type = 'number'; to.min = 0; to.max = 999999;
       to.value = n.timeout_frames || 0;
       bindInput(to, () => { n.timeout_frames = parseInt(to.value, 10) || 0; });
       box.append(field('待つ上限(フレーム。0 = 無期限)', to));
-      // 上限に達したときの動き(0=中断、1..n=その腕へ)。放置運転の保険
+      // 上限に達したときの動き(0=中断、1..n=その選択肢へ)。放置運転の保険
       const ot = document.createElement('select');
       ot.append(new Option('中断する', '0'));
       Object.keys(n.arms || {}).forEach((l, i) =>
@@ -4311,7 +4331,7 @@ function renderProps() {
       bindChange(ot, () => { n.on_timeout = parseInt(ot.value, 10) || 0; });
       box.append(field('上限に達したら', ot));
       box.append(el('div', 'hint',
-        'ここで止まり、画面で腕を選ぶと続きが走ります'
+        'ここで止まり、画面で選択肢を選ぶと続きが走ります'
         + '(くり返しの中には置けません)。上限は放置運転で永久に'
         + '待ち続けないための保険です'));
       break;
@@ -4326,9 +4346,9 @@ function renderProps() {
         while (arms.length > k) arms.pop();
         n.arms = arms;
       });
-      box.append(field('何周ごとに切り替えるか(腕の数)', i));
+      box.append(field('何周ごとに切り替えるか(選択肢の数)', i));
       box.append(el('div', 'hint',
-        'くり返しの直下に置きます。回数は腕の数で割り切れる必要があります'));
+        'くり返しの直下に置きます。回数は選択肢の数で割り切れる必要があります'));
       break;
     }
   }
