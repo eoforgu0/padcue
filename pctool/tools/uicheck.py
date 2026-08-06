@@ -396,27 +396,38 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_dev_find_and_connect():
         """「探す」で装置を見つけて接続先にできる(装置行の詳細から効く。
-        旧「探す」検査群の移行先その2)。結果メッセージは×で閉じられる
-        (旧 t_msg_close の移行先)。
+        旧「探す」検査群の移行先その2)。変更した場合は欄の値が変わるだけで
+        文は出ない(原則 §5)。維持した場合の文(見た目に変化が無いため残す)
+        は×で閉じられる(旧 t_msg_close の移行先)。
         """
         row = open_dev_row(page)
         row.locator(".devhost").fill("10.255.255.1")
         row.locator("button", has_text="接続").click()
         wait_state(page, "未接続", timeout_ms=12000)
         msg0 = text(page, "#lanes .lane .lmsg")
-        assert "装置パネルで接続先を確認してください" in msg0, \
-            f"対処の場所へ誘導していない: {msg0!r}"
+        assert msg0, "未接続の理由が消えている"
+        assert "装置パネルで" not in msg0, \
+            f"削ったはずの導線文が残っている(結論はチップ、対処は装置行が" \
+            f"自動で開いて赤くなる導線に統一済み): {msg0!r}"
+        before = row.locator(".devhost").input_value()
+        row.locator("button", has_text="探す").click()
+        for _ in range(30):
+            page.wait_for_timeout(500)
+            if row.locator(".devhost").input_value() != before:
+                break
+        got = row.locator(".devhost").input_value()
+        assert got and got != before, f"接続先が置き換わっていない: {got!r}"
+        assert row.locator(".devconnmsg").inner_text() == "", \
+            "接続先を変えたのに成功文が残っている(欄の値で伝わるはず)"
+        wait_state(page, "待機中", timeout_ms=15000)
+        # もう一度「探す」→ 今度は変わらない(維持)ので文が出て、×で閉じられる
         row.locator("button", has_text="探す").click()
         for _ in range(30):
             page.wait_for_timeout(500)
             if row.locator(".devconnmsg").inner_text():
                 break
         msg = row.locator(".devconnmsg").inner_text()
-        assert "にしました" in msg or "でつながっています" in msg, \
-            f"探索が失敗した: {msg!r}"
-        got = row.locator(".devhost").input_value()
-        assert got and got != "10.255.255.1", f"接続先が置き換わっていない: {got!r}"
-        wait_state(page, "待機中", timeout_ms=15000)
+        assert "でつながっています" in msg, f"維持したときの文が出ない: {msg!r}"
         row.locator(".devconnmsg .msgclose").click()
         page.wait_for_timeout(150)
         assert row.locator(".devconnmsg").inner_text() == "", "× で消えない"
@@ -455,20 +466,30 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert opts == ["―(先頭から)", "移動", "戦闘", "回収"], opts
     c.check("開始ラベルにラベルが並ぶ", t_resume_options)
 
-    def t_message_persists():
+    def t_resume_starts_from_label():
+        """開始ラベルを選ぶと、その起点から再生される(先頭からではない)。
+        旧来は文言(「〜から実行しています」)で確認していたが、その文は
+        原則 §5(迷ったら出さない)に基づき削ったので、再生位置の起点
+        フレームそのものを見る(uicheck の追従)。「移動」は手順の先頭
+        (フレーム0)と区別が付かないため、頭出しの効く「戦闘」で見る
+        """
         l = lane(page)
-        l.locator(".lresume").select_option(label="移動")
+        l.locator(".lresume").select_option(label="戦闘")
         l.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
-        first = text(page, "#lanes .lane .lactmsg")
-        assert "実行しています" in first, f"実行結果が出ていない: {first!r}"
-        page.wait_for_timeout(2600)      # 状態更新が2回以上走る間
-        assert text(page, "#lanes .lane .lactmsg") == first, \
-            "操作の結果メッセージが状態更新で消えている"
+        off = page.evaluate(
+            "() => { const l = [...laneMap.values()][0]; return l && l.runOffset; }")
+        assert off and off > 0, \
+            f"開始ラベルの起点フレームが0のまま(先頭と区別できない): {off!r}"
+        page.wait_for_timeout(2600)      # 状態更新が2回以上走る間、位置が動かないこと
+        off2 = page.evaluate(
+            "() => { const l = [...laneMap.values()][0]; return l && l.runOffset; }")
+        assert off2 == off, "起点フレームが状態更新のたびに変わってしまう"
         l.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         l.locator(".lresume").select_option(label="―(先頭から)")
-    c.check("操作の結果メッセージが消えない", t_message_persists)
+    c.check("開始ラベルどおりの起点から再生され、状態更新でも変わらない",
+            t_resume_starts_from_label)
 
     def t_run_and_monitor():
         l = lane(page)
@@ -751,15 +772,18 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("開始ラベル: ラベルが無い手順では押せない", t_resume_hint_when_no_labels)
 
     def t_resume_from():
-        # 「戦闘」はくり返しの直前のラベル(再開点がカウンタ初期化を指す位置)
+        # 「戦闘」はくり返しの直前のラベル(再開点がカウンタ初期化を指す位置)。
+        # 受理の文言は削ったので、予定量(total_frames)が手順全体(309F、
+        # 次の検査のコメント参照)より短いこと(=先頭からではなく戦闘から
+        # 始まっていること)で受理を確認する(uicheck の追従)
         l = lane(page)
         l.locator(".lresume").select_option("戦闘")
         l.locator(".lloops").fill("1")
         l.locator("button", has_text="周回実行").click()
-        page.wait_for_timeout(700)
-        msg = text(page, "#lanes .lane .lactmsg")
-        assert "から実行" in msg, f"再開実行が受け付けられていない: {msg!r}"
         wait_state(page, "実行中")
+        total = page.evaluate("() => state.devices[0].total_frames")
+        assert total and total < 309, \
+            f"予定量が手順全体のまま(先頭から実行している疑い): {total}"
         l.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
     c.check("くり返し直前のラベルから実行できる", t_resume_from)
@@ -2026,8 +2050,6 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "未接続でも停止が押せる"
         msg = text(page, "#lanes .lane .lmsg")
         assert "127.0.0.1" in msg, f"どこに繋げなかったのか分からない: {msg!r}"
-        assert "装置パネルで接続先を確認してください" in msg, \
-            f"対処の場所へ誘導していない: {msg!r}"
         assert not any(w in msg for w in ("Errno", "failed", "refused")), \
             f"生のエラーが出ている: {msg!r}"
         # 手動で閉じたら、同じ異常が続く間は再度開かない
@@ -2364,9 +2386,9 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         d2.stop()
         wait_lane_state(1, "未接続", timeout_ms=15000)
         # 対処(接続先の確認・探す)は装置パネル側にあるので、レーンには
-        # そこへの導線(結論)だけが出る(原則 §1)
-        assert "装置パネルで接続先を確認してください" in lane(1).inner_text(), \
-            "未接続の復旧導線(装置パネルへの誘導)が出ない"
+        # 結論(チップ「未接続」)だけが出る(原則 §1)。装置行が自動で
+        # 開いて赤くなる導線は t_disconnected が見ている
+        assert lane_chip(1) == "未接続", "レーンのチップが未接続にならない"
         assert lane(1).locator("button", has_text="1回実行") \
             .is_disabled(), "未接続なのに実行が押せる"
         assert lane_chip(0) == "待機中", "2P の未接続が 1P に波及"
@@ -2542,8 +2564,15 @@ def run_coupling(c: Checker, page, proj: Project,
             "  d => d.running || d.awaiting)", timeout=10000)
         badges = [lane(i).locator(".runchip").inner_text() for i in (0, 1)]
         assert all("連結して開始" in b for b in badges), badges
-        msg = page.locator("#cactmsg").inner_text()
-        assert "開始ズレ" in msg and "ms" in msg, f"開始ズレの実測が出ない: {msg}"
+        # 成功文は出ない(#chint の「前回の開始ズレ」が実測で更新される)
+        assert page.locator("#cactmsg").inner_text().strip() == "", \
+            "まとめて開始の成功文が残っている(#chint で伝わるはず)"
+        page.wait_for_function(
+            "() => document.getElementById('chint')"
+            ".textContent.includes('開始ズレ')", timeout=8000)
+        hint = page.locator("#chint").inner_text()
+        assert "開始ズレ" in hint and "ms" in hint, \
+            f"開始ズレの実測が出ない: {hint}"
         wait_idle()          # 人が選ばなくても自動合流で完走する
     c.check("まとめて1回実行 → 連結バッジ・開始ズレms・自動合流で完走",
             t_pair_run_and_auto_join)
@@ -2552,15 +2581,16 @@ def run_coupling(c: Checker, page, proj: Project,
         set_lane_proc(1, "選んで進む(遅)")
         page.wait_for_timeout(300)
         page.click("#crun1")
-        # 早い 1P が先に駐機 → 青の「相方待ち」(黄や赤ではない)
+        # 早い 1P が先に駐機 → 青の「相方待ち」(黄や赤ではない)。
+        # 毎秒の待ち文は削った(waitMsg 廃止)ので、チップだけで見る
         page.wait_for_function(
             "() => {"
             "  const l1 = document.querySelectorAll('#lanes .lane')[0];"
-            "  const m = l1.querySelector('.lawait .msg.wait');"
-            "  return m && m.textContent.includes('相方待ち'); }",
+            "  const ch = l1 && l1.querySelector('.chip:not(.runchip)');"
+            "  return ch && ch.textContent === '相方待ち'; }",
             timeout=10000)
-        assert lane(0).locator(".chip:not(.runchip)").first.inner_text() \
-            == "相方待ち", "レーンの状態表示が相方待ちにならない"
+        assert lane(0).locator(".lawait .msg.wait").count() == 0, \
+            "廃止したはずの毎秒の相方待ち文が残っている"
         assert lane(0).locator(".lawait .msg.warn").count() == 0, \
             "正常な相方待ちに黄色が使われている"
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
@@ -2761,14 +2791,14 @@ def run_coupling(c: Checker, page, proj: Project,
             t_formation_roundtrip)
 
     def t_f10_starts_together():
-        # F10 = 現在の盤面のままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)
+        # F10 = 現在の盤面のままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)。
+        # 成功文は出ない(両装置が動き出すこと自体で伝わる。原則 §5)
         page.keyboard.press("F10")
-        page.wait_for_function(
-            "() => document.querySelector('#cactmsg')"
-            ".textContent.includes('開始ズレ')", timeout=8000)
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
             "  d => d.running || d.awaiting)", timeout=10000)
+        assert page.locator("#cactmsg").inner_text().strip() == "", \
+            "まとめて開始の成功文が残っている"
         wait_idle()
     c.check("F10 で現在の盤面をまとめて開始", t_f10_starts_together)
 

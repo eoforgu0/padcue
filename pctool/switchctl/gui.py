@@ -2144,16 +2144,19 @@ function wireDevRow(row) {
     showIn(row.connmsg, '', '探しています…');
     const r = await api('/api/discover', 'POST', {dev: row.name});
     row.find.disabled = false;
-    showIn(row.connmsg, r.error ? 'err' : 'ok', r.error
-           || (r.kept ? `いまの接続先(${r.host})でつながっています`
-                      : `接続先を ${r.host} にしました`));
+    // 変更した場合は欄の値が変わるので文は出さない。維持した場合は見た目に
+    // 変化が無いので、その旨だけ残す(原則 §5)
+    if (r.error) showIn(row.connmsg, 'err', r.error);
+    else if (r.kept) {
+      showIn(row.connmsg, 'ok', `いまの接続先(${r.host})でつながっています`);
+    } else showIn(row.connmsg, '', '');
     refresh();
   };
   row.conn.onclick = async () => {
     const r = await api('/api/device', 'POST',
                         {host: row.host.value.trim(), dev: row.name});
-    showIn(row.connmsg, r.error ? 'err' : 'ok',
-           r.error || `接続先を ${r.host} にしました`);
+    // 成功文は出さない(欄の値が変わるのが見える)
+    showIn(row.connmsg, r.error ? 'err' : '', r.error || '');
     refresh();
   };
   row.rm.onclick = async () => {
@@ -2410,13 +2413,15 @@ function statusRows(d, np) {
   return rows;
 }
 
-// 実行を受け付けない状態の理由(押して失敗する前にボタン側で出す)
+// 実行を受け付けない状態の理由(押して失敗する前にボタン側で出す)。
+// BOOT・WIFI_CONNECTING は状態チップ(起動中・WiFi再接続中)が同じことを
+// 言っているので出さない(原則 §5: 迷ったら出さない)。ERROR だけは
+// 「異常の見逃し防止」のための確認ラッチ(自動で消えず、押して初めて
+// 解除される)なので、理由をここでも明示し続ける
 function blockedReason(d) {
   return {
-    ERROR: '異常が起きています。「異常を解除」を押してください',
-    OTA: 'ファーム更新中です。終わるまで待ってください',
-    BOOT: '起動中です。少し待ってください',
-    WIFI_CONNECTING: 'WiFi につなぎ直しています。少し待ってください',
+    ERROR: '「異常を解除」を押すまで実行できません',
+    OTA: 'ファーム更新中です。抜かないでください',
   }[d.state] || '';
 }
 
@@ -2660,9 +2665,6 @@ async function laneRun(lane, loops) {
   showIn(lane.actmsg, '', '');       // 前の操作の結果を残さない
   const r = await api('/api/run', 'POST', body);
   if (r.error) showIn(lane.actmsg, 'err', r.error);
-  else if (at && at !== '先頭') {
-    showIn(lane.actmsg, 'ok', `「${at}」から実行しています`);
-  }
   refresh();
 }
 
@@ -2768,12 +2770,11 @@ function updateLane(lane, d) {
     // ここでは結論と導線だけ(原則 §1)
     lane.chip.className = 'chip err';
     lane.chip.textContent = '未接続';
-    showIn(lane.msg, 'err',
-           d.error + ' — 装置パネルで接続先を確認してください');
+    showIn(lane.msg, 'err', d.error);
     lane.tlprog.textContent = '';
     for (const b of [lane.run1, lane.run, lane.stopg, lane.stopi]) {
       b.disabled = true;
-      b.title = 'つながっていないので送れません';
+      b.title = '';
     }
     lane.awaitbox.textContent = '';
     return;
@@ -2891,7 +2892,6 @@ function updateLane(lane, d) {
   if (lane.awaitKey !== aKey) {
     lane.awaitKey = aKey;
     lane.awaitbox.textContent = '';
-    lane.waitMsg = null;
     if (awaiting) {
       if (autoJoinLive) {
         if (late) {
@@ -2899,19 +2899,13 @@ function updateLane(lane, d) {
             `相方(${c.run.late.partner})が来ません`
             + '(このプリセットのいつもの待ちを超えました)。相方のレーンの状態を'
             + '確かめてください'));
-        } else {
-          lane.waitMsg = el('div', 'msg wait', '');
-          lane.awaitbox.append(lane.waitMsg);
         }
+        // 順調なときは何も出さない(チップ「相方待ち」で足りる。原則 §5)
       } else if (inRun) {
-        lane.awaitbox.append(el('div', 'msg warn',
-          '待機分岐で止まっています。連結バーの「選択肢を両方へ同時に送る」で'
-          + '両方まとめて進められます'));
+        // 連結中だが自動合流オフ(本人が手動にした)。連結バーの
+        // 「選択肢を両方へ同時に送る」が見えているので導線文は出さない
       } else {
-        lane.awaitbox.append(
-          el('div', 'msg warn',
-             '待機分岐で止まっています。進む先を選んでください'),
-          armRow(d, lane.name, lane.awaitbox));
+        lane.awaitbox.append(armRow(d, lane.name, lane.awaitbox));
       }
       if (inRun) {
         // 連結中の単独 SELECT は合流の対応がずれるので、畳んで警告つきで置く
@@ -2931,14 +2925,6 @@ function updateLane(lane, d) {
       lane.awaitbox.append(el('div', 'msg ok',
         `そろって進みました(ズレ ${c.run.last_join.skew_ms ?? '?'}ms)`));
     }
-  }
-  if (lane.waitMsg) {
-    // 経過秒だけを書き換える(DOM は作り直さない)
-    const sec = Math.max(0, Math.round(
-      (Date.now() - (lane.parkedAt || Date.now())) / 1000));
-    const armName = armLabels()[c.arm | 0] || `選択肢${(c.arm | 0) + 1}`;
-    lane.waitMsg.textContent =
-      `相方待ち ${sec}秒(そろったら「${armName}」で自動合流)`;
   }
   // 「実行中のまま戻らない」の自動復旧(1台時と同じ規則を装置ごとに)
   if (stateBusy && !running && !awaiting) lane.stuckPolls++;
@@ -3104,10 +3090,10 @@ async function coupleRun(once) {
   if (loadedFormation && !formationDirty()) body.formation = loadedFormation;
   const r = await api('/api/couple_run', 'POST', body);
   if (r.error) { show('cactmsg', 'err', r.error); return; }
+  // 成功文は出さない(#chint の「前回の開始ズレ」が同じ値に更新される)。
+  // 警告があるときだけ出す(原則 §5)
   const w = (r.warnings || []).join(' / ');
-  show('cactmsg', w ? 'warn' : 'ok',
-       `まとめて開始しました(開始ズレ ${r.skew_ms ?? '?'}ms)`
-       + (w ? ` — ${w}` : ''));
+  if (w) show('cactmsg', 'warn', w);
   refresh();
 }
 
@@ -3499,8 +3485,8 @@ document.getElementById('crun1').onclick = () => coupleRun(true);
 document.getElementById('crun').onclick = () => coupleRun(false);
 document.getElementById('cstopg').onclick = async () => {
   const r = await api('/api/stop_both', 'POST', {mode: 'graceful'});
-  show('cactmsg', r.error ? 'err' : 'ok',
-       r.error || '両方とも、今の周が終わったら止まります');
+  // 受理の成功文は出さない(両レーンの停止ボタンが予約中表示に変わる)
+  show('cactmsg', r.error ? 'err' : '', r.error || '');
   refresh();
 };
 document.getElementById('cstopi').onclick = async () => {
@@ -5320,8 +5306,8 @@ document.getElementById('rec').onclick = async () => {
     return;
   }
   save.style.display = '';
-  show('manualmsg', 'ok',
-       `${r.frames} フレーム記録しました。「部品として保存」で残せます`);
+  // 尾の導線は削る(「部品として保存」ボタンが現れるのが見える。原則 §5)
+  show('manualmsg', 'ok', `${r.frames} フレーム記録しました`);
 };
 document.getElementById('recsave').onclick = async () => {
   const name = prompt('記録を保存する部品の名前');
@@ -5332,8 +5318,9 @@ document.getElementById('recsave').onclick = async () => {
   document.getElementById('rec').textContent = '● 記録を開始';
   document.getElementById('recchip').textContent = '';
   document.getElementById('recsave').style.display = 'none';
-  show('manualmsg', 'ok', `部品「${r.name}」として保存しました(${r.frames} フレーム)。`
-       + '「部品を編集」タブで細かく直せます');
+  // 尾の導線は削る(「部品を編集」タブは常設で、いつでも行ける。原則 §5)
+  show('manualmsg', 'ok',
+       `部品「${r.name}」として保存しました(${r.frames} フレーム)`);
 };
 
 // ============ 更新ループ ============
