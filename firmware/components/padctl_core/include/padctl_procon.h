@@ -51,11 +51,16 @@ typedef struct {
     uint32_t out_reports;        // 受信した出力レポート数
     // サブコマンド 0x01(ペアリング)の引数先頭。本体(ホスト)の識別子が
     // 入っていないかの調査用(計画 §0.1: 取れたら常時表示、取れなければ
-    // 物理記名で確定)。BT なら相手 MAC が入る場所だが、有線 USB では
-    // 何が来るかを実機で一度確かめる
+    // 物理記名で確定)。実測で構造が判明: arg[0]=フェーズ(01=新規ペアリング
+    // 開始/04=既知本体の記録手渡し)、arg[1..6]=本体 BT MAC(LE)
     uint8_t host_info[8];
     uint8_t host_info_len;
     bool host_info_seen;
+    // ペアリングの可観測化(2026-08-06 の「登録未完で全入力無視」障害の教訓。
+    // これが無いと breadcrumb=完全・カウンタ健全のまま操作だけが効かない
+    // 状態を外から切り分けられない)
+    uint8_t pair_reqs;        // 0x01 を受けた累計(255 で飽和)
+    uint8_t pair_last_step;   // 直近の arg[0](0 = 未受信)
     padctl_procon_cb_t cb;
 } padctl_procon_t;
 

@@ -157,6 +157,16 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
     return 0;
 }
 
+// HOST_INFO(ペアリング引数の控え)のコア間受け渡し。
+// 書き手 = usb_task(コア1、下の set_report_cb)、読み手 = supervisor(コア0)。
+// s_procon の中身を直接読ませると、コピー中に次の 0x01 が上書きする競合が
+// あった(0x01 が 100ms 間隔で洪水する状況で実際に起きうる)ため、
+// ここでスピンロック越しの控えに移してから渡す
+static portMUX_TYPE s_hi_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint8_t s_hi[8];
+static uint8_t s_hi_len;
+static bool s_hi_seen;
+
 // ホスト→デバイス。OUT エンドポイントのデータもこのコールバックで届く
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type, const uint8_t *buffer,
@@ -165,6 +175,15 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
     if (s_mode != APP_USB_MODE_PROCON) return;
     uint8_t resp[PADCTL_PROCON_REPORT_SIZE];
     size_t n = padctl_procon_handle_output(&s_procon, buffer, bufsize, resp);
+    if (s_procon.host_info_seen) {
+        // このタスクだけが s_procon に触る(競合しない)。ロックは控えの側
+        taskENTER_CRITICAL(&s_hi_mux);
+        memcpy(s_hi, s_procon.host_info, sizeof(s_hi));
+        s_hi_len = s_procon.host_info_len;
+        s_hi_seen = true;
+        taskEXIT_CRITICAL(&s_hi_mux);
+        s_procon.host_info_seen = false;
+    }
     if (n > 0) {
         // 直接送らずキューへ積む(定期入力レポートとの競合で捨てられるのを防ぐ)
         padctl_tx_push_reply(&s_tx, resp, n);
@@ -341,16 +360,27 @@ uint32_t app_usb_get_breadcrumb(void) { return s_procon.breadcrumb; }
 bool app_usb_imu_enabled(void) { return s_procon.imu_enabled; }
 
 // ペアリング(サブコマンド 0x01)の引数先頭を1回だけ取り出す(本体識別子の
-// 調査用)。取り出したら控えは消える(同じ内容を毎周期ログに積まないため)
+// 調査用)。取り出したら控えは消える(同じ内容を毎周期ログに積まないため)。
+// supervisor(コア0)から呼ばれる。控えは usb_task がスピンロック越しに
+// 移してある(set_report_cb 参照)ので、ここは控えだけを見ればよい
 bool app_usb_take_host_info(uint8_t out[8], uint8_t *len) {
-    if (!s_procon.host_info_seen) {
-        return false;
+    bool got = false;
+    taskENTER_CRITICAL(&s_hi_mux);
+    if (s_hi_seen) {
+        memcpy(out, s_hi, 8);
+        *len = s_hi_len;
+        s_hi_seen = false;
+        got = true;
     }
-    for (int i = 0; i < 8; i++) {
-        out[i] = s_procon.host_info[i];
-    }
-    *len = s_procon.host_info_len;
-    s_procon.host_info_seen = false;
-    return true;
+    taskEXIT_CRITICAL(&s_hi_mux);
+    return got;
 }
 uint32_t app_usb_get_dropped_replies(void) { return s_tx.dropped_replies; }
+
+// ペアリングの観測値(切り分け用)。登録が完了しない本体は 0x01 を
+// 再要求し続けるため、「pair_step が 1〜2 のまま pair_reqs が増え続ける」
+// = 登録未完(入力が無視される)を PC 側から判定できる
+uint8_t app_usb_pair_reqs(void) { return s_procon.pair_reqs; }
+uint8_t app_usb_pair_step(void) { return s_procon.pair_last_step; }
+// 本体が最後に設定した入力レポートモード(0x30=通常。既定 0x3F)
+uint8_t app_usb_input_mode(void) { return s_procon.input_mode; }

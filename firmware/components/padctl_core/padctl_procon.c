@@ -146,14 +146,52 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
 
     switch (sub) {
     case 0x01: {  // ペアリング(有線でも送られてくる)
-        // 引数の先頭を控える(本体識別子の調査用。padctl_procon.h 参照)
-        pc->host_info_len = (uint8_t)(arglen > 8 ? 8 : arglen);
-        for (uint8_t k = 0; k < pc->host_info_len; k++) {
-            pc->host_info[k] = arg[k];
+        if (pc->pair_reqs < 255) pc->pair_reqs++;
+        uint8_t step = (arglen >= 1) ? arg[0] : 0x00;
+        pc->pair_last_step = step;
+        // 本体識別子の控え(padctl_procon.h 参照)は、識別子を運ぶフェーズ
+        // (0x01=新規ペアリング開始 / 0x04=既知本体の記録手渡し)のときだけ
+        // 更新する。0x02/0x03 は引数がフェーズ番号だけ(残りはゼロ埋め)
+        // なので、控えると「02+ゼロ」が識別子として記録され、どの本体でも
+        // 同じ値になって命名が壊れる(2026-08-06 レビュー)
+        if (step == 0x01 || step == 0x04) {
+            pc->host_info_len = (uint8_t)(arglen > 8 ? 8 : arglen);
+            for (uint8_t k = 0; k < pc->host_info_len; k++) {
+                pc->host_info[k] = arg[k];
+            }
+            pc->host_info_seen = true;
         }
-        pc->host_info_seen = true;
+        // フェーズ別応答。従来は全フェーズに固定 0x03 を返しており、実測で
+        // 正しいと確認済みなのは「既知本体の記録手渡し」(arg 0x04、
+        // bypass_procon_log.txt:24-25 で実機プロコンと全バイト一致)だけ
+        // だった。本体側にこの個体の登録記録が無いと、本体は新規ペアリング
+        // (arg 0x01)を送ってくるが、固定 0x03 では完了せず 100〜400ms
+        // 間隔で再要求が続き、登録未完のまま**全ての入力が無視される**
+        // (2026-08-06 に実測。自動・手動とも Switch 無反応の原因)。
+        // フェーズ 01/02 の応答形式は dekuNukem の BT 資料に従う。
+        // **実機プロコンでの実測は未実施**(採取したら突き合わせて直す)
         fill_subcmd_header(pc, r, 0x81, sub);
-        r[15] = 0x03;
+        switch (step) {
+        case 0x01:   // 本体 MAC の通知 → 自機 MAC(LE)を名乗り返す
+            r[15] = 0x01;
+            for (int i = 0; i < 6; i++) r[16 + i] = pc->mac[5 - i];
+            // r[22] 以降は資料で「記述子」とだけ記され中身は未解明。
+            // ゼロのまま返す(実測が取れたら埋める)
+            break;
+        case 0x02: {  // LTK 要求 → 16 バイトを各バイト 0xAA XOR で返す
+            r[15] = 0x02;
+            // LTK は BT 再接続用の共有鍵。有線運用では値自体に意味は無い
+            // ので、この実装では自機 MAC から決まる固定値を使う(個体で
+            // 変わり、毎回同じ = 本体側の保存と矛盾しない)
+            for (int i = 0; i < 16; i++) {
+                r[16 + i] = (uint8_t)((pc->mac[i % 6] + i) ^ 0xAA);
+            }
+            break;
+        }
+        default:     // 0x03(保存)・0x04(既知本体の記録手渡し)・その他
+            r[15] = 0x03;   // 実機プロコンの実測応答(arg 0x04)と同じ
+            break;
+        }
         return PADCTL_PROCON_REPORT_SIZE;
     }
     case 0x02: {  // デバイス情報

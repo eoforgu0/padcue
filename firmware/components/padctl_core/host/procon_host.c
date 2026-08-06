@@ -143,6 +143,20 @@ int main(void) {
             uint8_t hp[PADCTL_HIDPAD_REPORT_SIZE];
             size_t rn = padctl_hidpad_build_input(&st, hp);
             print_hex("in", hp, rn);
+        } else if (strncmp(line, "pair", 4) == 0) {
+            // ペアリングの観測値(受けた回数と直近フェーズ)
+            printf("pair %u %02x\n", (unsigned)pc.pair_reqs,
+                   pc.pair_last_step);
+        } else if (strncmp(line, "hostinfo", 8) == 0) {
+            // ペアリング引数の控え(取り出すと消える。app_usb と同じ作法)
+            if (!pc.host_info_seen) {
+                printf("none\n");
+            } else {
+                printf("hi %u ", pc.host_info_len);
+                for (int i = 0; i < 8; i++) printf("%02x", pc.host_info[i]);
+                printf("\n");
+                pc.host_info_seen = false;
+            }
         } else if (strncmp(line, "bc", 2) == 0) {
             printf("bc %08x\n", (unsigned)pc.breadcrumb);
         } else if (strncmp(line, "led", 3) == 0) {

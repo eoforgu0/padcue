@@ -10,8 +10,8 @@ import pytest
 
 from switchctl import binfmt, switchsim
 from switchctl.switchsim import (
-    ProtocolViolation, handshake_sequence, parse_input_report,
-    unpack_stick_calibration, verify_reply,
+    PAIRING_PAYLOAD, ProtocolViolation, handshake_sequence,
+    parse_input_report, unpack_stick_calibration, verify_reply,
 )
 from tests.test_hostc import CORE, find_gcc
 
@@ -123,6 +123,20 @@ class Device:
         _, val, calls = r.split()
         return int(val, 16), int(calls)
 
+    def pair(self) -> tuple[int, int]:
+        """ペアリングの観測値 (受けた回数, 直近フェーズ)。"""
+        r = self._cmd("pair")
+        _, reqs, step = r.split()
+        return int(reqs), int(step, 16)
+
+    def host_info(self) -> bytes | None:
+        """本体識別子の控え(取り出すと消える)。無ければ None。"""
+        r = self._cmd("hostinfo")
+        if r == "none":
+            return None
+        _, _n, hexs = r.split()
+        return bytes.fromhex(hexs)
+
     def close(self) -> None:
         self.proc.stdin.close()
         self.proc.wait(timeout=10)
@@ -170,6 +184,97 @@ def test_player_lights_callback(device):
     run_handshake(device)
     val, calls = device.led()
     assert (val, calls) == (0x01, 1)
+
+
+# 2026-08-06 の実測: 本体側にこの個体の登録記録が無いと、本体は新規ペアリング
+# (arg[0]=0x01 + 本体 BT MAC(LE))を送ってくる。旧実装は全フェーズに固定
+# 0x03 を返しており、これが完了しないと本体はコントローラー登録を行わず
+# **全ての入力を無視する**(自動・手動とも Switch 無反応の根因)。
+# 応答形式は dekuNukem の BT 資料に従う(実機プロコンでの実測は未採取)。
+# 実測時の Switch 2 の要求そのもの(引数先頭 8 バイト)
+PAIR_PHASE1_SWITCH2 = bytes([0x01, 0x9D, 0xF7, 0x6A, 0x6A, 0x30, 0x4C, 0x3C])
+
+
+def test_pairing_phase1_returns_own_mac(device):
+    """新規ペアリング開始(arg 0x01)に、自機 MAC(LE)を名乗り返すこと。
+
+    固定 0x03 応答では本体が同じ要求を 100〜400ms 間隔で再送し続け、
+    登録未完のまま入力が無視される(2026-08-06 の実測)。"""
+    run_handshake(device)
+    reply = device.send_output(
+        bytes([0x01, 0x00]) + bytes(8) + bytes([0x01]) + PAIR_PHASE1_SWITCH2)
+    assert reply[13] == 0x81                      # ACK(データ付き)
+    assert reply[14] == 0x01                      # サブコマンドのエコー
+    assert reply[15] == 0x01                      # フェーズのエコー
+    assert reply[16:22] == bytes(reversed(MAC))   # 自機 MAC(LE)
+
+
+def test_pairing_phase2_ltk_is_stable_and_xored(device):
+    """LTK 要求(arg 0x02)に、毎回同じ 16 バイトを 0xAA XOR で返すこと。
+
+    値が呼ぶたびに変わると、本体側の保存と食い違って再ペアリングが
+    終わらなくなる。"""
+    run_handshake(device)
+    out = bytes([0x01, 0x00]) + bytes(8) + bytes([0x01, 0x02])
+    r1 = device.send_output(out)
+    r2 = device.send_output(out)
+    assert r1[13] == 0x81 and r1[15] == 0x02
+    ltk = r1[16:32]
+    assert ltk == r2[16:32]                       # 何度でも同じ
+    expected = bytes(((MAC[i % 6] + i) & 0xFF) ^ 0xAA for i in range(16))
+    assert ltk == expected                        # 個体(MAC)から決まる
+
+
+def test_pairing_phase3_and_known_host_keep_capture_reply(device):
+    """保存(arg 0x03)と既知本体の記録手渡し(arg 0x04)は従来どおり 0x03。
+
+    0x04 への 0x03 応答は実機プロコンのキャプチャ
+    (bypass_procon_log.txt)と全バイト一致で検証済みの唯一の経路。
+    フェーズ対応の追加で壊してはならない。"""
+    run_handshake(device)
+    for phase_args in (bytes([0x03]), PAIRING_PAYLOAD):
+        reply = device.send_output(
+            bytes([0x01, 0x00]) + bytes(8) + bytes([0x01]) + phase_args)
+        assert reply[13] == 0x81
+        assert reply[15] == 0x03
+        assert reply[16] == 0x00
+
+
+def test_pairing_phase23_do_not_clobber_host_identity(device):
+    """フェーズ 0x02/0x03 は本体識別子の控えを上書きしないこと。
+
+    実機の出力レポートはゼロ埋めで届くため、0x02/0x03 まで控えると
+    識別子が「02+ゼロ」になり、どの本体でも同じ値になって命名が壊れる。"""
+    run_handshake(device)                          # 0x04 で控えが入る
+    # フェーズ 02(引数の残りはゼロ埋め=実機と同じ形)を受けても控えは不変
+    device.send_output(
+        bytes([0x01, 0x00]) + bytes(8) + bytes([0x01, 0x02]) + bytes(36))
+    device.send_output(
+        bytes([0x01, 0x00]) + bytes(8) + bytes([0x01, 0x03]) + bytes(36))
+    seen = device.host_info()
+    assert seen is not None
+    assert seen[:8] == PAIRING_PAYLOAD[:8]         # 0x04 の中身のまま
+    # 取り出した後にフェーズ 01 が来れば、新しい識別子として控え直す
+    assert device.host_info() is None
+    device.send_output(
+        bytes([0x01, 0x00]) + bytes(8) + bytes([0x01]) + PAIR_PHASE1_SWITCH2)
+    assert device.host_info() == PAIR_PHASE1_SWITCH2
+
+
+def test_pairing_counters_track_requests(device):
+    """ペアリングの回数と直近フェーズが観測できること(登録未完の検知用)。
+
+    「pair_step が 1 のまま回数だけ増える」= 本体が新規ペアリングを
+    受理せず再送している、を PC 側から切り分けられるようにする。"""
+    run_handshake(device)                          # キャプチャ経路で 1 回(0x04)
+    reqs0, step0 = device.pair()
+    assert step0 == 0x04
+    for _ in range(3):
+        device.send_output(
+            bytes([0x01, 0x00]) + bytes(8) + bytes([0x01]) + PAIR_PHASE1_SWITCH2)
+    reqs, step = device.pair()
+    assert reqs == reqs0 + 3
+    assert step == 0x01
 
 
 def test_stick_calibration_is_linear(device):

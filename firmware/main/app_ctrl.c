@@ -347,6 +347,13 @@ static int cmd_status(int sock) {
                           app_engine_stop_graceful_armed());
     cJSON_AddNumberToObject(j, "await_arms", app_engine_await_arm_count());
     cJSON_AddNumberToObject(j, "await_gen", app_engine_await_gen());
+    // ペアリング・入力モード・手動操作の可観測化(2026-08-06 の教訓:
+    // 「ハンドシェイク完全・カウンタ健全なのに本体が入力を無視する」状態
+    // (=コントローラー登録の未完)を外から切り分けられなかった)
+    cJSON_AddNumberToObject(j, "pair_reqs", app_usb_pair_reqs());
+    cJSON_AddNumberToObject(j, "pair_step", app_usb_pair_step());
+    cJSON_AddNumberToObject(j, "input_mode", app_usb_input_mode());
+    cJSON_AddBoolToObject(j, "manual", app_usb_manual_enabled());
     cJSON_AddNumberToObject(j, "session_loop", p.session_loop);
     cJSON_AddNumberToObject(j, "event_index", p.event_index);
     cJSON_AddNumberToObject(j, "frames_elapsed", (double)p.frames_elapsed);
