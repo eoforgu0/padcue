@@ -2058,6 +2058,7 @@ function consoleJa(hi) {
 // 一覧・チップは毎秒の状態取得のたびに呼ばれる。行は build/update(レーンと
 // 同じ規則。入力欄のフォーカス・開閉状態・ホバーを毎秒壊さない)
 let devsKey = '';
+let consKey = '';   // renderConsoles の変化検知(押そうとした✎を毎秒壊さない)
 
 // 装置id → レーン(実行・監視画面。実体は buildLane の後)
 const laneMap = new Map();   // キーは装置名(一意)。id は未学習だと空で衝突する
@@ -2115,7 +2116,8 @@ function buildDevRow(d) {
     const nv = prompt(`「${row.name}」の新しい名前`, row.name);
     if (nv == null || nv === row.name) return;
     const r = await api('/api/device_rename', 'POST', {old: row.name, new: nv});
-    show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
+    // 成功は行名・レーン名が変わることで伝わる(原則 §5)
+    show('devmsg', r.error ? 'err' : '', r.error || '');
     refresh();
   }));
   card.append(rops);
@@ -2177,7 +2179,8 @@ function wireDevRow(row) {
                  + '(装置は消えません。あとで再登録できます)。'
                  + 'よろしいですか?')) return;
     const r = await api('/api/device_remove', 'POST', {name: row.name});
-    show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
+    // 成功は行が消えることで伝わる(原則 §5)
+    show('devmsg', r.error ? 'err' : '', r.error || '');
     refresh();
   };
 }
@@ -2280,6 +2283,14 @@ function renderConsoles(devs) {
   const ids = [...new Set([...seen.keys(), ...Object.keys(named)])];
   document.getElementById('consolecard').style.display =
     ids.length ? '' : 'none';
+  // 識別子の並び・名前・接続中装置名が変わったときだけ作り直す(procsKey/
+  // devsKey と同じ作法)。押そうとした✎が毎秒破壊され、命名操作ができ
+  // なくなる不具合の修正(原則 §5「進行中のユーザー操作の足元を作り
+  // 変えない」)
+  const key = JSON.stringify(
+    ids.map(hi => [hi, named[hi] || '', (seen.get(hi) || []).join(',')]));
+  if (key === consKey) return;
+  consKey = key;
   const box = document.getElementById('consolelist');
   box.textContent = '';
   for (const hi of ids) {
@@ -2294,8 +2305,8 @@ function renderConsoles(devs) {
       if (nv == null) return;
       const r = await api('/api/console_name', 'POST',
                           {host_info: hi, name: nv});
-      show('consolemsg', r.error ? 'err' : 'ok',
-           r.error || (nv ? `この本体を「${nv}」と呼びます` : '名前を外しました'));
+      // 成功は一覧の名前が変わることで伝わる(原則 §5)。古い表示を消す
+      show('consolemsg', r.error ? 'err' : '', r.error || '');
       refresh();
     }));
     row.append(dot, el('b', null, consoleJa(hi)), rops);
@@ -2324,7 +2335,8 @@ document.getElementById('devadd').onclick = async () => {
   const registerHost = async (host, port) => {
     const body = port ? {host, port} : {host};
     const rr = await api('/api/device_add', 'POST', body);
-    show('devmsg', rr.error ? 'err' : 'ok', rr.error || rr.message);
+    // 成功は候補一覧が消え、台帳に行が現れることで伝わる(原則 §5)
+    show('devmsg', rr.error ? 'err' : '', rr.error || '');
     if (!rr.error) { box.style.display = 'none'; refresh(); }
   };
   for (const f of (r.found || [])) {
@@ -3278,7 +3290,8 @@ async function renFormation(old) {
   const r = await api('/api/formation_rename', 'POST', {old, new: name});
   if (r.error) { show('formmsg', 'err', r.error); return; }
   if (loadedFormation === old) loadedFormation = name;
-  show('formmsg', 'ok', `「${old}」を「${name}」に変えました`);
+  // 成功は一覧の行が変わることで伝わる(原則 §5)
+  show('formmsg', '', '');
   refresh();
 }
 
@@ -4497,8 +4510,9 @@ async function renFlow(old) {
   const wasOpen = (old === flowName);
   await refresh();
   if (wasOpen) { flowName = null; loadFlow(name); } else renderFlowList();
-  show('flowmsg', 'ok', `「${old}」を「${name}」に変えました`
-       + (r.updated ? `(呼んでいた ${r.updated} 件の手順も直しました)` : ''));
+  // 改名そのものは一覧の行が変わることで伝わる(原則 §5)。見えない波及
+  // (他の手順からの呼び出し先が追随した)だけ、非自明な情報として出す
+  show('flowmsg', '', r.updated ? `呼んでいた ${r.updated} 件の手順も直しました` : '');
 }
 async function delFlow(name) {
   if (!confirm(`「${name}」を削除します。よろしいですか?`)) return;
@@ -4617,8 +4631,9 @@ async function renPart(old) {
   if (r.error) { show('partmsg', 'err', r.error); return; }
   if (old === partName) { partName = null; await loadPart(name); }
   else loadPartList();
-  show('partmsg', 'ok', `「${old}」を「${name}」に変えました`
-       + (r.updated ? `(使っていた ${r.updated} 件の手順も直しました)` : ''));
+  // 改名そのものは一覧の行が変わることで伝わる(原則 §5)。見えない波及
+  // (使っていた手順が追随した)だけ、非自明な情報として出す
+  show('partmsg', '', r.updated ? `使っていた ${r.updated} 件の手順も直しました` : '');
 }
 async function delPart(name) {
   if (!confirm(`「${name}」を削除します。よろしいですか?`)) return;

@@ -2309,8 +2309,11 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         idspan = page.locator("#consolelist .meta span").first
         assert idspan.get_attribute("title") == "0100005e0053013c", \
             "フル識別子が title に無い"
-        assert "1P が接続中" in text(page, "#consolelist"), \
-            text(page, "#consolelist")
+        # 接続中の判定は devicepool の収集(最大1秒)を待つ必要がある。
+        # 即時 assert だと境界で稀に落ちる(2026-08-07 に実際に発生)
+        page.wait_for_function(
+            "() => document.getElementById('consolelist')"
+            ".textContent.includes('1P が接続中')", timeout=8000)
         prompt_value[0] = "リビングのSwitch2"
         page.locator("#consolelist .devrow .rowops button").first.click()
         page.wait_for_function(
@@ -2322,6 +2325,40 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         prompt_value[0] = "自動テスト"
     c.check("Switch 本体のカードで識別子に名前を付けられる",
             t_console_panel_naming)
+
+    def t_console_rename_back_to_back():
+        """本体2台に、待たずに続けて名前を付けられること。
+
+        renderConsoles は毎秒の状態取得のたびに呼ばれるが、変化検知なしで
+        #consolelist を textContent='' で全再構築すると、押そうとした✎が
+        毎秒壊れて命名操作がまともにできない(装置一覧・手順一覧は既に
+        変化検知ゲート済みで、ここだけ取り残されていた不具合の回帰検査)。
+        """
+        d2.report_host_info(0x0AAA1111, 0x2222BBBB)
+        page.wait_for_function(
+            "() => document.querySelectorAll('#consolelist .devrow').length"
+            " === 2", timeout=10000)
+        row1 = page.locator("#consolelist .devrow", has_text="リビングのSwitch2")
+        row2 = page.locator("#consolelist .devrow", has_text="ID BBBB")
+        prompt_value[0] = "1台目本体"
+        row1.locator(".rowops button").click()
+        # 相方の✎を、間を置かずに続けて押す(壊れていれば取れない/反映されない)
+        prompt_value[0] = "2台目本体"
+        row2.locator(".rowops button").click()
+        page.wait_for_function(
+            "() => document.getElementById('consolelist')"
+            ".textContent.includes('1台目本体')"
+            " && document.getElementById('consolelist')"
+            ".textContent.includes('2台目本体')", timeout=8000)
+        # 装置カード側(どの本体に繋がっているか)にも両方反映される
+        page.wait_for_function(
+            "() => document.getElementById('devlist')"
+            ".textContent.includes('1台目本体')"
+            " && document.getElementById('devlist')"
+            ".textContent.includes('2台目本体')", timeout=8000)
+        prompt_value[0] = "自動テスト"
+    c.check("本体2台に続けて名前を付けられる(✎が毎秒壊れない)",
+            t_console_rename_back_to_back)
 
     def t_unreachable_lane_isolated():
         d2.stop()
