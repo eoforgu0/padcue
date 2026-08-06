@@ -377,6 +377,23 @@ class _Handler(BaseHTTPRequestHandler):
             if ok:
                 self._pool().refresh()
             return {"ok": True, "message": msg} if ok else {"error": msg}
+        if path == "/api/console_name":
+            # 本体(Switch)に名前を付ける。キーは本体識別子(USB ペアリング
+            # 引数。本体ごとに固有・安定を実測で確認 2026-08-06)なので、
+            # マイコンをどっちに挿し替えても名前は本体に付いていく
+            key = (body.get("host_info") or "").strip()
+            if not key:
+                return {"error": "本体の識別子がまだ取れていません"}
+            cfg = self.project.load_config()
+            consoles = dict(cfg.get("consoles") or {})
+            name = (body.get("name") or "").strip()
+            if name:
+                consoles[key] = name
+            else:
+                consoles.pop(key, None)   # 空 = 名前を外す
+            cfg["consoles"] = consoles
+            self.project.save_config(cfg)
+            return {"ok": True}
         if path == "/api/identify":
             # どの Switch がどの装置につながっているかを目で確かめる:
             # その装置だけに左スティック半分の左右ゆらしを約1秒送る。
@@ -678,7 +695,8 @@ class _Handler(BaseHTTPRequestHandler):
                 })
         cfg = self.project.load_config()
         out = {"procedures": procs, "host": cfg.get("host", ""),
-               "project": str(self.project.root)}
+               "project": str(self.project.root),
+               "consoles": cfg.get("consoles") or {}}
         # 装置プールの収集キャッシュを即答する(装置への I/O はしない)。
         # 片方が無応答でも、その装置の error になるだけで他方は即座に返る
         links = self._pool().links()
@@ -688,6 +706,10 @@ class _Handler(BaseHTTPRequestHandler):
             d = {"name": l.cfg.get("name", ""), "id": l.cfg.get("id", ""),
                  "host": l.cfg.get("host", ""),
                  "port": int(l.cfg.get("port", 5555)), "at": l.at}
+            if l.host_info:
+                # つながっている本体(Switch)の識別子。名前は台帳(consoles)
+                # で付け替えられる
+                d["host_info"] = l.host_info
             if l.error:
                 d["error"] = _why(l.error_exc, d["host"]) if l.error_exc                     else l.error
             elif l.info is not None:
@@ -2038,6 +2060,12 @@ function devDot(d) {
 }
 function devStateJa(d) { return d.error ? '未接続' : stateJa(d.state); }
 function devIdJa(id) { return id ? 'ID ' + id.slice(-4).toUpperCase() : 'ID 未学習'; }
+// つながっている本体(Switch)の表示名。名前を付けていなければ識別子の下4桁
+function consoleJa(hi) {
+  if (!hi) return '';
+  const n = (state.consoles || {})[hi];
+  return n || `本体 ${hi.slice(-4).toUpperCase()}`;
+}
 
 // 一覧・チップは毎秒の状態取得のたびに呼ばれるが、作り直すのは中身が
 // 変わったときだけ(ボタンへのフォーカスやホバーを毎秒切らない)
@@ -2052,8 +2080,10 @@ function renderDevices() {
   document.getElementById('logdevwrap').style.display =
     multi ? 'inline-flex' : 'none';
   document.getElementById('devhint').style.display = multi ? 'none' : '';
-  const key = JSON.stringify(devs.map(d => [d.name, d.id, d.host, d.state,
-                                            d.error || '', d.proc || '']));
+  const key = JSON.stringify([devs.map(d => [d.name, d.id, d.host, d.state,
+                                             d.error || '', d.proc || '',
+                                             d.host_info || '']),
+                              state.consoles || {}]);
   if (key === devsKey) return;
   devsKey = key;
   // ヘッダのチップ(2台以上のときだけ。1台なら従来どおり接続カードで足りる)
@@ -2062,7 +2092,8 @@ function renderDevices() {
   if (multi) {
     for (const d of devs) {
       const c = el('span', 'hchip');
-      c.title = d.error || `${d.host} ・ ${devIdJa(d.id)}`;
+      c.title = d.error || (`${d.host} ・ ${devIdJa(d.id)}`
+        + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : ''));
       c.append(el('span', 'dot ' + devDot(d)), el('b', null, d.name),
                document.createTextNode(devStateJa(d)));
       chips.append(c);
@@ -2085,7 +2116,27 @@ function renderDevices() {
     row.append(dot, el('b', null, d.name), el('span', 'rowops'));
     const meta = el('div', 'meta');
     meta.append(el('span', null, devStateJa(d)
-      + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`));
+      + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`
+      + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
+    if (d.host_info) {
+      // 本体に名前を付ける(キーは本体識別子なので、マイコンを挿し替えても
+      // 名前は本体に付いていく)
+      const cn = el('button', 'small',
+                    (state.consoles || {})[d.host_info] ? '本体名' : '本体に名前');
+      cn.title = `つながっている Switch 本体に名前を付けます`
+        + `(識別子 ${d.host_info})。空にすると外れます`;
+      cn.onclick = async () => {
+        const cur = (state.consoles || {})[d.host_info] || '';
+        const nv = prompt('この本体の名前(例: リビングのSwitch2)', cur);
+        if (nv == null) return;
+        const r = await api('/api/console_name', 'POST',
+                            {host_info: d.host_info, name: nv});
+        show('devmsg', r.error ? 'err' : 'ok',
+             r.error || (nv ? `この本体を「${nv}」と呼びます` : '名前を外しました'));
+        refresh();
+      };
+      meta.append(cn);
+    }
     const ident = el('button', 'small', '識別');
     if (d.error) {
       ident.disabled = true;

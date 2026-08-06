@@ -176,6 +176,34 @@ def test_logs_clear_per_device(env):
     assert proj.read_logs(100) == []
 
 
+def test_host_info_shown_and_console_named(env):
+    """本体識別子(HOST_INFO)が装置に紐づいて表示され、本体に名前を
+    付けられること。識別子は保存ログから拾い直すので、GUI を立ち上げ
+    直しても失われない(実測 2026-08-06: 本体ごとに固有・安定)。"""
+    proj, d1, base = env
+    proj.append_logs([{"kind": "HOST_INFO",
+                       "a": 16777310, "b": 5439804}],
+                     dev="aaaa00000001")
+    # プールを作り直す(= GUI 再起動相当)。起動時の拾い直しを確かめる
+    get(base, "/api/state")              # まずプールを作らせる
+    gui._Handler.pool.close()
+    gui._Handler.pool = None
+    st = wait_until(lambda: (lambda s: s if s.get("devices")
+                             and s["devices"][0].get("host_info")
+                             else None)(get(base, "/api/state")))
+    assert st, get(base, "/api/state")
+    assert st["devices"][0]["host_info"] == "0100005e0053013c"
+    # 本体に名前を付ける → state の consoles に載る。空で外れる
+    assert post(base, "/api/console_name",
+                {"host_info": "0100005e0053013c",
+                 "name": "リビングのSwitch2"}).get("ok")
+    st = get(base, "/api/state")
+    assert st["consoles"]["0100005e0053013c"] == "リビングのSwitch2"
+    assert post(base, "/api/console_name",
+                {"host_info": "0100005e0053013c", "name": ""}).get("ok")
+    assert "0100005e0053013c" not in get(base, "/api/state")["consoles"]
+
+
 def test_identify_only_when_idle(env):
     proj, d1, base = env
     wait_until(lambda: "fw" in get(base, "/api/state")["devices"][0])

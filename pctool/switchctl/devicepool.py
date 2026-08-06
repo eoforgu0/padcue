@@ -37,6 +37,7 @@ class DeviceLink:
         self.listing: dict = {}          # 手順名 -> ハッシュ(直近の LIST)
         self.error: str = ""             # 直近の収集エラー(空 = 健康)
         self.error_exc: Exception | None = None   # 同・例外そのもの(表示整形用)
+        self.host_info: str = ""         # つながっている本体の識別子(16進16桁)
         self.at: float = 0.0             # キャッシュ時刻(UNIX 秒)
         self._wt_at: float = 0.0         # 書き戻し(write-through)の時刻(単調時計)
         self._stop = False
@@ -116,10 +117,26 @@ class DeviceLink:
     def start(self) -> None:
         if self._thread is not None:
             return
+        # 本体識別子(HOST_INFO)は USB を挿した瞬間にしか流れてこない。
+        # 起動時に保存済みログから拾い直しておかないと、GUI を立ち上げ
+        # 直すたびに「次の抜き挿しまで不明」に戻ってしまう
+        self._load_host_info()
         self._thread = threading.Thread(
             target=self._collect_loop, daemon=True,
             name=f"collect-{self.cfg.get('name', '?')}")
         self._thread.start()
+
+    def _load_host_info(self) -> None:
+        dev_id = self.cfg.get("id", "")
+        if not dev_id:
+            return
+        try:
+            for e in self.project.read_logs(2000):
+                if e.get("dev") == dev_id and e.get("kind") == "HOST_INFO":
+                    self.host_info = (f"{int(e.get('a', 0)):08x}"
+                                      f"{int(e.get('b', 0)):08x}")
+        except Exception:   # noqa: BLE001  記録が読めなくても収集は始める
+            pass
 
     def stop(self) -> None:
         self._stop = True
@@ -172,6 +189,12 @@ class DeviceLink:
                 h = f"{int(e.get('b', 0)):08x}{int(e['c']):08x}"
                 if h in names:
                     e["name"] = names[h]
+            elif e.get("kind") == "HOST_INFO":
+                # 本体識別子(USB ペアリング引数。実測で本体ごとに固有・
+                # 安定を確認 2026-08-06)。「どの Switch につながっているか」
+                # の表示に使う
+                self.host_info = (f"{int(e.get('a', 0)):08x}"
+                                  f"{int(e.get('b', 0)):08x}")
         dev_id = self.cfg.get("id") or getattr(self.client, "device_id", "")
         self.project.append_logs(entries, dev=dev_id)
 
