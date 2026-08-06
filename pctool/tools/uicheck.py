@@ -2613,10 +2613,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "state.devices[0].running || state.devices[0].awaiting"), \
             "人為停止が連動してしまった"
         page.keyboard.press("F9")        # 全部止めるホットキー
-        page.wait_for_function(
-            "() => document.querySelector('#cactmsg')"
-            ".textContent.includes('F9')", timeout=8000)
-        wait_idle()
+        wait_idle()                      # 結果はチップの変化で伝わる(成功文は無い)
     c.check("人為停止は連動せず、F9 で全部止められる", t_manual_stop_not_coupled)
 
     def t_solo_restart_after_manual_stop_not_auto_joined():
@@ -2645,10 +2642,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "単独実行のはずの2Pが勝手に選択されて進んでしまった" \
             "(連結の自動合流が誤発火)"
         page.keyboard.press("F9")        # 全部止めるホットキー
-        page.wait_for_function(
-            "() => document.querySelector('#cactmsg')"
-            ".textContent.includes('F9')", timeout=8000)
-        wait_idle()
+        wait_idle()                      # 結果はチップの変化で伝わる(成功文は無い)
     c.check("人為停止した装置は単独実行を開始でき、連結の自動合流に巻き込まれない",
             t_solo_restart_after_manual_stop_not_auto_joined)
 

@@ -2909,8 +2909,8 @@ function updateLane(lane, d) {
           + '両方まとめて進められます'));
       } else {
         lane.awaitbox.append(
-          el('div', 'msg warn', '待機分岐で止まっています。進む先を選んで'
-             + `ください(${lane.name} だけが進みます)`),
+          el('div', 'msg warn',
+             '待機分岐で止まっています。進む先を選んでください'),
           armRow(d, lane.name, lane.awaitbox));
       }
       if (inRun) {
@@ -2938,8 +2938,7 @@ function updateLane(lane, d) {
       (Date.now() - (lane.parkedAt || Date.now())) / 1000));
     const armName = armLabels()[c.arm | 0] || `選択肢${(c.arm | 0) + 1}`;
     lane.waitMsg.textContent =
-      `相方待ち ${sec}秒 — 相方が同じ待機分岐に着いたら、自動で`
-      + `「${armName}」を選んで両方いっしょに進みます(異常ではありません)`;
+      `相方待ち ${sec}秒(そろったら「${armName}」で自動合流)`;
   }
   // 「実行中のまま戻らない」の自動復旧(1台時と同じ規則を装置ごとに)
   if (stateBusy && !running && !awaiting) lane.stuckPolls++;
@@ -3137,8 +3136,7 @@ document.addEventListener('keydown', async e => {
     e.preventDefault();
     beep(440);
     const r = await api('/api/stop_both', 'POST', {mode: 'immediate'});
-    show('cactmsg', r.error ? 'err' : 'ok',
-         r.error || 'F9: 両方を今すぐ止めました');
+    show('cactmsg', r.error ? 'err' : '', r.error || '');
     refresh();
   } else if (e.key === 'F10') {
     e.preventDefault();
@@ -3507,7 +3505,7 @@ document.getElementById('cstopg').onclick = async () => {
 };
 document.getElementById('cstopi').onclick = async () => {
   const r = await api('/api/stop_both', 'POST', {mode: 'immediate'});
-  show('cactmsg', r.error ? 'err' : 'ok', r.error || '両方を止めました');
+  show('cactmsg', r.error ? 'err' : '', r.error || '');
   refresh();
 };
 document.getElementById('cauto').onchange = async e => {
@@ -5296,14 +5294,10 @@ document.getElementById('rec').onclick = async () => {
   const chip = document.getElementById('recchip');
   const save = document.getElementById('recsave');
   if (!recOn) {
-    if (!manualOn) {
-      // 記録するのは「手動操作で送っている入力」なので、手動操作が
-      // 動いていないと何も残らない。押す前に理由つきで断る
-      show('manualmsg', 'warn',
-           '先に「手動操作を開始」を押してください。'
-           + '記録できるのは、自分で動かした操作だけです');
-      return;
-    }
+    // 手動操作が動いていないと記録できない。押しても失敗するだけの状態は
+    // ボタンを disabled にして理由を title で示す(3020 行付近)ので、ここでは
+    // 断り文は出さない。disabled を外して直接呼ばれた場合の保険としてのみ黙って戻る
+    if (!manualOn) return;
     const r = await api('/api/record', 'POST', {action: 'start'});
     if (r.error) { show('manualmsg', 'err', r.error); return; }
     recOn = true;
