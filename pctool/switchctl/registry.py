@@ -52,6 +52,17 @@ def rename_device(project, old: str, new: str) -> tuple[bool, str]:
     new = (new or "").strip()
     if not new:
         return False, "新名前が空です"
+    # 連結実行の運転記録(runstate.json)は装置名で追っている。実行中に
+    # 改名すると監視(連動停止・自動合流)が対象を見失うため、どの入口
+    # (GUI/CLI)からでもここで断る
+    try:
+        import json as _json
+        run = _json.loads((project.root / "runstate.json")
+                          .read_text(encoding="utf-8")).get("run")
+        if run and run.get("active") and old in run.get("members", []):
+            return False, f"{old} は連結実行中です。止めてから改名してください"
+    except (OSError, ValueError):
+        pass
     if any(d.get("name") == new for d in devs):
         return False, f"名前「{new}」は使用済みです(重複すると指名で取り違えます)"
     for d in devs:

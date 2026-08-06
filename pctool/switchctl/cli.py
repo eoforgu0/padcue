@@ -16,8 +16,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 from .client import DeviceClient, DeviceError, connect_verified
@@ -29,6 +31,62 @@ from .project import Project
 
 def _project(args) -> Project:
     return Project(Path(args.project).resolve())
+
+
+def _gui_base(p: Project) -> str | None:
+    """操作画面のサーバが動いていれば、その URL を返す(計画 D10)。
+
+    実機は同時1接続・後着優先のため、画面が開いているときに CLI が直結
+    すると、毎秒の収集と接続を奪い合って両方が間欠故障になる。装置に触る
+    操作は画面のサーバを経由する。マーカーが消し忘れ(クラッシュ等)なら
+    応答確認で落ちて、従来どおりの直結に戻る。
+    """
+    marker = p.root / "gui_server.json"
+    if not marker.is_file():
+        return None
+    try:
+        info = json.loads(marker.read_text(encoding="utf-8"))
+        base = f"http://127.0.0.1:{int(info['port'])}"
+        with urllib.request.urlopen(base + "/api/state", timeout=2.0) as r:
+            json.loads(r.read())
+        return base
+    except Exception:   # noqa: BLE001  残骸マーカーは無視して直結
+        return None
+
+
+def _gui_get(base: str, path: str) -> dict:
+    with urllib.request.urlopen(base + path, timeout=10) as r:
+        return json.loads(r.read())
+
+
+def _gui_post(base: str, path: str, obj: dict) -> dict:
+    req = urllib.request.Request(
+        base + path, data=json.dumps(obj).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())
+
+
+def _gui_dev(base: str, args) -> tuple[dict | None, dict]:
+    """state から対象装置(--device 省略時は1台目)のエントリを取る。"""
+    st = _gui_get(base, "/api/state")
+    devs = st.get("devices") or []
+    want = getattr(args, "device", None)
+    if not want:
+        return (devs[0] if devs else None), st
+    for d in devs:
+        if d.get("name") == want or d.get("id") == want:
+            return d, st
+    return None, st
+
+
+def _refuse_while_gui(p: Project, what: str) -> bool:
+    """装置を専有する操作(OTA・設定・方式切替)は画面と両立しない。"""
+    if _gui_base(p) is None:
+        return False
+    print(f"padctl.bat(操作画面)が開いています。{what}は装置をまるごと"
+          "預かる操作のため、画面を閉じてからやり直してください")
+    return True
 
 
 def _pick_device(args, cfg: dict) -> dict:
@@ -198,6 +256,16 @@ def cmd_push(args) -> int:
         print(f"コンパイル失敗: {e}")
         return 1
     _print_build(r)
+    base = _gui_base(p)
+    if base:
+        res = _gui_post(base, "/api/push",
+                        {"name": args.name,
+                         "dev": getattr(args, "device", "") or ""})
+        if res.get("error"):
+            print(res["error"])
+            return 1
+        print(f"転送・保存しました(hash {res.get('hash')}・操作画面経由)")
+        return 0
     with _client(args) as c:
         h = c.put(r.name, r.blob)
         c.commit(r.name)
@@ -207,6 +275,33 @@ def cmd_push(args) -> int:
 
 def cmd_run(args) -> int:
     p = _project(args)
+    base = _gui_base(p)
+    if base:
+        # 画面が開いている間は画面のサーバ経由(D10)。版ずれの自動転送や
+        # 連結の人為停止の印も、サーバ側の同じ規則で扱われる
+        r = _gui_post(base, "/api/run",
+                      {"name": args.name, "loops": args.loops,
+                       "dev": getattr(args, "device", "") or ""})
+        if r.get("error"):
+            print(r["error"])
+            return 1
+        print(f"実行開始: {args.name} ×{args.loops}(操作画面経由)")
+        if args.watch:
+            try:
+                while True:
+                    d, _st = _gui_dev(base, args)
+                    if not d or not d.get("running"):
+                        print(f"\n終了: {(d or {}).get('state', '不明')}")
+                        break
+                    print(f"\r{d.get('session_loop', 0)}/{args.loops} 周 "
+                          f"{d.get('frames_elapsed', 0)} フレーム", end="")
+                    time.sleep(0.5)
+            except KeyboardInterrupt:
+                _gui_post(base, "/api/stop",
+                          {"mode": "immediate",
+                           "dev": getattr(args, "device", "") or ""})
+                print("\n停止しました")
+        return 0
     with _client(args) as c:
         target = args.name
         listing = {e["name"]: e for e in c.list()}
@@ -232,18 +327,58 @@ def cmd_run(args) -> int:
 
 
 def cmd_stop(args) -> int:
+    mode = ("cancel" if args.cancel
+            else "graceful" if args.graceful else "immediate")
+    said = {"cancel": "区切り停止の予約を取り消しました"
+                      "(既に止まっていた場合は停止のままです)",
+            "graceful": "区切り停止を指示しました",
+            "immediate": "即時停止しました"}[mode]
+    base = _gui_base(_project(args))
+    if base:
+        r = _gui_post(base, "/api/stop",
+                      {"mode": mode,
+                       "dev": getattr(args, "device", "") or ""})
+        if r.get("error"):
+            print(r["error"])
+            return 1
+        print(said + "(操作画面経由)")
+        return 0
     with _client(args) as c:
-        if args.cancel:
-            c.stop("cancel")
-            print("区切り停止の予約を取り消しました"
-                  "(既に止まっていた場合は停止のままです)")
-        else:
-            c.stop("graceful" if args.graceful else "immediate")
-            print("区切り停止を指示しました" if args.graceful else "即時停止しました")
+        c.stop(mode)
+        print(said)
     return 0
 
 
 def cmd_status(args) -> int:
+    base = _gui_base(_project(args))
+    if base:
+        d, _st = _gui_dev(base, args)
+        if d is None:
+            print("装置が登録されていません")
+            return 1
+        print("(操作画面のサーバ経由で表示)")
+        if d.get("error"):
+            print(f"未接続     : {d['error']}")
+            return 1
+        print(f"ファーム   : {d.get('fw')} ({d.get('partition')})")
+        print(f"転送方式   : {d.get('mode')} / bInterval={d.get('binterval')}")
+        print(f"状態       : {d.get('state')}")
+        print(f"USB        : {'接続' if d.get('usb_mounted') else '未接続'}"
+              f" / 到達段階 0x{d.get('breadcrumb', 0):03x}")
+        if "imu_enabled" in d:
+            print("ジャイロ   : "
+                  + ("本体が有効化済み" if d["imu_enabled"]
+                     else "本体からの有効化なし(値を送っても読まれません)"))
+        if d.get("running"):
+            print(f"実行中     : {d.get('proc', '')} "
+                  f"{d.get('session_loop')} 周目 / "
+                  f"{d.get('frames_elapsed')} フレーム")
+        if "max_late_us" in d:
+            v = f"切り替え {d['max_late_us']}µs"
+            if "deliver_max_us" in d:
+                v += f" / 送出まで {d['deliver_max_us']}µs"
+            print(f"ずれ最大   : {v}")
+        return 0
     with _client(args) as c:
         info = c.hello()
         st = c.status()
@@ -290,6 +425,8 @@ def cmd_mode(args) -> int:
     プロコン方式が Switch 2 で受理されない場合の逃げ道。無線で切り替えられる
     ので、書き込みモードに入れ直す必要はない(切替後に USB を挿し直す)。
     """
+    if _refuse_while_gui(_project(args), "方式の切り替え"):
+        return 1
     with _client(args) as c:
         c.set_mode(args.mode)
     name = "プロコン方式" if args.mode == "procon" else "保険モード(HIDパッド)"
@@ -303,6 +440,8 @@ def cmd_config(args) -> int:
     frame_period_ns: 1 フレームの長さ。60.00Hz=16666667 / 59.94Hz=16683333
     """
     val = int(args.value) if args.value.lstrip("-").isdigit() else args.value
+    if _refuse_while_gui(_project(args), "設定の書き込み"):
+        return 1
     with _client(args) as c:
         c.config(args.key, val)
     print(f"{args.key} = {val} を保存しました")
@@ -310,6 +449,15 @@ def cmd_config(args) -> int:
 
 
 def cmd_clear_error(args) -> int:
+    base = _gui_base(_project(args))
+    if base:
+        r = _gui_post(base, "/api/clear_error",
+                      {"dev": getattr(args, "device", "") or ""})
+        if r.get("error"):
+            print(r["error"])
+            return 1
+        print("異常状態を解除しました(操作画面経由)")
+        return 0
     with _client(args) as c:
         c.clear_error()
     print("異常状態を解除しました")
@@ -317,6 +465,22 @@ def cmd_clear_error(args) -> int:
 
 
 def cmd_logs(args) -> int:
+    base = _gui_base(_project(args))
+    if base:
+        # 画面のサーバが毎秒回収して溜めている記録(装置タグ付き)を出す。
+        # 直結で読むと回収を横取りして、画面側の記録に穴が開く
+        entries = _gui_get(base, "/api/logs").get("entries", [])
+        st = _gui_get(base, "/api/state")
+        names = {d.get("id"): d.get("name")
+                 for d in st.get("devices", []) if d.get("id")}
+        if not entries:
+            print("(ログなし)")
+        for e in entries[-200:]:
+            t = time.strftime("%H:%M:%S", time.localtime(e.get("at", 0)))
+            who = names.get(e.get("dev"), "")
+            print(f"[{t}] {who:<4} {e.get('kind', '?'):<14} "
+                  f"a={e.get('a', 0)} b={e.get('b', 0)} c={e.get('c', 0)}")
+        return 0
     with _client(args) as c:
         entries = c.logs()
         # 実機側のログは読むと消える。ここで保存しないと、この回収分は
@@ -331,6 +495,15 @@ def cmd_logs(args) -> int:
 
 
 def cmd_list(args) -> int:
+    base = _gui_base(_project(args))
+    if base:
+        d, _st = _gui_dev(base, args)
+        if d is None:
+            print("装置が登録されていません")
+            return 1
+        for name, h in sorted((d.get("listing") or {}).items()):
+            print(f"{name:<24} {h}")
+        return 0
     with _client(args) as c:
         for e in c.list():
             print(f"{e['name']:<24} {e['size']:>7} バイト  {e['hash']}")
@@ -338,6 +511,8 @@ def cmd_list(args) -> int:
 
 
 def cmd_ota(args) -> int:
+    if _refuse_while_gui(_project(args), "ファームウェア更新"):
+        return 1
     path = Path(args.image)
     if not path.is_file():
         # 既定パスはリポジトリ直下から見た相対。runbook の手順どおり
@@ -435,6 +610,19 @@ def cmd_device(args) -> int:
     if a == "auto":
         # 1台目(または --device 指定)の IP を探索で追跡する。
         # ID が学習済みなら一致する応答のみ採用(別個体へは乗り換えない)
+        base = _gui_base(p)
+        if base:
+            # 画面が開いている間は画面の「探す」と同じ経路(D10)。直結の
+            # 到達確認が画面の接続を横取りしない
+            r = _gui_post(base, "/api/discover",
+                          {"dev": getattr(args, "device", "") or ""})
+            if r.get("error"):
+                print(r["error"])
+                return 1
+            print(("いまの接続先でつながっています: " if r.get("kept")
+                   else "接続先を控え直しました: ") + str(r.get("host"))
+                  + "(操作画面経由)")
+            return 0
         dev = _pick_device(args, cfg)
         found = discover()
         match = [f for f in found

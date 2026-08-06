@@ -20,6 +20,7 @@ switchctl.json.bak
 # 実行時生成物
 logs.jsonl
 runstate.json
+gui_server.json
 uicheck/
 runbook_walk/
 

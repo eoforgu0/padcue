@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import webbrowser
@@ -1383,6 +1384,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <span class="hint" style="margin:0">いま 2 台は無関係です。それぞれのレーンから別々に動かせます</span>
       </div>
     </div>
+    <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
+         実機が動く事故を防ぐ(2台化で生まれた組み合わせ) -->
+    <div id="mixwarn" style="display:none"></div>
     <!-- 装置が2台以上のときは、下の3カード(接続・実行・タイムライン)を
          隠して、装置ごとのレーンをここに並べる(案C。1台なら従来のまま) -->
     <div class="lanes" id="lanes" style="display:none"></div>
@@ -1974,8 +1978,10 @@ const LOG_JA = {
   OTA:           (a, b) => `ファームウェアを更新しました(${b} バイト)`,
   HOST_INFO:     (a, b) => {
     const hex = v => (v >>> 0).toString(16).padStart(8, '0');
-    return `本体からの接続時データ: ${hex(a)} ${hex(b)}`
-      + '(調査用。同じ本体なら毎回同じ値になるかを見ます)';
+    const hi = hex(a) + hex(b);
+    const nm = (state && state.consoles || {})[hi];
+    return `本体を確認: ${hex(a)} ${hex(b)}`
+      + (nm ? `(=「${nm}」)` : '(装置カードの「本体に名前」で命名できます)');
   },
   AWAIT_TIMEOUT: (a, b) => b
     ? `待機分岐の待ちが上限に達したので、腕${b}へ自動で進みました`
@@ -3212,6 +3218,25 @@ function renderLanes() {
   // 連結バー・CTA・編成カードの出し引きは装置数に関わらずここで行う
   // (2台→1台に減ったとき、レーンだけ消えて連結バーが残らないように)
   renderCoupling();
+  // 練習(模擬)と実機の混在は、押し間違いで実機が動く。目立つ注意を常設
+  const mocks = devs.filter(d => d.host === '127.0.0.1'
+                                 || d.host === 'localhost');
+  const mixed = mocks.length > 0 && mocks.length < devs.length;
+  const mw = document.getElementById('mixwarn');
+  mw.style.display = mixed ? '' : 'none';
+  if (mixed) {
+    const mockNames = mocks.map(d => d.name).join('・');
+    const realNames = devs.filter(d => !mocks.includes(d))
+      .map(d => d.name).join('・');
+    const text = `練習中: ${mockNames} は模擬デバイスです。`
+      + `${realNames} は実機なので、そちらのレーンを操作すると実際の `
+      + `Switch が動きます`;
+    if (mw.dataset.text !== text) {
+      mw.dataset.text = text;
+      mw.textContent = '';
+      mw.append(el('div', 'msg warn', text));
+    }
+  }
   const box = document.getElementById('lanes');
   if (!multi) {
     if (laneMap.size) { laneMap.clear(); box.textContent = ''; }
@@ -5491,6 +5516,11 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
     _Handler.project = project
     srv = ThreadingHTTPServer((host or "127.0.0.1", port), _Handler)
     url = f"http://127.0.0.1:{srv.server_port}/"
+    # 稼働中の目印(計画 D10)。CLI はこれを見て、装置操作をこのサーバ経由に
+    # 切り替える(直結すると毎秒の収集と接続を奪い合うため)
+    marker = project.root / "gui_server.json"
+    marker.write_text(json.dumps({"port": srv.server_port, "pid": os.getpid()}),
+                      encoding="utf-8")
     print(f"操作画面: {url}")
     print("終了は Ctrl+C。実行中の手順があっても実機側で最後まで動き続けます")
     if open_browser:
@@ -5506,6 +5536,7 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
               "(止めるには padctl.bat をもう一度開いて「今すぐ止める」、"
               "または本体ボタンを1.5秒長押し)")
     finally:
+        marker.unlink(missing_ok=True)
         srv.server_close()
         if _Handler.coupler is not None:
             _Handler.coupler.close()
