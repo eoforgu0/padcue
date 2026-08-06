@@ -360,7 +360,7 @@ def _print_pairing(st: dict) -> None:
     step = int(st.get("pair_step") or 0)
     reqs = int(st.get("pair_reqs") or 0)
     if step in (0x01, 0x02):
-        print(f"ペアリング : ⚠ 未完(フェーズ 0x{step:02x}・計 {reqs} 回受信)")
+        print(f"ペアリング : ⚠ 未完了(フェーズ 0x{step:02x}・計 {reqs} 回受信)")
         print("             本体がコントローラー登録を完了できていません。"
               "この間は入力が無視されます")
     elif step:

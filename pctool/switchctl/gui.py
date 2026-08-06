@@ -786,7 +786,7 @@ def _why(e: Exception, host: str) -> str:
                 "確認してください")
     if isinstance(e, ConnectionRefusedError) or "refused" in text.lower():
         return (f"{host} に届きましたが、受け付けてもらえませんでした。"
-                "マイコンがまだ起動途中か、その住所が別の機器かもしれません")
+                "マイコンがまだ起動途中か、その接続先が別の機器かもしれません")
     if isinstance(e, (TimeoutError, socket.timeout)) or "timed out" in text.lower():
         return (f"{host} から返事がありません。"
                 "電源とネットワーク、ルーターの「AP 分離」設定を確認してください")
@@ -1031,10 +1031,15 @@ main > .card { min-width:0; }
 .row > .hint { margin-top:0; }
 button { font:inherit; border:1px solid var(--line); background:var(--surface);
   color:var(--ink); border-radius:7px; padding:4px 12px; cursor:pointer; }
-button:hover { border-color:var(--accent); }
+button:hover:not(:disabled) { border-color:var(--accent); }
 button.primary { background:var(--accent); color:var(--on-fill);
   border-color:transparent;
   font-weight:700; }
+/* primary/danger は独自の枠色を持つため、素のホバー(枠を藍に)が効かず
+   「最重要ボタンだけホバーで無反応」になっていた。地色側で反応させる */
+button.primary:hover:not(:disabled) {
+  background:color-mix(in srgb, var(--accent) 86%, var(--ink)); }
+button.danger:hover:not(:disabled) { background:var(--err-bg); }
 button.small { padding:2px 8px; font-size:12px; }
 button:disabled { opacity:.45; cursor:not-allowed; }
 button.danger { border-color:var(--err); color:var(--err); }
@@ -1066,7 +1071,7 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .msgclose:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
 .msg.warn { background:var(--warn-bg); color:var(--warn); }
 .msg.err { background:var(--err-bg); color:var(--err); }
-.msg.ok { background:var(--accent-soft); color:var(--accent); }
+.msg.ok { background:var(--ok-bg); color:var(--ok); }
 .tl-wrap { overflow-x:auto; }
 /* 部品グリッドは縦横ともこの領域の中でスクロールする(高さは fitPartGrid が
    画面内に収まるよう設定)。横バーが表の最下端ではなく領域の下端に出る */
@@ -1139,6 +1144,9 @@ button.armed::after { content:' ⏳'; }
 #padfig .fs { fill:var(--accent-soft); stroke:var(--line); cursor:pointer; }
 #padfig .figc:hover .fs { stroke:var(--accent); }
 #padfig .figc.on .fs { fill:var(--c-btn); }
+/* 押している間はキートップの文字も反転させる(地が濃色になるため、
+   そのままだと押した瞬間に文字が読めなくなる。部品表の ON セルと同じ扱い) */
+#padfig .figc.on .ft { fill:var(--on-fill); }
 #padfig .ft { fill:var(--ink); font-size:13px; text-anchor:middle;
   pointer-events:none; font-weight:700; }
 .en input { vertical-align:-1px; opacity:.28; }
@@ -1215,12 +1223,16 @@ table.grid th.ops, table.grid td.ops { white-space:nowrap;
   text-align:left; padding-left:2px; }
 table.grid th.fn, table.grid td.fn:first-child {
   position:sticky; left:0; z-index:3; background:var(--surface); }
-table.grid tr.alt td.fn:first-child { background:#f1f1ee; }
-@media (prefers-color-scheme: dark) {
-  table.grid tr.alt td.fn:first-child { background:#23262d; }
-}
+/* テーマは data-theme 属性で切り替わるため、OS 設定(prefers-color-scheme)
+   ではなくテーマ変数から縞色を作る(OS=ライトのままダーク系テーマを選ぶと
+   左端列の縞だけ明るく浮いていた) */
+table.grid tr.alt td.fn:first-child {
+  background:color-mix(in srgb, var(--line) 33%, var(--surface)); }
 table.grid th.gh { background:var(--surface); color:var(--muted); font-weight:400;
-  font-size:10.5px; letter-spacing:.06em; padding:1px 4px; text-align:left; }
+  font-size:10.5px; letter-spacing:.06em; padding:1px 4px; text-align:left;
+  /* 2段ヘッダの上段。下段(top:18px)と貼り付き位置を分ける(同じ top:0 だと
+     縦スクロールで下段が上段に重なり、まとまりの見出しが消える) */
+  top:0; height:18px; box-sizing:border-box; }
 table.grid tr.alt td { background:rgba(128,128,128,.10); }
 /* ポインタのある行(と入力中の行)を丸ごとハイライトする。左右に長い表で
    「この数値の行は何フレーム目か」を目で追うときの行ズレ防止(2026-08-04
@@ -1233,7 +1245,10 @@ table.grid tr:hover td.fn:first-child,
 table.grid tr:focus-within td.fn:first-child {
   background:color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 table.grid td.ax input { color:var(--c-axis); font-variant-numeric:tabular-nums; }
-table.grid th { position:sticky; top:0; z-index:2; }
+/* ヘッダはデータセルより上に描く。フレーム番号列のデータセル(z-index:3)より
+   低いと、縦スクロール時に番号がヘッダへ透けて写る */
+table.grid th { position:sticky; top:18px; z-index:4; }
+table.grid th.fn { z-index:5; }   /* 角セル(縦横両方の固定が交差する) */
 table.grid td.ax input { text-align:right; }
 table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   background:color-mix(in srgb, var(--line) 22%, transparent); }
@@ -1275,9 +1290,11 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 <header>
   <h1>padctl</h1>
   <div class="tabs">
-    <span class="tab on" data-view="home">実行・監視</span>
-    <span class="tab" data-view="flow">手順を編集</span>
-    <span class="tab" data-view="part">部品を編集</span>
+    <!-- button にするのはキーボードで画面を切り替えられるようにするため
+         (span だと Tab キーで到達できず、focus-visible の枠も死んでいた) -->
+    <button class="tab on" data-view="home">実行・監視</button>
+    <button class="tab" data-view="flow">手順を編集</button>
+    <button class="tab" data-view="part">部品を編集</button>
   </div>
   <!-- 装置が2台以上のときだけ、どのタブでも実行状態が見えるチップを出す
        (1台のときは従来どおり=接続カードの表示だけ) -->
@@ -1315,8 +1332,8 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div id="devaddbox" style="display:none"></div>
       <!-- devmsg = このカードの操作(追加/識別/改名/外す)の結果。次の操作まで残す -->
       <div id="devmsg"></div>
-      <div class="hint" id="devhint" style="display:none">2台目を作ったら、
-        「＋ 装置を追加」で登録します(受け入れの全手順は docs/runbook.md)</div>
+      <div class="hint" id="devhint"
+           style="display:none">2台目のマイコンを用意したら、「＋ 装置を追加」で登録します</div>
     </div>
     <!-- 編成 = 盤面(連結・装置×手順×周回×開始位置・合流の腕)のスナップ
          ショット。2台以上のときだけ出る -->
@@ -1380,8 +1397,8 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <div class="card" id="couplecta" style="display:none">
       <div class="row">
         <button id="clink"
-                title="まとめて開始・自動合流・連動停止・両方へ同時に選ぶ、は連結したときにだけ現れます">◇ 連結する</button>
-        <span class="hint" style="margin:0">いま 2 台は無関係です。それぞれのレーンから別々に動かせます</span>
+                title="まとめて開始・自動合流・連動停止・両方へ同時に選ぶ、は連結したときにだけ現れます">⧉ 連結する</button>
+        <span class="hint" style="margin:0">いま 2 台は連結していません。それぞれのレーンから別々に動かせます</span>
       </div>
     </div>
     <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
@@ -1391,9 +1408,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
          隠して、装置ごとのレーンをここに並べる(案C。1台なら従来のまま) -->
     <div class="lanes" id="lanes" style="display:none"></div>
     <div class="card" id="conncard">
-      <h2>マイコンとの接続</h2>
+      <h2>装置との接続</h2>
       <div class="devbar" id="devbar">
-        <span class="lbl">マイコン</span>
+        <span class="lbl">装置</span>
         <span id="devchip" class="chip">確認中…</span>
         <span class="sep"></span>
         <label class="lbl" for="host">接続先</label>
@@ -1428,7 +1445,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <button id="stopi" class="danger"
                 title="その場で全ボタンを離して止めます(ゲームは操作の途中で放置される)">
           ⏹ 今すぐ止める</button>
-        <button id="push" title="実機へ転送するだけ(実行はしない)">転送のみ</button>
+        <button id="push" title="装置へ転送するだけ(実行はしない)">転送のみ</button>
       </div>
       <!-- 実行中の手順を編集したときだけ出る注意。ボタンより下に置いて、
            出たり消えたりしてもボタンの位置が動かないようにする -->
@@ -1453,15 +1470,15 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <label id="trialdevwrap" style="display:none"
                title="どの装置で1回実行して判定するかを選びます">対象
           <select id="trialdev"></select></label>
-        <button id="trialrun" title="この手順を1回だけ実行して結果を見る">▶ 1回実行して判定</button>
+        <button id="trialrun" title="1回だけ実行します。結果を見て ○成功 / ×失敗 を押してください">▶ 1回実行して判定</button>
         <button id="trialok">○ 成功</button>
         <button id="trialng">× 失敗</button>
-        <button id="trialreset">記録をクリア</button>
+        <button id="trialreset">成績を消す</button>
         <span id="trialchip" class="chip">未実施</span>
       </div>
       <div id="trialmsg"></div>
       <div class="hint">
-        1フレーム差が効く操作はどうしてもばらつきます。何度も試して成功率を見ます
+        1フレーム差が効く操作はどうしてもばらつきます。何度も試して成功率を確かめてください
       </div>
     </div>
     <div class="card" id="manualcard">
@@ -1582,7 +1599,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <div id="flowbody"></div>
   </div>
   <div class="card v-flow" style="display:none">
-    <h2>選択中のブロック</h2>
+    <h2 id="propshead">選択中のブロック</h2>
     <div id="props"></div>
     <div class="hint">
       追加: 左の一覧をクリック / 置きたい場所へドラッグ<br>
@@ -1608,8 +1625,8 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
           <input type="number" id="bulkn" value="1" min="1" max="10000"
                  style="width:76px" title="まとめて足す/減らすフレーム数">
           フレーム</label>
-        <button class="small" id="addrow">追加</button>
-        <button class="small" id="delrow">削除</button>
+        <button class="small" id="addrow">足す</button>
+        <button class="small" id="delrow">減らす</button>
         <span class="sep-v"></span>
         <label class="hint" style="display:flex;gap:5px;align-items:center">
           <input type="checkbox" id="showmotion" checked>ジャイロ・加速度の列も出す
@@ -1986,7 +2003,7 @@ const LOG_JA = {
     const hi = hex(a) + hex(b);
     const nm = (state && state.consoles || {})[hi];
     return `本体を確認: ${hex(a)} ${hex(b)}`
-      + (nm ? `(=「${nm}」)` : '(装置カードの「本体に名前」で命名できます)');
+      + (nm ? `(=「${nm}」)` : '(装置カードの「本体に命名」で名前を付けられます)');
   },
   AWAIT_TIMEOUT: (a, b) => b
     ? `待機分岐の待ちが上限に達したので、腕${b}へ自動で進みました`
@@ -2053,7 +2070,7 @@ function renderLogs(entries) {
     // 改名しても過去の行が正しい名前で出る。台帳から外した装置の行は
     // ID の下4桁で残す(誰の記録か消さない)
     if (multi) line.append(el('span', 'ldev',
-      e.dev ? (names[e.dev] || e.dev.slice(-4).toUpperCase()) : 'ー'));
+      e.dev ? (names[e.dev] || e.dev.slice(-4).toUpperCase()) : '—'));
     line.append(el('span', 'lm', r.text));
     box.append(line);
   }
@@ -2129,11 +2146,17 @@ function renderDevices() {
     meta.append(el('span', null, devStateJa(d)
       + (d.proc ? ` ・ ${d.proc}` : '') + ` ・ ${devIdJa(d.id)}`
       + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
+    // ボタン群は1つの折返し単位にまとめる。状態文の長さ次第で
+    // 「識別」だけ1行目・「改名」だけ2行目とボタン対が泣き別れ、
+    // 毎秒の状態変化でカードの高さがガタつくのを防ぐ
+    const ops = el('span');
+    ops.style.cssText = 'display:inline-flex; gap:6px; flex:none;';
     if (d.host_info) {
       // 本体に名前を付ける(キーは本体識別子なので、マイコンを挿し替えても
       // 名前は本体に付いていく)
       const cn = el('button', 'small',
-                    (state.consoles || {})[d.host_info] ? '本体名' : '本体に名前');
+                    (state.consoles || {})[d.host_info] ? '本体名を変更'
+                                                        : '本体に命名');
       cn.title = `つながっている Switch 本体に名前を付けます`
         + `(識別子 ${d.host_info})。空にすると外れます`;
       cn.onclick = async () => {
@@ -2146,7 +2169,7 @@ function renderDevices() {
              r.error || (nv ? `この本体を「${nv}」と呼びます` : '名前を外しました'));
         refresh();
       };
-      meta.append(cn);
+      ops.append(cn);
     }
     const ident = el('button', 'small', '識別');
     if (d.error) {
@@ -2162,7 +2185,7 @@ function renderDevices() {
       show('devmsg', r.error ? 'err' : 'ok', r.error
            || `${d.name} へ識別の入力を送りました。Switch 側の反応を確かめてください`);
     };
-    meta.append(ident);
+    ops.append(ident);
     const ren = el('button', 'small', '改名');
     ren.title = '表示名を変えます(個体IDでの照合は変わりません)';
     ren.onclick = async () => {
@@ -2172,7 +2195,7 @@ function renderDevices() {
       show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
       refresh();
     };
-    meta.append(ren);
+    ops.append(ren);
     if (multi) {
       // 1台だけのときは出さない(従来の1台運用で誤って台帳を空にしない。
       // どうしても外すときは CLI の device remove)
@@ -2184,8 +2207,9 @@ function renderDevices() {
         show('devmsg', r.error ? 'err' : 'ok', r.error || r.message);
         refresh();
       };
-      meta.append(rm);
+      ops.append(rm);
     }
+    meta.append(ops);
     row.append(meta);
     box.append(row);
   }
@@ -2215,7 +2239,7 @@ document.getElementById('devadd').onclick = async () => {
                el('span', 'rowops'));
     const meta = el('div', 'meta');
     meta.append(el('span', null,
-      `${devIdJa(f.id)} ・ fw ${f.fw || '不明'}`));
+      `${devIdJa(f.id)} ・ ファーム ${f.fw || '不明'}`));
     const add = el('button', 'small', '登録');
     add.title = 'この装置を台帳に登録します(名前はあとから改名できます)';
     add.onclick = () => registerHost(f.host, f.port);
@@ -2462,9 +2486,12 @@ function renderStatus() {
          + '本体のリセットを短く押すか、USB を挿し直してください');
   }
   if (d.state === 'ERROR') {
+    // レーン版(2台以上)と同じ「文+ボタン」の形にする。ボタンだけ置くと
+    // 何が起きたのか読めない
+    show('msg', 'err', '装置が異常を報告しています');
     const b = el('button', null, '異常を解除');
     b.onclick = async () => { await api('/api/clear_error', 'POST', {}); refresh(); };
-    document.getElementById('msg').append(b);
+    document.getElementById('msg').firstChild.append(b);
   }
   if (d.awaiting) {
     // 待機分岐で止まっている。どちらへ進むかを選ぶ。実行を続けるための
@@ -2497,10 +2524,10 @@ function statusRows(d, np) {
   // 本体にこの個体の登録記録が無いと、本体は新規ペアリング(フェーズ 0x01)
   // を再要求し続け、完了するまで**全ての入力が無視される**。接続・到達段階・
   // ジャイロが全部正常のまま操作だけ効かない、という形で現れるので、
-  // 未完のときだけ⚠付きで出す(正常時は行を足さない=表示の引き算)
+  // 未完了のときだけ⚠付きで出す(正常時は行を足さない=表示の引き算)
   if ('pair_step' in d && (d.pair_step === 1 || d.pair_step === 2)) {
     rows.push(['⚠ コントローラー登録',
-               `未完(ペアリング要求 ${d.pair_reqs || 0} 回)。` +
+               `未完了(ペアリング要求 ${d.pair_reqs || 0} 回)。` +
                '本体が登録を完了できず、入力が無視されています']);
   }
   // ずれの実測値は **0 でも出す**。「遅れた回数」だけを条件付きで出していると、
@@ -2547,7 +2574,7 @@ function armRow(d, dev, errBox) {
   const names = d.arm_names || [];
   const row = el('div', 'row');
   for (let i = 0; i < (d.await_arms || names.length); i++) {
-    const label = (names[i] || `枝 ${i + 1}`) + (dev ? `(${dev} へ)` : '');
+    const label = (names[i] || `腕${i + 1}`) + (dev ? `(${dev} へ)` : '');
     const b = el('button', 'primary', label);
     b.onclick = async () => {
       const r = await api('/api/select', 'POST', {arm: i, dev});
@@ -3109,7 +3136,7 @@ function updateLane(lane, d) {
   if (inRun) {
     lane.badge.style.display = '';
     lane.badge.className = 'chip link runchip';
-    lane.badge.textContent = '⧉ 連結して開始';
+    lane.badge.textContent = '⧉ 連結して開始した組';
     lane.badge.title = '連結して開始した組。相方の異常時は両方止まります。'
       + '手で止めた場合は連動しません';
   } else if (running || awaiting) {
@@ -3464,7 +3491,7 @@ async function applyFormation(f) {
   const busy = (state.devices || []).some(d => !d.error
     && (d.running || d.awaiting));
   if (busy) {
-    show('formmsg', 'err', '実行中は編成を呼び出せません。止めてからどうぞ');
+    show('formmsg', 'err', '実行中は編成を呼び出せません。止めてから呼び出してください');
     return;
   }
   for (const fd of f.devices || []) {
@@ -3489,7 +3516,7 @@ async function applyFormation(f) {
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
   loadedFormation = f.name;
-  show('formmsg', 'ok', `「${f.name}」を盤面にしました。開始はしていません`
+  show('formmsg', 'ok', `「${f.name}」を盤面に反映しました。開始はしていません`
        + '(連結バーの ▶ で開始)');
   refresh();
 }
@@ -3507,7 +3534,8 @@ function renderFormations() {
   const forms = state.formations || [];
   if (!forms.length) {
     box.append(el('div', 'hint',
-      'まだありません。盤面(連結・手順・周回)を作って「今の盤面を保存」'));
+      'まだありません。盤面(連結・手順・周回)を作って'
+      + '「今の盤面を保存」を押すと、ここに並びます'));
     return;
   }
   for (const f of forms) {
@@ -3583,7 +3611,7 @@ function renderCoupling() {
   cta.style.display = c.on ? 'none' : '';
   bar.style.display = c.on ? '' : 'none';
   document.getElementById('clink').textContent =
-    `◇ ${names.join(' と ')} を連結する`;
+    `⧉ ${names.join(' と ')} を連結する`;
   if (!c.on) return;
   const run = c.run || {};
   const active = !!run.active;
@@ -3628,7 +3656,7 @@ function renderCoupling() {
   const oneshot = document.getElementById('coneshot');
   oneshot.classList.toggle('armed', !!c.oneshot_manual);
   oneshot.textContent = c.oneshot_manual
-    ? '✋ 次の合流は自分で選ぶ(取り消す)' : '✋ 次の合流は自分で選ぶ(1回だけ)';
+    ? '↩ 次の合流の保留を取り消す' : '✋ 次の合流は自分で選ぶ(1回だけ)';
   // 両方へ同時に選ぶ(両方が選択待ちのときだけ押せる。ボタンは消さない)
   const both = document.getElementById('cbotharms');
   const ready = devs.slice(0, 2).every(d => !d.error && d.awaiting);
@@ -4055,7 +4083,8 @@ function renderBlocks(arr, prefix, parent) {
       } else if (n.type === 'counter_branch') {
         (n.arms || []).forEach((arm, ai) => {
           const wrap = el('div', 'arm');
-          wrap.append(el('div', 't', `${ai + 1} 周目ごと`));
+          wrap.append(el('div', 't',
+            `${(n.arms || []).length} 周ごとの ${ai + 1} 周目`));
           wrap.append(renderBlocks(arm, path.concat([ai]), n));
           nest.append(wrap);
         });
@@ -4097,6 +4126,10 @@ function renderProps() {
   const box = document.getElementById('props');
   box.textContent = '';
   if (!flowDoc) return;
+  // 見出しを中身に合わせる(未選択時は手順自体の設定が出るため、
+  // 「選択中のブロック」のままだと見出しと中身が食い違う)
+  document.getElementById('propshead').textContent =
+    flowSel ? '選択中のブロック' : 'この手順の設定';
   if (!flowSel) {
     // 手順そのものの設定
     const nm = el('input'); nm.value = flowDoc.name; nm.disabled = true;
@@ -4258,7 +4291,7 @@ function renderProps() {
     case 'loop':
       box.append(num('回数', 'count', 1, 1000000),
         allowFlag('状態が戻るのは意図的(警告を出さない)', 'loop-reset',
-          'くり返しの2周目以降は本体の先頭の状態に戻ります'));
+          'くり返しの2周目以降は、くり返しの先頭の状態に戻ります'));
       break;
     case 'wait_branch': {
       const t = el('input');
@@ -4272,7 +4305,7 @@ function renderProps() {
         });
         n.arms = next;
       });
-      box.append(field('選べる枝の名前(カンマ区切り・最大4つ)', t));
+      box.append(field('選べる腕の名前(カンマ区切り・最大4つ)', t));
       const to = el('input'); to.type = 'number'; to.min = 0; to.max = 999999;
       to.value = n.timeout_frames || 0;
       bindInput(to, () => { n.timeout_frames = parseInt(to.value, 10) || 0; });
@@ -4287,7 +4320,7 @@ function renderProps() {
       bindChange(ot, () => { n.on_timeout = parseInt(ot.value, 10) || 0; });
       box.append(field('上限に達したら', ot));
       box.append(el('div', 'hint',
-        'ここで止まり、画面で枝を選ぶと続きが走ります'
+        'ここで止まり、画面で腕を選ぶと続きが走ります'
         + '(くり返しの中には置けません)。上限は放置運転で永久に'
         + '待ち続けないための保険です'));
       break;
@@ -4449,7 +4482,7 @@ async function dupFlow(src) {
 }
 async function renFlow(old) {
   if (old === flowName && !confirmDiscard()) return;
-  const name = prompt('新しい手順の名前', old);
+  const name = prompt(`「${old}」の新しい名前`, old);
   if (!name || name === old) return;
   const r = await api('/api/flow/rename', 'POST', {old, new: name});
   if (r.error) { show('flowmsg', 'err', r.error); return; }
@@ -4460,7 +4493,7 @@ async function renFlow(old) {
        + (r.updated ? `(呼んでいた ${r.updated} 件の手順も直しました)` : ''));
 }
 async function delFlow(name) {
-  if (!confirm(`「${name}」を削除しますか`)) return;
+  if (!confirm(`「${name}」を削除します。よろしいですか?`)) return;
   await api('/api/flow/delete', 'POST', {name});
   if (name === flowName) { flowDoc = null; flowName = null; renderFlow(false); }
   await refresh(); renderFlowList();
@@ -4570,7 +4603,7 @@ async function dupPart(src) {
 }
 async function renPart(old) {
   if (old === partName && !confirmDiscardPart()) return;
-  const name = prompt('新しい部品の名前', old);
+  const name = prompt(`「${old}」の新しい名前`, old);
   if (!name || name === old) return;
   const r = await api('/api/part/rename', 'POST', {old, new: name});
   if (r.error) { show('partmsg', 'err', r.error); return; }
@@ -4580,7 +4613,7 @@ async function renPart(old) {
        + (r.updated ? `(使っていた ${r.updated} 件の手順も直しました)` : ''));
 }
 async function delPart(name) {
-  if (!confirm(`「${name}」を削除しますか`)) return;
+  if (!confirm(`「${name}」を削除します。よろしいですか?`)) return;
   await api('/api/part/delete', 'POST', {name});
   if (name === partName) {
     partName = null; partData = null; markPartDirty(false);
@@ -5067,7 +5100,7 @@ document.getElementById('addrow').onclick = () => {
 document.getElementById('delrow').onclick = () => {
   if (!partData) return;
   const n = Math.min(bulkCount(), partData.rows.length - 1);
-  if (n < 1) { show('partmsg', 'warn', '1 フレームは残ります'); return; }
+  if (n < 1) { show('partmsg', 'warn', '最後の 1 フレームは減らせません'); return; }
   partData.rows.splice(partData.rows.length - n, n);
   markPartDirty(true); renderPart();
   show('partmsg', 'ok', `${n} フレーム減らしました(全 ${partData.rows.length})`);
@@ -5426,9 +5459,8 @@ document.getElementById('logclear').onclick = async () => {
   if (!confirm(q)) return;
   await api('/api/logs/clear', 'POST', flt ? {dev: flt} : {});
   renderLogs(flt ? lastLogs.filter(e => e.dev !== flt) : []);
-  const m = document.getElementById('logmsg');
-  m.textContent = '消しました';
-  setTimeout(() => { m.textContent = ''; }, 3000);
+  // 完了の合図は出さない。一覧が空になること自体が結果として見える
+  // (「表示より状態変化で伝える」)
 };
 // 記録は「開始 → 停止 → 部品として保存」の順。停止するまで保存ボタンは
 // 出さない(以前は停止すると記録が捨てられ、停止してから保存を押すと

@@ -327,8 +327,9 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         box = page.locator("#devbar")
         assert box.is_visible(), "デバイスのまとまりが無い"
         t = box.inner_text()
-        # 呼び名は「マイコン」で統一する(「デバイス」「実機」を混ぜない)
-        assert "マイコン" in t, f"何についての表示か書かれていない: {t!r}"
+        # 呼び名は台帳と同じ「装置」で統一する(「マイコン」「デバイス」
+        # 「実機」を混ぜない。glossary の正も装置。2026-08-06 文言統一)
+        assert "装置" in t, f"何についての表示か書かれていない: {t!r}"
         assert "接続先" in t, f"接続先のラベルが無い: {t!r}"
         for sel in ("#devchip", "#host", "#finddev", "#sethost"):
             assert page.locator("#devbar " + sel).count() == 1, \
@@ -463,7 +464,9 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         # 消せる
         page.click("#logclear")
         page.wait_for_timeout(900)
-        assert "消しました" in text(page, "#logmsg"), text(page, "#logmsg")
+        # 完了メッセージは廃止(一覧が空になること自体が結果)。空を確かめる
+        assert page.locator("#logs .logline").count() == 0, \
+            "消去後もログが残っている"
     c.check("ログが溜まり、日時・色・消去が効く", t_logs_panel)
 
     def t_theme_switch():
@@ -1346,7 +1349,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.locator("#flowbody .nest > .head", has_text="待って選ぶ").click()
         page.wait_for_timeout(350)
         props = text(page, "#props")
-        assert "枝の名前" in props, props
+        assert "腕の名前" in props, props
     c.check("待機分岐が腕ごとに表示・編集できる", t_wait_branch_editor)
 
     def t_edit_inside_wait_branch_arm():
@@ -1372,7 +1375,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.locator("#flowlist .proc").nth(0).click()   # 周回で変える
         page.wait_for_timeout(700)
         arms = page.locator("#flowbody .arm > .t").all_inner_texts()
-        assert any("1 周目ごと" in a for a in arms), arms
+        assert any("周ごとの 1 周目" in a for a in arms), arms
         page.locator("#flowbody .nest > .head", has_text="周回で分岐").click()
         page.wait_for_timeout(350)
         assert "腕の数" in text(page, "#props"), text(page, "#props")
