@@ -1158,6 +1158,72 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert page.locator("#flowbody .blk").count() == n
     c.check("パレットからドラッグして挿入できる", t_palette_drag_insert)
 
+    def flow_shape():
+        return page.evaluate(
+            "() => flowDoc.body.map(n => n.type === 'loop'"
+            " ? 'loop[' + n.body.map(m => m.type).join(',') + ']'"
+            " : n.type)")
+
+    def flow_undo_to(before):
+        """倒れた時も含めて、フローを元の並びへ戻す(後の検査のため)。"""
+        for _ in range(4):
+            if flow_shape() == before:
+                return
+            page.keyboard.press("Control+z")
+            page.wait_for_timeout(300)
+
+    def t_block_drag_same_level():
+        """同じ並びの中で下へ動かせること(1つ下へも、末尾へも)。
+
+        挿入位置を二重に補正していて、下向きの移動が必ず1つ手前に入って
+        いた(1つ下へ動かすと無反応、末尾には永久に置けない)。
+        """
+        before = flow_shape()
+        blks = page.locator("#flowbody > .blocks > .blk")
+        try:
+            third = blks.nth(2).bounding_box()
+            drag(page, blks.first.locator(".bgrab").bounding_box(),
+                 third["x"] + 60, third["y"] + third["height"] - 2)
+            want = before[1:3] + [before[0]] + before[3:]
+            assert flow_shape() == want, f"{before} -> {flow_shape()} (期待 {want})"
+            page.keyboard.press("Control+z")
+            page.wait_for_timeout(300)
+            # いちばん下(最後のブロックより下の余白)へも置ける
+            last = page.locator("#flowbody > .blocks > .blk").last.bounding_box()
+            drag(page, blks.first.locator(".bgrab").bounding_box(),
+                 last["x"] + 60, last["y"] + last["height"] + 6)
+            want = before[1:] + [before[0]]
+            assert flow_shape() == want, \
+                f"末尾へ入らない: {flow_shape()} (期待 {want})"
+        finally:
+            flow_undo_to(before)
+        assert flow_shape() == before, flow_shape()
+    c.check("ブロックを同じ並びの中で下へ・末尾へ動かせる", t_block_drag_same_level)
+
+    def t_block_drag_after_nest():
+        """くり返しの「後ろ」へ置けること、動かした先が選ばれること。
+
+        入れ子の下端は外側の並びの当たり判定だが、細すぎて中へ吸い込まれ、
+        入れ子の直後へは置けなかった。
+        """
+        before = flow_shape()
+        i = [n for n, x in enumerate(before) if x.startswith("loop[")][0]
+        try:
+            nest = page.locator("#flowbody > .blocks > .nest").first.bounding_box()
+            g = page.locator("#flowbody > .blocks > .blk").first.locator(".bgrab")
+            drag(page, g.bounding_box(), nest["x"] + 60,
+                 nest["y"] + nest["height"] - 3)
+            want = before[1:i + 1] + [before[0]] + before[i + 1:]
+            assert flow_shape() == want, f"{flow_shape()} (期待 {want})"
+            sel = page.evaluate(
+                "() => { const n = nodeAt(flowSel); return n ? n.type : null; }")
+            assert sel == before[0], f"動かした先が選ばれていない: {sel}"
+        finally:
+            flow_undo_to(before)
+        assert flow_shape() == before, flow_shape()
+    c.check("ブロックをくり返しの後ろへ置ける(動かした先が選ばれる)",
+            t_block_drag_after_nest)
+
     def t_list_reorder_shared():
         """一覧の並べ替えが保存され、実行・監視の一覧とも共有されること。"""
         before = page.locator("#flowlist .proc b").all_inner_texts()
@@ -1490,6 +1556,104 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert target in names, f"解体で手順ごと消えた: {names}"
         assert proj.load_proc_org()["folders"] == [], proj.load_proc_org()
     c.check("フォルダに入れて開閉でき、改名・解体が効く", t_proc_folder_dnd)
+
+    def org_setup(folders):
+        """フォルダ分けを直接組んで、その状態から D&D を試すための下ごしらえ。"""
+        page.evaluate(
+            "async f => { await api('/api/proc_org', 'POST',"
+            " {folders: f, hidden: []}); await refresh(); renderFlowList(); }",
+            folders)
+        page.wait_for_timeout(700)
+
+    def t_folder_reorder():
+        """フォルダを並べ替えられること(開閉は巻き添えで変わらない)。
+
+        つまみを離した直後の click が見出し行へ伝わって開閉が走り、それが
+        古い並びを保存し直すため、並べ替えたはずの順番が元へ戻っていた。
+        """
+        names = proj.procedure_names()
+        try:
+            org_setup([{"name": "上", "open": True, "items": [names[0]]},
+                       {"name": "下", "open": True, "items": [names[1]]}])
+            rows = page.locator("#flowlist .folder-row")
+            top = rows.nth(0).bounding_box()
+            drag(page, rows.nth(1).locator(".grab").bounding_box(),
+                 top["x"] + 60, top["y"] + 2)
+            page.wait_for_timeout(700)
+            got = proj.load_proc_org()["folders"]
+            assert [f["name"] for f in got] == ["下", "上"], got
+            assert [f["open"] for f in got] == [True, True], \
+                f"開閉まで巻き添えで変わった: {got}"
+        finally:
+            org_setup([])
+    c.check("フォルダを並べ替えられる(開閉は変わらない)", t_folder_reorder)
+
+    def order_restore(names):
+        """一覧の並びを元へ戻す。後の検査は並びの順番で手順を選ぶため、
+        途中で倒れても必ず戻す(finally から呼ぶ)。"""
+        page.evaluate(
+            "async n => { await api('/api/reorder', 'POST',"
+            " {kind: 'procedures', names: n}); await refresh(); renderFlowList(); }",
+            names)
+        page.wait_for_timeout(700)
+
+    def t_proc_dnd_inside_and_out():
+        """フォルダの中での並べ替えと、フォルダの外へ出す操作が効くこと。"""
+        names = proj.procedure_names()
+        try:
+            org_setup([{"name": "置き場", "open": True, "items": names[:2]}])
+            items = page.locator("#flowlist .folder-items .proc")
+            last = items.nth(1).bounding_box()
+            drag(page, items.nth(0).locator(".grab").bounding_box(),
+                 last["x"] + 40, last["y"] + last["height"] - 2)
+            page.wait_for_timeout(700)
+            got = proj.load_proc_org()["folders"][0]["items"]
+            assert got == [names[1], names[0]], f"フォルダの中で末尾へ動かない: {got}"
+            # 全部フォルダに入っていても、下の余白へ落とせば外へ出せる
+            org_setup([{"name": "置き場", "open": True, "items": names}])
+            box = page.locator("#flowlist").bounding_box()
+            g = page.locator("#flowlist .folder-items .proc").first.locator(".grab")
+            drag(page, g.bounding_box(), box["x"] + 60,
+                 box["y"] + box["height"] + 40)
+            page.wait_for_timeout(700)
+            got = proj.load_proc_org()["folders"][0]["items"]
+            assert names[0] not in got, f"フォルダの外へ出せない: {got}"
+            # たたんだフォルダの直後は「外の先頭」でもある。吸い込まれないこと
+            org_setup([{"name": "置き場", "open": False, "items": [names[0]]}])
+            outside = page.locator("#flowlist > .proc:not(.folder-row)")
+            moved = outside.last.locator("b").inner_text()
+            first = outside.first.bounding_box()
+            drag(page, outside.last.locator(".grab").bounding_box(),
+                 first["x"] + 60, first["y"] + 2)
+            page.wait_for_timeout(700)
+            got = proj.load_proc_org()["folders"][0]["items"]
+            assert moved not in got, f"たたんだフォルダに吸い込まれた: {got}"
+        finally:
+            org_setup([])
+            order_restore(names)
+    c.check("フォルダの中で並べ替えでき、外へも出せる", t_proc_dnd_inside_and_out)
+
+    def t_proc_drag_keeps_open_flow():
+        """一覧をドラッグしても、開いている手順が勝手に切り替わらないこと。"""
+        before = page.locator("#flowlist .proc b").all_inner_texts()
+        page.locator("#flowlist .proc", has_text=before[0]).first.locator("b").click()
+        page.wait_for_timeout(700)
+        opened = page.evaluate("() => flowName")
+        rows = page.locator("#flowlist .proc")
+        top = rows.first.bounding_box()
+        try:
+            drag(page, rows.last.locator(".grab").bounding_box(),
+                 top["x"] + 60, top["y"] + 2)
+            page.wait_for_timeout(700)
+            assert page.evaluate("() => flowName") == opened, \
+                "ドラッグしただけで別の手順が開いた"
+            after = page.locator("#flowlist .proc b").all_inner_texts()
+            assert after == [before[-1]] + before[:-1], f"{before} -> {after}"
+        finally:
+            order_restore(before)
+        assert page.locator("#flowlist .proc b").all_inner_texts() == before
+    c.check("一覧のドラッグで開いている手順が切り替わらない",
+            t_proc_drag_keeps_open_flow)
 
     # ================= 部品を編集 =================
     print("[部品を編集]", flush=True)

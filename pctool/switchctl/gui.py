@@ -981,6 +981,10 @@ main > .card { min-width:0; }
 .foldericon { color:var(--muted); display:inline-flex; margin-right:5px; }
 .foldericon svg { vertical-align:-2px; }
 .folder-items { margin-left:20px; }
+/* たたんだフォルダへ手順を落とすときの目印。挿入線だと「たたんだフォルダの
+   中」と「フォルダの外の先頭」が同じ位置に出て見分けが付かないので、
+   行そのものを落とし先として見せる(選択中と同じ見え方に揃える) */
+.folder-row.into { border-color:var(--accent); background:var(--accent-soft); }
 .chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:11px;
   border:1px solid var(--line); color:var(--muted); }
 .chip:empty { display:none; }   /* 中身が空のときは枠だけ残さない */
@@ -1156,7 +1160,10 @@ table.grid tr:hover td.ops input[type=checkbox] { opacity:1; }
 .blk.k-label { border-left-color:var(--accent); }
 .blk.k-part { border-left-color:var(--c-part); }
 .blk.k-loop, .blk.k-counter_branch { border-left-color:var(--c-loop); }
-.nest { border:1px solid var(--c-loop); border-radius:8px; padding:5px 7px 7px;
+/* 下の余白は、くり返し・分岐の「中」ではなく「後ろ」へ落とすための帯でも
+   ある(中の並びはこの余白の上で終わる)。狙えない細さだと、入れ子が最後に
+   あるフローで末尾へ挿せなくなるため、少し広くとる */
+.nest { border:1px solid var(--c-loop); border-radius:8px; padding:5px 7px 12px;
   margin:2px 0; }
 .nest > .head { color:var(--c-loop); font-weight:700; font-size:12px;
   margin-bottom:5px; cursor:pointer; border-radius:4px; padding:1px 3px; }
@@ -1822,11 +1829,30 @@ let dragging = null;   // {kind, name, container}
 const dropLine = (() => { const d = document.createElement('div');
                           d.className = 'drop-line'; return d; })();
 
+// ドラッグの直後に発火する click を止める。pointerdown の preventDefault は
+// click までは止めないので、これが無いと「掴んで動かしただけ」なのに、つまみ
+// から親へ伝わった click が行の onclick(手順を開く・フォルダを開閉する)まで
+// 走ってしまう。フォルダの並べ替えでは、その開閉が古い並びを保存し直して
+// 動かしたはずの順番が元へ戻っていた(2026-08-07 監査)
+function bindDragClickGuard(handle) {
+  handle.addEventListener('click', e => {
+    if (!handle._dragged) return;
+    handle._dragged = false;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }, true);
+}
+// 挿入線は高さを持つ。入れたまま位置を測ると、線より後ろの行が押し下がった
+// 状態で測ることになり、狙った所と実際に入る所がずれる。測る前に必ず外す
+function dropLineDetach() { dropLine.remove(); }
+
 function bindRowDrag(handle, row, kind, name, after) {
   let start = null;   // 押しただけ(まだ動かしていない)の状態
+  bindDragClickGuard(handle);
   handle.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
     handle.setPointerCapture(e.pointerId);
+    handle._dragged = false;
     start = {x: e.clientX, y: e.clientY};
   });
   handle.addEventListener('pointermove', e => {
@@ -1837,8 +1863,10 @@ function bindRowDrag(handle, row, kind, name, after) {
         return;
       }
       dragging = {kind, name, container: row.parentElement, after};
+      handle._dragged = true;
       row.classList.add('dragging');
     }
+    dropLineDetach();
     const rows = [...dragging.container.querySelectorAll('.proc')]
       .filter(r => !r.classList.contains('dragging'));
     let before = null;
@@ -3547,6 +3575,31 @@ function resolve(path) {
 }
 function nodeAt(path) { const r = resolve(path); return r.arr[r.idx]; }
 function samePath(a, b) { return a && b && a.join() === b.join(); }
+// ブロックの実体から今のパスを引く。描画時に控えたパスは「動かす前」の位置
+// なので、自分より前にあったブロックを抜くと1つずれ、別のブロックを指す
+function pathOfNode(target, arr, prefix) {
+  arr = arr || flowDoc.body;
+  prefix = prefix || [];
+  for (let i = 0; i < arr.length; i++) {
+    const n = arr[i];
+    const here = prefix.concat([i]);
+    if (n === target) return here;
+    let arms = null;
+    if (n.type === 'loop') arms = [n.body || []];
+    else if (n.type === 'counter_branch') arms = n.arms || [];
+    else if (n.type === 'wait_branch') {
+      arms = Object.keys(n.arms || {}).map(k => n.arms[k]);
+    }
+    if (!arms) continue;
+    for (let ai = 0; ai < arms.length; ai++) {
+      // くり返しは選択肢が1本なので、パスに枝番を挟まない(resolve と同じ)
+      const got = pathOfNode(target, arms[ai],
+                             n.type === 'loop' ? here : here.concat([ai]));
+      if (got) return got;
+    }
+  }
+  return null;
+}
 
 // 生値のままだと「2047 がどっち向きか」が分からないので、向きと強さで見せる
 function stickText(x, y) {
@@ -3645,6 +3698,19 @@ function _blockTargetAt(x, y) {
     if (bDrag && bDrag.elem && bDrag.elem.contains(b)) continue;
     target = b;   // querySelectorAll は文書順 = 後勝ちが最深
   }
+  // 箱の高さは中身ぴったりなので、最後のブロックより下には当たり判定が無く、
+  // 「一番下へ入れる」ができなかった。フロー欄の横幅の中にいる限り、下の
+  // 余白はいちばん外側の並びの末尾として受け取る(左の一覧まで持って行った
+  // ときは何も起きない、は今までどおり)
+  if (!target) {
+    const top = document.querySelector('#flowbody > .blocks');
+    const body = document.getElementById('flowbody');
+    if (top && body) {
+      const r = top.getBoundingClientRect();
+      const rb = body.getBoundingClientRect();
+      if (y > r.bottom && x >= rb.left && x <= rb.right) target = top;
+    }
+  }
   return target;
 }
 
@@ -3661,19 +3727,25 @@ function _blockInsertIndex(box, y) {
 }
 
 function _blockDragMove(e) {
+  dropLineDetach();   // 挿入線ぶんの押し下がりを測らないよう、先に外す
   const box = _blockTargetAt(e.clientX, e.clientY);
-  if (!box) { dropLine.remove(); return; }
-  const {before} = _blockInsertIndex(box, e.clientY);
+  if (!box) { bDrag.at = null; return; }
+  const {idx, before} = _blockInsertIndex(box, e.clientY);
+  bDrag.at = {box, idx};   // 線を出した場所をそのまま覚える(下の _blockDrop 用)
   if (before) box.insertBefore(dropLine, before);
   else box.append(dropLine);
 }
 
-function _blockDrop(e) {
-  const box = _blockTargetAt(e.clientX, e.clientY);
+// 挿入位置は必ず「最後に挿入線を出した所」を使う。離した時に測り直すと、
+// 線を外したぶん行が繰り上がって、見えていた位置と1つずれることがあった
+function _blockDrop() {
+  const at = bDrag.at;
   dropLine.remove();
-  if (!box) return false;
-  const {idx} = _blockInsertIndex(box, e.clientY);
-  let insertIdx = idx;
+  if (!at) return false;
+  const box = at.box;
+  // _blockInsertIndex はドラッグ中のブロックを数えていないので、この添字は
+  // 「抜いた後の配列」での位置。抜いた後に挿れるだけでよい(繰り上げ不要)
+  const insertIdx = at.idx;
   let node;
   snapshot();
   if (bDrag.palette) {
@@ -3682,20 +3754,23 @@ function _blockDrop(e) {
     const r = resolve(bDrag.path);
     node = r.arr[r.idx];
     r.arr.splice(r.idx, 1);
-    // 同じ配列内で前から後ろへ動かすときは、抜いたぶん挿入位置が繰り上がる
-    if (r.arr === box._arr && r.idx < insertIdx) insertIdx--;
   }
   box._arr.splice(insertIdx, 0, node);
-  flowSel = box._prefix.concat([insertIdx]);   // 動かした先を選択
+  // 動かした先を選択する。box._prefix は描画時=抜く前のパスなので、実体から
+  // 引き直す(自分より前のブロックを抜いていると1つずれ、別のブロックの
+  // 設定を編集することになる)
+  flowSel = pathOfNode(node) || box._prefix.concat([insertIdx]);
   renderFlow(true);
   return true;
 }
 
 function bindBlockDrag(handle, path, elem) {
   let start = null;
+  bindDragClickGuard(handle);
   handle.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
     handle.setPointerCapture(e.pointerId);
+    handle._dragged = false;
     start = {x: e.clientX, y: e.clientY};
   });
   handle.addEventListener('pointermove', e => {
@@ -3705,31 +3780,34 @@ function bindBlockDrag(handle, path, elem) {
       if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6) {
         return;
       }
-      bDrag = {path, elem};
+      bDrag = {path, elem, at: null};
+      handle._dragged = true;
       elem.classList.add('dragging');
     }
     _blockDragMove(e);
   });
-  const done = (e, commit) => {
+  const done = (commit) => {
     start = null;
     if (!bDrag) return;
     elem.classList.remove('dragging');
-    if (commit) _blockDrop(e);
+    if (commit) _blockDrop();
     else dropLine.remove();
     bDrag = null;
   };
-  handle.addEventListener('pointerup', e => done(e, true));
-  handle.addEventListener('pointercancel', e => done(e, false));
+  handle.addEventListener('pointerup', () => done(true));
+  handle.addEventListener('pointercancel', () => done(false));
 }
 
 // パレット: クリック=選択の直後に追加(従来)、ドラッグ=好きな場所へ挿入。
 // 6px 動くまではクリック扱いにして両立させる
 function bindPaletteDrag(elp, type) {
   let start = null;
+  bindDragClickGuard(elp);   // ドラッグ後のクリックで二重追加しないように
   elp.addEventListener('pointerdown', e => {
     // 先にキャプチャしておく(枠の外に出た瞬間に move が届かなくなるため)。
     // 6px 動くまではドラッグ扱いにしないので、クリック追加はそのまま生きる
     elp.setPointerCapture(e.pointerId);
+    elp._dragged = false;
     start = {x: e.clientX, y: e.clientY};
   });
   elp.addEventListener('pointermove', e => {
@@ -3738,27 +3816,24 @@ function bindPaletteDrag(elp, type) {
       if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6) {
         return;
       }
-      bDrag = {palette: type};
+      bDrag = {palette: type, at: null};
+      elp._dragged = true;
       elp.classList.add('dragging');
     }
     _blockDragMove(e);
   });
-  const done = (e, commit) => {
+  const done = (commit) => {
     elp.classList.remove('dragging');
+    start = null;
     if (bDrag && bDrag.palette) {
-      if (commit && !paletteBlocked(type)) _blockDrop(e);
+      if (commit && !paletteBlocked(type)) _blockDrop();
       else dropLine.remove();
       bDrag = null;
-      start = null;
-      // ドラッグ後のクリックで二重追加しないよう1回だけ握りつぶす
-      elp.addEventListener('click', ev => ev.stopImmediatePropagation(),
-                           {capture: true, once: true});
-      return;
     }
-    start = null;   // 動かず離した → click イベントが追加を行う
+    // 動かず離したときは _dragged が false のまま = click がそのまま追加を行う
   };
-  elp.addEventListener('pointerup', e => done(e, true));
-  elp.addEventListener('pointercancel', e => done(e, false));
+  elp.addEventListener('pointerup', () => done(true));
+  elp.addEventListener('pointercancel', () => done(false));
 }
 
 // part/call はドロップ前にも追加可否を確かめる(addBlock と同じ断り)
@@ -4296,7 +4371,7 @@ async function delFolder(name) {
 // 上の bindRowDrag はフラットな並びしか扱えないため、フォルダを持つこの
 // 一覧だけ専用に用意する(掴む・6px しきい値・挿入線という考え方は同じ。
 // ドラッグ中は他の画面と同時に動かないので dropLine を使い回してよい)
-let orgDrag = null;   // {kind:'proc'|'folder', name}
+let orgDrag = null;   // {kind:'proc'|'folder', name, at}
 
 function folderItemsEl(name) {
   for (const c of document.getElementById('flowlist').children) {
@@ -4304,29 +4379,30 @@ function folderItemsEl(name) {
   }
   return null;
 }
-// #flowlist の行を「開いているフォルダの中身も展開した1本の並び」で返す
-// (proc をどこへ落とすかの判定に使う。フォルダの見出し行自体も候補に含む)
-function orgRowScan() {
-  const box = document.getElementById('flowlist');
-  const out = [];
-  for (const child of box.children) {
-    if (child.classList.contains('folder-row')) {
-      out.push({el: child, kind: 'folderHeader', folder: child.dataset.folder});
-    } else if (child.classList.contains('folder-items')) {
-      for (const item of child.children) {
-        out.push({el: item, kind: 'item', folder: child.dataset.folder});
-      }
-    } else if (child.classList.contains('proc')) {
-      out.push({el: child, kind: 'item', folder: null});
-    }
+function folderRowEl(name) {
+  for (const c of document.getElementById('flowlist').children) {
+    if (c.classList.contains('folder-row') && c.dataset.folder === name) return c;
   }
-  return out;
+  return null;
+}
+// たたんだフォルダへ入れるときの目印。挿入線だと「たたんだフォルダの中」と
+// 「フォルダの外の先頭」が同じ位置に出て見分けが付かない(フォルダは常に
+// 一覧の先頭側に並ぶので、たたんだフォルダの直後は外の先頭でもある)
+function markFolderTarget(name) {
+  for (const el of document.querySelectorAll('#flowlist .folder-row.into')) {
+    el.classList.remove('into');
+  }
+  if (!name) return;
+  const el = folderRowEl(name);
+  if (el) el.classList.add('into');
 }
 function bindOrgDrag(handle, row, kind, name) {
   let start = null;
+  bindDragClickGuard(handle);
   handle.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation();
     handle.setPointerCapture(e.pointerId);
+    handle._dragged = false;
     start = {x: e.clientX, y: e.clientY};
   });
   handle.addEventListener('pointermove', e => {
@@ -4334,11 +4410,21 @@ function bindOrgDrag(handle, row, kind, name) {
     if (!orgDrag) {
       // 6px 動くまではドラッグにしない(押しただけで挿入線が出るのを防ぐ)
       if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) < 6) return;
-      orgDrag = {kind, name};
+      orgDrag = {kind, name, at: null};
+      handle._dragged = true;
       row.classList.add('dragging');
     }
-    if (kind === 'folder') placeFolderDropLine(computeFolderTarget(e.clientY, row));
-    else placeOrgDropLine(computeOrgTarget(e.clientY, row));
+    dropLineDetach();   // 挿入線ぶんの押し下がりを測らないよう、先に外す
+    // 落とし先は「線を出したときの判定」をそのまま覚えておき、離した時に
+    // DOM から読み直さない。読み直すと、たたんだフォルダの直後のように
+    // 位置が同じで意味の違う場所を取り違える
+    if (kind === 'folder') {
+      orgDrag.at = computeFolderTarget(e.clientY, row);
+      placeFolderDropLine(orgDrag.at);
+    } else {
+      orgDrag.at = computeOrgTarget(e.clientY, row);
+      placeOrgDropLine(orgDrag.at);
+    }
   });
   const finish = async (commit) => {
     start = null;
@@ -4346,32 +4432,51 @@ function bindOrgDrag(handle, row, kind, name) {
     const drag = orgDrag;
     orgDrag = null;
     row.classList.remove('dragging');
-    if (commit && dropLine.parentElement) {
-      if (drag.kind === 'folder') await commitFolderDrop(drag.name);
-      else await commitProcDrop(drag.name);
-    } else {
-      dropLine.remove();
+    dropLine.remove();
+    markFolderTarget(null);
+    if (commit && drag.at) {
+      if (drag.kind === 'folder') await commitFolderDrop(drag.name, drag.at);
+      else await commitProcDrop(drag.name, drag.at);
     }
   };
   handle.addEventListener('pointerup', () => finish(true));
   handle.addEventListener('pointercancel', () => finish(false));
 }
-// 手順をどこへ落とすか: フォルダの見出しの上=そのフォルダの末尾、
-// 開いているフォルダの中の行間=その位置、それ以外=フォルダ外のその位置
+// 手順をどこへ落とすか。#flowlist を上から順に見て、最初に当てはまった所。
+//   フォルダの見出しの上           → そのフォルダの末尾
+//   開いているフォルダの中         → その位置(中身の最後より下なら末尾)
+//   フォルダの外の行の上半分       → その手前
+//   どれにも当たらない(全部より下)→ フォルダの外の末尾
+// 返すのは「どの手順の手前か」であって DOM の位置ではない。位置で覚えると、
+// たたんだフォルダの直後のように、同じ場所で意味が違う所を取り違える
 function computeOrgTarget(clientY, dragRow) {
-  const rows = orgRowScan().filter(r => r.el !== dragRow);
-  for (const r of rows) {
-    const b = r.el.getBoundingClientRect();
-    if (r.kind === 'folderHeader') {
-      if (clientY >= b.top && clientY < b.bottom) return {folder: r.folder, header: true};
+  for (const child of document.getElementById('flowlist').children) {
+    if (child === dragRow || child === dropLine) continue;
+    const b = child.getBoundingClientRect();
+    if (child.classList.contains('folder-row')) {
+      if (clientY >= b.top && clientY < b.bottom) {
+        return {folder: child.dataset.folder, atEnd: true};
+      }
       continue;
     }
-    if (clientY < b.top + b.height / 2) return {folder: r.folder, before: r.el};
+    if (child.classList.contains('folder-items')) {
+      if (clientY >= b.bottom) continue;   // この入れ物より下。次の行を見る
+      const folder = child.dataset.folder;
+      for (const item of child.children) {
+        if (item === dragRow || item === dropLine) continue;
+        const ib = item.getBoundingClientRect();
+        if (clientY < ib.top + ib.height / 2) return {folder, before: item};
+      }
+      return {folder, atEnd: true};
+    }
+    if (child.classList.contains('proc') && clientY < b.top + b.height / 2) {
+      return {folder: null, before: child};
+    }
   }
-  const last = rows[rows.length - 1];
-  return last ? {folder: last.folder, atEnd: true} : {folder: null, atEnd: true};
+  return {folder: null, atEnd: true};
 }
 function placeOrgDropLine(target) {
+  markFolderTarget(null);
   if (target.before) {
     target.before.parentElement.insertBefore(dropLine, target.before);
     return;
@@ -4379,76 +4484,60 @@ function placeOrgDropLine(target) {
   if (target.folder) {
     const cont = folderItemsEl(target.folder);
     if (cont) { cont.append(dropLine); return; }
-    // 閉じたフォルダの見出しへ: 見出しの直後に置く(そこは「末尾」の印)
-    const header = [...document.getElementById('flowlist').children].find(
-      c => c.classList.contains('folder-row') && c.dataset.folder === target.folder);
-    if (header) { header.after(dropLine); return; }
+    markFolderTarget(target.folder);   // たたんだフォルダは見出しで示す
+    return;
   }
   document.getElementById('flowlist').append(dropLine);
 }
 // フォルダ自体の並べ替え: フォルダの見出し同士の間だけを候補にする
 // (フォルダ間の入れ子はできない仕様のため)
 function computeFolderTarget(clientY, dragRow) {
-  const rows = orgRowScan().filter(r => r.kind === 'folderHeader' && r.el !== dragRow);
-  for (const r of rows) {
-    const b = r.el.getBoundingClientRect();
-    if (clientY < b.top + b.height / 2) return {before: r.el};
+  for (const child of document.getElementById('flowlist').children) {
+    if (child === dragRow || !child.classList.contains('folder-row')) continue;
+    const b = child.getBoundingClientRect();
+    if (clientY < b.top + b.height / 2) return {before: child};
   }
   return {atEnd: true};
 }
 function placeFolderDropLine(target) {
+  markFolderTarget(null);
   const box = document.getElementById('flowlist');
   if (target.before) { box.insertBefore(dropLine, target.before); return; }
+  // 末尾 = 最後のフォルダの後ろ(フォルダの外の手順が始まる手前)
   const firstOutside = [...box.children].find(c => c !== dropLine
     && !c.classList.contains('folder-row') && !c.classList.contains('folder-items'));
   if (firstOutside) box.insertBefore(dropLine, firstOutside); else box.append(dropLine);
 }
-async function commitProcDrop(name) {
-  const box = document.getElementById('flowlist');
-  const parent = dropLine.parentElement;
-  let targetFolder = null;
-  if (parent.classList.contains('folder-items')) {
-    targetFolder = parent.dataset.folder;
-  } else if (dropLine.previousElementSibling
-             && dropLine.previousElementSibling.classList.contains('folder-row')) {
-    targetFolder = dropLine.previousElementSibling.dataset.folder;
-  }
+async function commitProcDrop(name, target) {
   const folders = cloneFolders();
   for (const f of folders) f.items = f.items.filter(n => n !== name);
+  const beforeName = target.before ? target.before.dataset.name : null;
   let newFlatOrder = null;   // フォルダ外へ出た/動いたときだけ使う
-  if (targetFolder != null) {
-    const f = folders.find(x => x.name === targetFolder);
+  if (target.folder) {
+    const f = folders.find(x => x.name === target.folder);
     if (f) {
-      let idx = f.items.length;   // 既定は末尾(閉じたフォルダの見出しへ落とした場合)
-      if (parent.classList.contains('folder-items')) {
-        idx = 0;
-        for (const c of parent.children) {
-          if (c === dropLine) break;
-          if (c.classList.contains('proc') && c.dataset.name !== name) idx++;
-        }
-      }
-      f.items.splice(idx, 0, name);
+      const at = beforeName ? f.items.indexOf(beforeName) : -1;
+      f.items.splice(at < 0 ? f.items.length : at, 0, name);
     }
   } else {
-    // フォルダ外の位置。#flowlist 直下の手順行を dropLine の位置で並べ替え、
+    // フォルダ外の位置。一覧に出ているフォルダ外の手順だけを並べ替え、
     // フォルダに入っている名前は元の相対位置のまま order.json 全体へ反映する
-    let idx = 0;
-    for (const c of box.children) {
-      if (c === dropLine) break;
-      if (c.classList.contains('proc') && !c.classList.contains('folder-row')
-          && c.dataset.name && c.dataset.name !== name) idx++;
-    }
-    const outsideNames = [...box.children]
+    const outsideNames = [...document.getElementById('flowlist').children]
       .filter(c => c.classList.contains('proc') && !c.classList.contains('folder-row')
              && c.dataset.name && c.dataset.name !== name)
       .map(c => c.dataset.name);
-    outsideNames.splice(idx, 0, name);
+    const at = beforeName ? outsideNames.indexOf(beforeName) : -1;
+    outsideNames.splice(at < 0 ? outsideNames.length : at, 0, name);
     const inFolderNow = new Set(folders.flatMap(f => f.items));
     const flat = state.procedures.map(p => p.name);
-    let oi = 0;
-    newFlatOrder = flat.map(n => (inFolderNow.has(n) ? n : outsideNames[oi++]));
+    // 一覧の描画と state がずれていると、数が合わずに並びへ undefined が
+    // 混ざる(order.json に "None" が書かれ、実在する手順が並びから落ちる)。
+    // 合わないときは並び順には触らず、フォルダ分けの保存だけに留める
+    if (flat.filter(n => !inFolderNow.has(n)).length === outsideNames.length) {
+      let oi = 0;
+      newFlatOrder = flat.map(n => (inFolderNow.has(n) ? n : outsideNames[oi++]));
+    }
   }
-  dropLine.remove();
   const ok = await saveProcOrg(folders, currentHidden());
   if (ok && newFlatOrder) {
     await api('/api/reorder', 'POST', {kind: 'procedures', names: newFlatOrder});
@@ -4456,19 +4545,14 @@ async function commitProcDrop(name) {
   await refresh();
   renderFlowList();
 }
-async function commitFolderDrop(name) {
-  const box = document.getElementById('flowlist');
-  let idx = 0;
-  for (const c of box.children) {
-    if (c === dropLine) break;
-    if (c.classList.contains('folder-row') && c.dataset.folder !== name) idx++;
-  }
-  dropLine.remove();
+async function commitFolderDrop(name, target) {
   const folders = cloneFolders();
   const at = folders.findIndex(f => f.name === name);
   if (at < 0) return;
   const [f] = folders.splice(at, 1);
-  folders.splice(idx, 0, f);
+  const beforeName = target.before ? target.before.dataset.folder : null;
+  const j = beforeName ? folders.findIndex(x => x.name === beforeName) : -1;
+  folders.splice(j < 0 ? folders.length : j, 0, f);
   if (await saveProcOrg(folders, currentHidden())) { await refresh(); renderFlowList(); }
 }
 
