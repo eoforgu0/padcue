@@ -869,14 +869,14 @@ header { position:relative; }
 .dot.warn { background:var(--warn); }
 .dot.err { background:var(--err); }
 /* 装置カードの行。手順一覧の .proc の形を借りるが、行は選択対象ではない */
-.devrow b, .devrow .meta { cursor:default; }
+.devrow:not(.foldable) b, .devrow:not(.foldable) .meta { cursor:default; }
 .devrow .meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 /* 開閉式の詳細を持つ行(装置の台帳)。折りたたみ三角ぶんだけ列を1つ増やす
    (手順を編集のフォルダ行 .folder-row と同じ作法。原則 §5 同じ意味は同じ形) */
-.devrow.foldable { grid-template-columns:14px 16px 1fr auto; }
+.devrow.foldable { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
 .devrow.foldable .meta { grid-column:3 / -1; }
 .devtoggle { border:0; background:transparent; cursor:pointer;
-  color:var(--muted); padding:0; width:16px; font-size:10px; text-align:center; }
+  color:var(--muted); padding:0; width:16px; font-size:12px; text-align:center; }
 .devdetail { grid-column:1 / -1; display:none; margin-top:8px; padding-top:8px;
   border-top:1px solid var(--line); }
 .devrow.open .devdetail { display:flex; flex-direction:column; gap:8px; }
@@ -915,12 +915,12 @@ main { display:grid; gap:14px; padding:14px; align-items:start;
 /* 中身が広いとき、列そのものを広げずに中で横スクロールさせる
    (これが無いと画面全体が横に伸びる) */
 main > * { min-width:0; }
-/* 左ペインは3画面とも同じ幅(いちばん広い実行・監視の 280px)に揃える。
+/* 左ペインは3画面とも同じ幅(いちばん広い実行・監視の 320px)に揃える。
    画面ごとに違うと、切り替えのたびに本文の開始位置が動いてちらつく
    (2026-08-04 ユーザー指摘) */
-main.home { grid-template-columns:280px 1fr; }
-main.flow { grid-template-columns:280px 1fr 260px; }
-main.part { grid-template-columns:280px 1fr; }
+main.home { grid-template-columns:320px 1fr; }
+main.flow { grid-template-columns:320px 1fr 260px; }
+main.part { grid-template-columns:320px 1fr; }
 @media (max-width:900px){ main.home, main.flow, main.part { grid-template-columns:1fr; } }
 .card { background:var(--surface); border:1px solid var(--line);
   border-radius:10px; padding:13px 15px; }
@@ -973,11 +973,13 @@ main > .card { min-width:0; }
 .proc.off { opacity:.55; }
 /* フォルダ(手順を編集の一覧。VSCode のエクスプローラ風)。見出し行は
    .proc の見た目を借りつつ、開閉の三角ぶんだけ列を1つ増やす */
-.folder-row { grid-template-columns:14px 16px 1fr auto; cursor: default; }
+.folder-row { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
 .foldertoggle { border:0; background:transparent; cursor:pointer;
-  color:var(--muted); padding:0; width:16px; font-size:10px;
+  color:var(--muted); padding:0; width:16px; font-size:12px;
   text-align:center; }
 .folder-row b { font-weight:700; }
+.foldericon { color:var(--muted); display:inline-flex; margin-right:5px; }
+.foldericon svg { vertical-align:-2px; }
 .folder-items { margin-left:20px; }
 .chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:11px;
   border:1px solid var(--line); color:var(--muted); }
@@ -1056,8 +1058,13 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 /* 行の追加(＋)と削除(×)。字形の幅に任せると不揃いになるので同じ幅に */
 table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
 /* 再生位置(.play)を中で絶対配置するので、基準をここにする。
-   指定を忘れると画面全体を基準にしてしまい、まったく違う場所に出る */
-.tl { min-width:520px; position:relative; }
+   指定を忘れると画面全体を基準にしてしまい、まったく違う場所に出る。
+   マーク・帯・再生位置はすべて %(親要素幅に対する割合)で置いているので、
+   幅そのものは固定 px を持たずパネル幅にそのまま追従する。レーンの
+   タイムラインは横スクロールさせない(部品エディタのグリッドとは別扱い。
+   2026-08-07 決定) */
+.tl { position:relative; }
+.lane .tl-wrap { overflow-x:visible; }
 .tlrow { display:grid; grid-template-columns:56px 1fr; align-items:center;
   margin-bottom:4px; }
 .tlrow .nm { color:var(--muted); text-align:right; padding-right:10px;
@@ -1882,6 +1889,8 @@ const ICON_SVG = {
      + '<path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/>'
      + '<path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0'
      + '-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9'
+     + 'L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 };
 function iconSvg(name, size) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"`
@@ -2060,7 +2069,7 @@ function devFlagKey(d) {
 function applyDevOpenState(row) {
   const open = !!devOpen.get(row.name);
   row.card.classList.toggle('open', open);
-  row.toggle.textContent = open ? '▾' : '▸';
+  row.toggle.textContent = open ? '▼' : '▶';
   row.toggle.title = open ? 'たたむ' : '詳細を開く(接続先・診断)';
 }
 
@@ -2087,9 +2096,15 @@ function buildDevRow(d) {
   row.card = card;
   row.dot = el('span', 'dot');
   card.append(row.dot);
-  row.toggle = el('button', 'devtoggle', '▸');
+  row.toggle = el('button', 'devtoggle', '▶');
   row.toggle.onclick = (e) => { e.stopPropagation(); toggleDevOpen(row.name); };
   card.append(row.toggle);
+  // 行ヘッダ全体をクリックで開閉できるようにする(ボタン・入力欄は除外。
+  // 原則 §5 同じ意味は同じ形 — 手順を編集のフォルダ行と揃える)
+  card.onclick = (e) => {
+    if (e.target.closest('button,input')) return;
+    toggleDevOpen(row.name);
+  };
   row.nameEl = el('b', null, row.name);
   card.append(row.nameEl);
   const rops = el('span', 'rowops');
@@ -4198,17 +4213,26 @@ function renderFolderRow(f) {
   g.title = 'ドラッグでフォルダを並べ替え(フォルダ間の入れ子はできません)';
   bindOrgDrag(g, d, 'folder', f.name);
   d.append(g);
-  const tgl = el('button', 'foldertoggle', f.open ? '▾' : '▸');
+  const tgl = el('button', 'foldertoggle', f.open ? '▼' : '▶');
   tgl.title = f.open ? 'たたむ' : '開く';
   tgl.onclick = (e) => { e.stopPropagation(); toggleFolderOpen(f.name); };
   d.append(tgl);
-  d.append(el('b', null, f.name));
+  const nameEl = el('b');
+  const icon = el('span', 'foldericon');
+  icon.innerHTML = iconSvg('folder', 13);
+  nameEl.append(icon, document.createTextNode(f.name));
+  d.append(nameEl);
   const ops = el('span', 'rowops');
   ops.append(
     rowIcon('pencil', 'フォルダの名前を変える', false, () => renFolder(f.name)),
     rowIcon('trash', 'フォルダを解体(中の手順は外に出ます。手順は消えません)',
             true, () => delFolder(f.name)));
   d.append(ops);
+  // 行ヘッダ全体をクリックで開閉できるようにする(ボタンは除外。原則 §5)
+  d.onclick = (e) => {
+    if (e.target.closest('button,input')) return;
+    toggleFolderOpen(f.name);
+  };
   return d;
 }
 
