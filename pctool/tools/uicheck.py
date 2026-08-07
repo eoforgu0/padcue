@@ -629,14 +629,33 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "() => document.documentElement.dataset.theme").startswith("ai-")
         page.keyboard.press("Escape")
         page.wait_for_timeout(150)
-        lane(page).locator(".lproc").select_option(sel_before)
-        page.wait_for_timeout(600)
+        assert lane(page).locator(".lproc").input_value() == sel_before, \
+            "配色を選ぶ前後で手順の選択が変わった"
     c.check("配色を切り替えられ、選択が残る", t_theme_switch)
+
+    def t_lane_proc_survives_reload():
+        """読み込み直しても、そのレーンで最後に選んだ手順が選ばれたままなこと。
+
+        以前は select に選択肢を並べた時点で先頭が選ばれてしまい、控え
+        (localStorage)を読む段に到達していなかった。
+        """
+        l = lane(page)
+        before = l.locator(".lproc").input_value()
+        # 一覧の先頭(周回で変える)以外を選ばないと、戻ったのか残ったのかが
+        # 区別できない
+        l.locator(".lproc").select_option("選んで進む")
+        page.wait_for_timeout(400)
+        page.reload()
+        page.wait_for_timeout(1400)
+        assert lane(page).locator(".lproc").input_value() == "選んで進む", \
+            "読み込み直しで手順の選択が一覧の先頭に戻る"
+        lane(page).locator(".lproc").select_option(before)
+        page.wait_for_timeout(600)
+    c.check("読み込み直しても手順の選択が残る(新設)",
+            t_lane_proc_survives_reload)
 
     def t_notify_settings():
         """⚙ の通知設定: 3択で効かない欄が出入りし、選択が残ること。"""
-        # 読み込み直すと手順の選択は一覧の先頭に戻る(既知。t_theme_switch も
-        # 同じ理由で選び直している)。後続の検査の前提を壊さないよう戻す
         sel_before = lane(page).locator(".lproc").input_value()
         page.click("#setbtn")
         page.wait_for_timeout(200)
@@ -663,8 +682,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(150)
-        lane(page).locator(".lproc").select_option(sel_before)
-        page.wait_for_timeout(600)
+        assert lane(page).locator(".lproc").input_value() == sel_before, \
+            "通知設定の読み込み直しで手順の選択が変わった"
     c.check("通知の3択で効かない欄が出入りし、選択が残る(新設)", t_notify_settings)
 
     def t_notify_on_finish():

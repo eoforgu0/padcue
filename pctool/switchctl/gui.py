@@ -2931,9 +2931,17 @@ function buildLane(d) {
   return lane;
 }
 
+// 「このレーンで最後に選んだ手順」の控えの置き場所。個体IDが正だが、
+// 練習の mock は設計上 ID を学習しないので空になる。空 ID 同士だと2台
+// 練習で控えが1つに混ざるため、そのときだけ名前で分ける(laneMap を
+// 名前キーにしたのと同じ理由)
+function laneProcKey(lane) {
+  return 'laneProc.' + (lane.id || lane.name);
+}
+
 function wireLane(lane) {
   lane.proc.onchange = () => {
-    localStorage.setItem('laneProc.' + lane.id, lane.proc.value);
+    localStorage.setItem(laneProcKey(lane), lane.proc.value);
     // 「手順を編集」を開くときの初期候補として、最後に選んだ手順を覚えておく
     selected = lane.proc.value;
   };
@@ -2990,7 +2998,11 @@ function syncLaneProc(lane, d, runName) {
   const key = names.join('\n');
   if (lane.procKey !== key) {
     lane.procKey = key;
-    const keep = lane.proc.value;
+    // 読み込み直した直後は select がまだ空なので、控えを起点にする。
+    // 選択肢を並べると value は勝手に先頭へ決まってしまい、後ろの want で
+    // 控えを読む段には永久に到達しない(= 最後に選んだ手順を覚える仕組みが
+    // 読み込み直しでは効いていなかった)
+    const keep = lane.proc.value || localStorage.getItem(laneProcKey(lane));
     lane.proc.textContent = '';
     for (const p of shown) {
       const o = new Option(p.error ? `${p.name}(エラー)` : p.name, p.name);
@@ -2999,8 +3011,7 @@ function syncLaneProc(lane, d, runName) {
     }
     if (names.includes(keep)) lane.proc.value = keep;
   }
-  const want = runName || lane.proc.value
-    || localStorage.getItem('laneProc.' + lane.id) || names[0] || '';
+  const want = runName || lane.proc.value || names[0] || '';
   if (want && lane.proc.value !== want && names.includes(want)) {
     lane.proc.value = want;
   }
