@@ -264,7 +264,9 @@ class Project:
         if not isinstance(order, list):
             return sorted(names)
         rest = sorted(n for n in names if n not in order)
-        return [n for n in order if n in names] + rest
+        # 同じ名前が二度載っていても一覧に二行出さない(手で order.json を
+        # 直したときや、改名の追従が重なったときの保険)
+        return list(dict.fromkeys(n for n in order if n in names)) + rest
 
     def save_order(self, kind: str, names: list[str]) -> None:
         if kind not in ("procedures", "parts"):
@@ -333,37 +335,39 @@ class Project:
         self._order_path().write_text(
             json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    def _update_org_refs(self, old: str, new: str | None) -> None:
-        """order.json の hidden/folders 内の手順名を改名・削除に追従させる。
+    def _update_org_refs(self, old: str, new: str | None,
+                         kind: str = "procedures") -> None:
+        """order.json の中の名前を、改名・削除に追従させる。
 
-        rename_procedure/delete_procedure から呼ぶ。フォルダ所属や非表示は
-        名前をキーに持つため、改名で放置すると別物として消えてしまう
-        (単純な並び順と違い、フィルタで落とすだけでは意味が変わる)。
+        rename_*/delete_* から呼ぶ。
+        並び順(procedures/parts)も名前で位置を覚えているので、追従しないと
+        改名した途端に「載っていない名前」と見なされ、D&D で決めた場所を
+        失って一覧の末尾へ飛ぶ。フォルダ所属・非表示(手順のみ)は名前が
+        そのまま意味を持つため、放置すると別物として消えてしまう。
         new が None なら削除(参照を取り除く)、それ以外は改名(名前を差し替え)。
         """
         d = self._load_order()
         changed = False
-        hidden = d.get("hidden")
-        if isinstance(hidden, list) and old in hidden:
-            i = hidden.index(old)
+
+        def follow(lst) -> None:
+            nonlocal changed
+            if not isinstance(lst, list) or old not in lst:
+                return
+            i = lst.index(old)
             if new is None:
-                hidden.pop(i)
+                lst.pop(i)
             else:
-                hidden[i] = new
+                lst[i] = new
             changed = True
-        folders = d.get("folders")
-        if isinstance(folders, list):
-            for f in folders:
-                if not isinstance(f, dict):
-                    continue
-                items = f.get("items")
-                if isinstance(items, list) and old in items:
-                    i = items.index(old)
-                    if new is None:
-                        items.pop(i)
-                    else:
-                        items[i] = new
-                    changed = True
+
+        follow(d.get(kind))
+        if kind == "procedures":
+            follow(d.get("hidden"))
+            folders = d.get("folders")
+            if isinstance(folders, list):
+                for f in folders:
+                    if isinstance(f, dict):
+                        follow(f.get("items"))
         if changed:
             self._order_path().write_text(
                 json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -596,6 +600,7 @@ class Project:
         self.part_path(new).write_text(
             self.part_path(old).read_text(encoding="utf-8"), encoding="utf-8")
         self.part_path(old).unlink(missing_ok=True)
+        self._update_org_refs(old, new, "parts")
         return self._rewrite_refs("part", old, new)
 
     def copy_procedure(self, src: str, new: str) -> None:
@@ -621,6 +626,7 @@ class Project:
 
     def delete_part(self, name: str) -> None:
         self.part_path(name).unlink(missing_ok=True)
+        self._update_org_refs(name, None, "parts")
 
     def init_sample(self) -> None:
         """はじめて使うときの雛形を作る。"""

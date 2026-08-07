@@ -102,6 +102,41 @@ def test_delete_procedure_removes_from_hidden_and_folders(tmp_path):
     assert org["hidden"] == []
 
 
+def test_rename_keeps_place_in_order(tmp_path):
+    """改名しても、D&D で決めた並びの場所を保つ。
+
+    追従しないと order.json に旧名だけが残り、新しい名前は「載っていない
+    名前」として名前順で末尾へ回される(並べ替えたのに勝手に動く)。
+    """
+    p = make(tmp_path, {"A": [], "B": [], "C": []},
+             {"X": "F,A\n1,1\n", "Y": "F,A\n1,1\n", "Z": "F,A\n1,1\n"})
+    p.save_order("procedures", ["C", "A", "B"])
+    p.save_order("parts", ["Z", "X", "Y"])
+    p.rename_procedure("A", "A改")
+    p.rename_part("X", "X改")
+    assert p.procedure_names() == ["C", "A改", "B"]
+    assert p.part_names() == ["Z", "X改", "Y"]
+
+
+def test_delete_drops_name_from_order(tmp_path):
+    p = make(tmp_path, {"A": [], "B": []}, {"X": "F,A\n1,1\n", "Y": "F,A\n1,1\n"})
+    p.save_order("procedures", ["B", "A"])
+    p.save_order("parts", ["Y", "X"])
+    p.delete_procedure("A")
+    p.delete_part("X")
+    raw = json.loads((p.root / "order.json").read_text(encoding="utf-8"))
+    assert raw["procedures"] == ["B"]
+    assert raw["parts"] == ["Y"]
+
+
+def test_order_with_duplicate_names_shows_one_row(tmp_path):
+    """order.json に同じ名前が二度あっても一覧に二行出さない。"""
+    p = make(tmp_path, {"A": [], "B": []})
+    (p.root / "order.json").write_text(
+        json.dumps({"procedures": ["A", "A", "B"]}), encoding="utf-8")
+    assert p.procedure_names() == ["A", "B"]
+
+
 # ---------------- 後方互換(procedures/parts のみの旧形式) ----------------
 
 def test_legacy_order_json_still_works(tmp_path):
