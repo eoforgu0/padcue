@@ -21,6 +21,7 @@ from .client import DeviceClient, DeviceError
 from .coupler import Coupler
 from .devicepool import DevicePool
 from .discover import discover
+from .notify import RunWatcher
 from .project import Project, validate_name
 from .record import Recorder
 
@@ -78,6 +79,10 @@ class _Handler(BaseHTTPRequestHandler):
     lock = threading.Lock()      # 記録(recorder)など PC 側共有物の直列化
     pool = None                  # DevicePool(装置への接続・収集の唯一の窓口)
     coupler = None               # Coupler(連結・セット実行・自動合流の持ち主)
+    watcher = None               # RunWatcher(通知のきっかけを見張る)
+    # 見張りを作るときだけの錠。lock(装置操作の直列化)とは別にする。
+    # /api/stop は lock を持ったまま見張りに触るので、同じ錠だと自分で詰まる
+    watcher_lock = threading.Lock()
     recorder: Recorder | None = None   # 手動操作の記録中だけ存在する
 
     def log_message(self, *args):
@@ -138,6 +143,18 @@ class _Handler(BaseHTTPRequestHandler):
             cls.coupler = Coupler(cls.project, pool)
         return cls.coupler
 
+    @classmethod
+    def _watcher(cls):
+        pool, coupler = cls._pool(), cls._coupler()
+        with cls.watcher_lock:
+            if cls.watcher is not None and (cls.watcher.pool is not pool
+                                            or cls.watcher.coupler is not coupler):
+                cls.watcher.close()
+                cls.watcher = None
+            if cls.watcher is None:
+                cls.watcher = RunWatcher(pool, coupler)
+            return cls.watcher
+
     def _call(self, fn, dev: str = ""):
         """装置への操作。dev = 装置の名前(省略時は台帳の1台目)。
 
@@ -180,6 +197,8 @@ class _Handler(BaseHTTPRequestHandler):
             # 実機は同時に1接続しか受けないので POST と同じ錠で直列化する
             with self.lock:
                 return self._json(self._state())
+        if u.path == "/api/events":
+            return self._events()
         if u.path == "/api/timeline":
             name = parse_qs(u.query).get("name", [""])[0]
             r, err = self.project.build_safe(name)
@@ -440,6 +459,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/stop":
             mode = body.get("mode", "immediate")
             link = self._pool().get(body.get("dev", ""))
+            if mode == "immediate":
+                # 押した本人は画面を見ているので、この停止では通知しない。
+                # 送る**前に**印を付ける(止まった状態が控えに乗るのと
+                # 見張りの周期は競争するため、届いてから付けたのでは間に合う
+                # 保証がない)。印は次に止まった1回で使い切る
+                self._watcher().note_manual_stop([link.cfg.get("name", "")])
             link.write_through(
                 status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             # 人が押した停止の印。連結実行中でも「人為停止は連動しない」
@@ -501,7 +526,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/couple_resume":
             return self._coupler().couple_resume()
         if path == "/api/stop_both":
-            return self._coupler().stop_both(body.get("mode", "graceful"))
+            mode = body.get("mode", "graceful")
+            if mode == "immediate":
+                self._watcher().note_manual_stop(
+                    [l.cfg.get("name", "") for l in self._coupler().members()])
+            return self._coupler().stop_both(mode)
         if path == "/api/select_both":
             return self._coupler().select_both(int(body.get("arm", 0)))
         # ---- 編成(盤面のスナップショット。sets/<名前>.json) ----
@@ -630,6 +659,40 @@ class _Handler(BaseHTTPRequestHandler):
         return {"error": "not found"}
 
     # ---- 状態 ----
+
+    def _events(self):
+        """通知のきっかけを押し出す(SSE)。lock は取らない。
+
+        この接続は開いたままになるので、装置操作の錠を持ってはいけない。
+        繋いだ時点より前の事象は流さない(画面を開き直したとき、すでに
+        終わっている実行の知らせが遅れて鳴らないように)。
+        """
+        w = self._watcher()
+        ev = w.subscribe()
+        last, _ = w.since(0)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(b": open\n\n")
+            self.wfile.flush()
+            while not w.closed:
+                ev.wait(15.0)
+                ev.clear()
+                last, items = w.since(last)
+                # 事象が無くても15秒ごとに1行送る。閉じた接続はここで
+                # 書き込みが失敗して片付く(残ると接続が溜まる)
+                out = "".join(
+                    "data: " + json.dumps(it, ensure_ascii=False) + "\n\n"
+                    for it in items) or ": ping\n\n"
+                self.wfile.write(out.encode("utf-8"))
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError,
+                OSError):
+            pass       # 画面を閉じた・読み込み直しただけ
+        finally:
+            w.unsubscribe(ev)
 
     def _state(self) -> dict:
         org = self.project.load_proc_org()
@@ -837,7 +900,9 @@ header .spacer { margin-left:auto; }
 /* デバイス(マイコン)の状態と接続先は同じことなので1つの枠にまとめる。
    状態だけ左端に離れていると、何の状態なのか・どこで直すのかが分からない */
 header { position:relative; }
-.thememenu { margin-left:auto; position:relative; }
+/* ⚙ = この画面そのものの設定(通知・配色)。運転席にも格納庫にも属さない
+   ものはヘッダに置く(設計原則 §1)。設定の入口は1つに保つ */
+.setmenu { margin-left:auto; position:relative; }
 .iconbtn { border:1px solid var(--line); background:var(--surface);
   color:var(--ink); border-radius:8px; width:30px; height:28px;
   cursor:pointer; font-size:15px; line-height:1; padding:0;
@@ -852,6 +917,18 @@ header { position:relative; }
 .menu button:hover { background:var(--accent-soft); color:var(--accent); }
 .menu button.on { font-weight:700; color:var(--accent); }
 .menu button.on::before { content:'✓ '; }
+.menu.setpanel { min-width:238px; }
+.setsec { font-size:11px; color:var(--muted); letter-spacing:.06em;
+  padding:5px 9px 3px; }
+.setsec.line { border-top:1px solid var(--line); margin-top:5px;
+  padding-top:8px; }
+.setrow { padding:3px 9px 5px; display:flex; flex-wrap:wrap; gap:9px;
+  align-items:center; font-size:12.5px; }
+.setrow label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+.setrow input[type=range] { width:92px; }
+/* .menu button の全幅指定を、行の中のボタンには効かせない */
+.setrow button { display:inline-flex; width:auto; align-items:center;
+  border:1px solid var(--line); }
 /* ラベル語(接続先・選択肢を両方へ同時に送る、など)の基本の見た目。強調したい
    文脈(連結バー)だけ .coupler .lbl で太字に上書きする */
 .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em; }
@@ -1297,17 +1374,37 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <button class="tab" data-view="flow">手順を編集</button>
     <button class="tab" data-view="part">部品を編集</button>
   </div>
-  <div class="thememenu">
-    <button id="themebtn" class="iconbtn" title="画面の配色を選ぶ"
-            aria-haspopup="true" aria-expanded="false">◐</button>
-    <div id="themelist" class="menu" style="display:none">
-      <button data-t="auto">自動(OS に合わせる)</button>
-      <button data-t="ai-light">藍 ライト</button>
-      <button data-t="ai-dark">藍 ダーク</button>
-      <button data-t="sumi-light">墨 ライト(色を抑える)</button>
-      <button data-t="sumi-dark">墨 ダーク(色を抑える)</button>
-      <button data-t="kohaku-light">琥珀 ライト(暖色)</button>
-      <button data-t="kohaku-dark">琥珀 ダーク(暖色・夜間向け)</button>
+  <!-- 設定の入口は1つ。◐(配色だけ)と ⚙ を並べると、配色を探す人が
+       ⚙ の中を開けることになる(同じ意味は同じ形。原則 §5) -->
+  <div class="setmenu">
+    <button id="setbtn" class="iconbtn" title="通知と配色"
+            aria-haspopup="true" aria-expanded="false">⚙</button>
+    <div id="setlist" class="menu setpanel" style="display:none">
+      <div class="setsec">通知</div>
+      <div id="notifyways">
+        <button data-w="sound">音</button>
+        <button data-w="tab">タブ名を点滅</button>
+        <button data-w="off">通知なし</button>
+      </div>
+      <div class="setrow" id="notifyvolrow">
+        <label>音量 <input type="range" id="notifyvol"
+                          min="0" max="100" step="5"></label>
+        <button class="small" id="notifytest">♪ 試す</button>
+      </div>
+      <div class="setrow" id="notifywhen">
+        <label><input type="checkbox" id="notifydone">実行が終わったとき</label>
+        <label><input type="checkbox" id="notifyawait">操作待ちになったとき</label>
+      </div>
+      <div class="setsec line">配色</div>
+      <div id="themelist">
+        <button data-t="auto">自動(OS に合わせる)</button>
+        <button data-t="ai-light">藍 ライト</button>
+        <button data-t="ai-dark">藍 ダーク</button>
+        <button data-t="sumi-light">墨 ライト(色を抑える)</button>
+        <button data-t="sumi-dark">墨 ダーク(色を抑える)</button>
+        <button data-t="kohaku-light">琥珀 ライト(暖色)</button>
+        <button data-t="kohaku-dark">琥珀 ダーク(暖色・夜間向け)</button>
+      </div>
     </div>
   </div>
 </header>
@@ -1793,33 +1890,183 @@ function applyTheme(v) {
   document.documentElement.dataset.theme =
     auto ? (dark ? 'ai-dark' : 'ai-light') : v;
 }
+// ============ 通知 ============
+// きっかけ(終了・異常・操作待ち)の判定はサーバが持ち、/api/events で
+// 届く。ブラウザは裏に回るとタイマーを絞られる(隠れて5分たつと毎分1回)
+// ので、画面の定期取得で捉えると放置運転の知らせが最大1分遅れる。
+// ここは受け取って知らせるだけ
+const NOTIFY_DEFAULT = {way: 'sound', vol: 40, done: true, wait: true};
+let notify = (() => {
+  try {
+    return Object.assign({}, NOTIFY_DEFAULT,
+                         JSON.parse(localStorage.getItem('padctl-notify') || '{}'));
+  } catch (e) { return Object.assign({}, NOTIFY_DEFAULT); }
+})();
+
+// 音を出す土台。通知(チーン)と F9/F10 の受け付けビープが共用する
+let audioCtx = null;
+
+// 一声ぶん。立ち上がりを短く、減衰を長く取ると「チーン」になる
+function tone(freq, at, dur, vol) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.linearRampToValueAtTime(vol, at + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(at);
+  o.stop(at + dur + 0.02);
+}
+
+// 意味が違えば形も違う(原則 §5)。終了=チーン、異常=低く下がる2音、
+// 操作待ち=呼びかけるように上がる2音
+function chime(kind) {
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const v = Math.max(0, Math.min(100, notify.vol | 0)) / 100 * 0.5;
+    if (!v) return;
+    const t = audioCtx.currentTime + 0.02;
+    if (kind === 'error') {
+      tone(392, t, 0.5, v);
+      tone(294, t + 0.24, 0.8, v);
+    } else if (kind === 'await') {
+      tone(880, t, 0.3, v * 0.8);
+      tone(1174.7, t + 0.14, 0.7, v * 0.8);
+    } else {
+      // 基音に薄い倍音を重ねると、澄んだ鈴の音になる
+      tone(1046.5, t, 1.2, v);
+      tone(2093, t, 0.5, v * 0.22);
+    }
+  } catch (e) { /* 音が出せない環境では黙って続ける */ }
+}
+
+// タブ名の点滅。画面に戻った時点で必ず止める(消せない表示を残さない)。
+// 点滅の両側とも知らせの文言にしてあるのは、隠れたタブではタイマーが
+// 絞られて切り替えが止まりうるため(どちらで止まっても読める)
+const BASE_TITLE = document.title;
+let blinkTimer = null;
+
+function blinkTitle(text) {
+  stopBlink();
+  let on = true;
+  document.title = '● ' + text;
+  blinkTimer = setInterval(() => {
+    on = !on;
+    document.title = (on ? '● ' : '○ ') + text;
+  }, 1000);
+}
+
+function stopBlink() {
+  if (blinkTimer === null) return;
+  clearInterval(blinkTimer);
+  blinkTimer = null;
+  document.title = BASE_TITLE;
+}
+document.addEventListener('visibilitychange',
+                          () => { if (!document.hidden) stopBlink(); });
+window.addEventListener('focus', stopBlink);
+// 画面を見たまま終わったときは切り替えも焦点移動も起きない。触れば
+// 「見た」と分かるので、そこで止める(気づくまでは出したままにする)
+window.addEventListener('pointerdown', stopBlink);
+window.addEventListener('keydown', stopBlink);
+
+const NOTIFY_TEXT = {done: '実行が終わりました', error: '異常で止まりました',
+                     await: '操作を待っています'};
+
+function onNotify(kind) {
+  if (notify.way === 'off') return;
+  if (!(kind === 'await' ? notify.wait : notify.done)) return;
+  if (notify.way === 'sound') chime(kind);
+  else blinkTitle(NOTIFY_TEXT[kind] || NOTIFY_TEXT.done);
+}
+
+// 音は「利用者が一度でも触ってから」でないと鳴らせない決まりがある。
+// 実行を押した時点で必ず満たされるが、CLI から始めた実行にも間に合うよう、
+// どこかに触れた時点で用意しておく
+document.addEventListener('pointerdown', () => {
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { /* 音が出せない環境 */ }
+}, {once: true});
+
+// EventSource は切れても自動で繋ぎ直す。繋ぎ直しの間に起きた事は流れて
+// こない(戻ってきた瞬間に古い知らせが鳴らない、が正しい)
+try {
+  new EventSource('/api/events').onmessage = ev => {
+    let m = null;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m && m.kind) onNotify(m.kind);
+  };
+} catch (e) { /* 通知が使えない環境でも画面は動く */ }
+
+// ============ 設定パネル(⚙: 通知・配色)============
 {
-  const btn = document.getElementById('themebtn');
-  const list = document.getElementById('themelist');
+  const btn = document.getElementById('setbtn');
+  const panel = document.getElementById('setlist');
+  const themes = document.getElementById('themelist');
+  const ways = document.getElementById('notifyways');
+  const volrow = document.getElementById('notifyvolrow');
+  const vol = document.getElementById('notifyvol');
+  const when = document.getElementById('notifywhen');
+  const cbDone = document.getElementById('notifydone');
+  const cbWait = document.getElementById('notifyawait');
   let cur = localStorage.getItem('padctl-theme') || 'auto';
-  const mark = () => list.querySelectorAll('button').forEach(
+  const markTheme = () => themes.querySelectorAll('button').forEach(
     b => b.classList.toggle('on', b.dataset.t === cur));
+  const paint = () => {
+    ways.querySelectorAll('button').forEach(
+      b => b.classList.toggle('on', b.dataset.w === notify.way));
+    // 効かない欄は置かない(音量は音のときだけ、鳴らすときは通知するときだけ)
+    volrow.style.display = notify.way === 'sound' ? '' : 'none';
+    when.style.display = notify.way === 'off' ? 'none' : '';
+    vol.value = notify.vol;
+    cbDone.checked = !!notify.done;
+    cbWait.checked = !!notify.wait;
+  };
+  const save = () => {
+    localStorage.setItem('padctl-notify', JSON.stringify(notify));
+    paint();
+  };
   applyTheme(cur);
-  mark();
+  markTheme();
+  paint();
   const close = () => {
-    list.style.display = 'none';
+    panel.style.display = 'none';
     btn.setAttribute('aria-expanded', 'false');
   };
   btn.onclick = (e) => {
     e.stopPropagation();
-    const open = list.style.display === 'none';
-    list.style.display = open ? '' : 'none';
+    const open = panel.style.display === 'none';
+    panel.style.display = open ? '' : 'none';
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   };
-  list.querySelectorAll('button').forEach(b => {
+  // 中を触っても閉じない(音量を決めるには聴き比べが要る。配色も見比べる)。
+  // 閉じるのは外を押すか Esc
+  panel.addEventListener('click', e => e.stopPropagation());
+  themes.querySelectorAll('button').forEach(b => {
     b.onclick = () => {
       cur = b.dataset.t;
       localStorage.setItem('padctl-theme', cur);
       applyTheme(cur);
-      mark();
-      close();
+      markTheme();
     };
   });
+  ways.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      notify.way = b.dataset.w;
+      save();
+      if (notify.way === 'sound') chime('done');   // 選んだ音がその場で分かる
+    };
+  });
+  vol.oninput = () => { notify.vol = parseInt(vol.value, 10) || 0; save(); };
+  vol.onchange = () => chime('done');
+  document.getElementById('notifytest').onclick = () => chime('done');
+  cbDone.onchange = () => { notify.done = cbDone.checked; save(); };
+  cbWait.onchange = () => { notify.wait = cbWait.checked; save(); };
   document.addEventListener('click', close);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   if (window.matchMedia) {
@@ -3154,9 +3401,8 @@ async function coupleRun(once) {
   refresh();
 }
 
-// 受け付けをビープで返す(F9/F10 は画面を見ずに打つキーなので)
-let audioCtx = null;
-
+// 受け付けをビープで返す(F9/F10 は画面を見ずに打つキーなので)。
+// これは操作の返事であって通知ではないので、⚙ の通知設定には従わない
 function beep(freq) {
   try {
     audioCtx = audioCtx || new AudioContext();
@@ -5524,6 +5770,10 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
               "または本体ボタンを1.5秒長押し)")
     finally:
         marker.unlink(missing_ok=True)
+        # 見張りを先に終わらせる(開いたままの通知の配信を起こして返す)
+        if _Handler.watcher is not None:
+            _Handler.watcher.close()
+            _Handler.watcher = None
         srv.server_close()
         if _Handler.coupler is not None:
             _Handler.coupler.close()

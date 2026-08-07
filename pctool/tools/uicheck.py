@@ -599,23 +599,27 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("ログが溜まり、日時・色・消去が効く", t_logs_panel)
 
     def t_theme_switch():
-        """右上のアイコンから配色を選べ、再読込しても残ること。"""
+        """右上の ⚙ から配色を選べ、再読込しても残ること。"""
         sel_before = lane(page).locator(".lproc").input_value()
-        assert page.locator("#themelist").is_hidden(), "最初からメニューが開いている"
-        page.click("#themebtn")
+        assert page.locator("#setlist").is_hidden(), "最初から設定が開いている"
+        page.click("#setbtn")
         page.wait_for_timeout(200)
-        assert page.locator("#themelist").is_visible(), "メニューが開かない"
+        assert page.locator("#setlist").is_visible(), "設定が開かない"
         page.locator('#themelist button[data-t="sumi-dark"]').click()
         page.wait_for_timeout(250)
-        assert page.locator("#themelist").is_hidden(), "選んでも閉じない"
+        # 選ぶたびに閉じると見比べられない(設定パネルは外を押すか Esc で閉じる)
+        assert page.locator("#setlist").is_visible(), "選んだだけで閉じる"
         assert page.evaluate(
             "() => document.documentElement.dataset.theme") == "sumi-dark"
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        assert page.locator("#setlist").is_hidden(), "Esc で閉じない"
         page.reload()
         page.wait_for_timeout(1400)
         assert page.evaluate(
             "() => document.documentElement.dataset.theme") == "sumi-dark", \
             "選択が残っていない"
-        page.click("#themebtn")
+        page.click("#setbtn")
         page.wait_for_timeout(200)
         assert "on" in (page.locator('#themelist button[data-t="sumi-dark"]')
                         .get_attribute("class") or ""), "今の配色に印が無い"
@@ -623,9 +627,104 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(250)
         assert page.evaluate(
             "() => document.documentElement.dataset.theme").startswith("ai-")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(150)
         lane(page).locator(".lproc").select_option(sel_before)
         page.wait_for_timeout(600)
     c.check("配色を切り替えられ、選択が残る", t_theme_switch)
+
+    def t_notify_settings():
+        """⚙ の通知設定: 3択で効かない欄が出入りし、選択が残ること。"""
+        # 読み込み直すと手順の選択は一覧の先頭に戻る(既知。t_theme_switch も
+        # 同じ理由で選び直している)。後続の検査の前提を壊さないよう戻す
+        sel_before = lane(page).locator(".lproc").input_value()
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        assert "on" in (page.locator('#notifyways button[data-w="sound"]')
+                        .get_attribute("class") or ""), "既定が音になっていない"
+        assert page.locator("#notifyvolrow").is_visible(), "音量が出ていない"
+        assert page.locator("#notifywhen").is_visible(), "鳴らすときが出ていない"
+        page.locator('#notifyways button[data-w="tab"]').click()
+        page.wait_for_timeout(200)
+        assert page.locator("#notifyvolrow").is_hidden(), \
+            "音以外でも音量の欄が残っている(効かない欄)"
+        assert page.locator("#notifywhen").is_visible()
+        page.locator('#notifyways button[data-w="off"]').click()
+        page.wait_for_timeout(200)
+        assert page.locator("#notifywhen").is_hidden(), \
+            "通知なしでも「鳴らすとき」が残っている"
+        page.reload()
+        page.wait_for_timeout(1400)
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        assert "on" in (page.locator('#notifyways button[data-w="off"]')
+                        .get_attribute("class") or ""), "選択が残っていない"
+        page.locator('#notifyways button[data-w="sound"]').click()
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(150)
+        lane(page).locator(".lproc").select_option(sel_before)
+        page.wait_for_timeout(600)
+    c.check("通知の3択で効かない欄が出入りし、選択が残る(新設)", t_notify_settings)
+
+    def t_notify_on_finish():
+        """実行が終わると通知が届く(タブ名の点滅で確かめる)。
+
+        音は自動では聴けないので、同じ知らせを受け取る「タブ名を点滅」に
+        して見る。届く経路(サーバの見張り → /api/events)は同じ。
+        """
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        page.locator('#notifyways button[data-w="tab"]').click()
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.evaluate("() => stopBlink()")
+        l = lane(page)
+        l.locator("button", has_text="1回実行").click()
+        wait_state(page, "実行中")
+        wait_state(page, "待機中", timeout_ms=20000)
+        page.wait_for_function("() => document.title !== 'padctl'",
+                               timeout=8000)
+        assert "実行が終わりました" in page.title(), page.title()
+        # 画面に戻れば必ず消える(消せない表示を残さない)
+        page.evaluate("() => document.dispatchEvent("
+                      "  new Event('visibilitychange'))")
+        page.wait_for_timeout(200)
+        assert page.title() == "padctl", f"点滅が止まらない: {page.title()!r}"
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        page.locator('#notifyways button[data-w="sound"]').click()
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(150)
+    c.check("実行が終わると通知が届き、画面に戻ると消える(新設)",
+            t_notify_on_finish)
+
+    def t_notify_silent_on_manual_stop():
+        """「今すぐ止める」で止めたときは通知しない(押した本人が見ている)。"""
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        page.locator('#notifyways button[data-w="tab"]').click()
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.evaluate("() => stopBlink()")
+        l = lane(page)
+        l.locator(".lloops").fill("0")
+        l.locator("button", has_text="周回実行").click()
+        wait_state(page, "実行中")
+        l.locator("button", has_text="今すぐ止める").click()
+        wait_state(page, "待機中")
+        page.wait_for_timeout(2500)      # 見張りの周期を十分に跨ぐ
+        assert page.title() == "padctl", \
+            f"自分で止めたのに知らせが出た: {page.title()!r}"
+        l.locator(".lloops").fill("1")
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        page.locator('#notifyways button[data-w="sound"]').click()
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(150)
+    c.check("今すぐ止めるでは通知しない(新設)", t_notify_silent_on_manual_stop)
 
     def t_stopg_armed():
         """「今の周で止める」を押すと、予約中だと分かる見た目になること。"""
