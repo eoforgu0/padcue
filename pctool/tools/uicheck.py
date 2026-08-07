@@ -3034,16 +3034,46 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "PC_" not in body, "生のログ種別がそのまま画面に出ている"
     c.check("連結のログが日本語で読める", t_pc_logs_readable)
 
+    def form_row(name: str):
+        return page.locator("#formlist .devrow", has_text=name).first
+
+    def open_form(name: str):
+        """プリセットの中身を開く(既に開いていれば何もしない)。"""
+        row = form_row(name)
+        if "open" not in (row.get_attribute("class") or ""):
+            row.locator(".devtoggle").click()
+            page.wait_for_timeout(250)
+        return row
+
     def t_formation_roundtrip():
         # 保存の作法は連結バーに一本化(原則 §4)。未使用時は #cformsave が
         # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に化ける
+        assert page.locator("#cformsaveas").is_hidden(), \
+            "上書きする相手がいないのに「別名で保存」が出ている"
         prompt_value[0] = "いつもの"
         page.click("#cformsave")
         page.wait_for_function(
             "() => document.querySelector('#formlist')"
             ".textContent.includes('いつもの')", timeout=8000)
-        row = page.locator("#formlist .devrow", has_text="いつもの")
+        row = form_row("いつもの")
+        # 使用中の1件は強調され、中身が開いている(いまの運転がどれか)
+        assert "sel" in (row.get_attribute("class") or ""), \
+            "呼び出し中のプリセットが強調されていない"
+        assert "open" in (row.get_attribute("class") or ""), \
+            "保存したプリセットの中身が開いていない"
         assert "連結" in row.inner_text(), "プリセットの概要に連結が出ない"
+        # 中身は装置ごとに1行で、周回と開始ラベルが読める
+        assert row.locator(".fdev").count() == 2, "装置ごとの行になっていない"
+        assert "×" in row.locator(".floops").first.inner_text(), \
+            "周回が出ていない"
+        # 名前が縦に潰れない(1文字ずつ折り返す崩れの再発を止める)
+        w = row.locator("b").first.bounding_box()["width"]
+        assert w > 40, f"名前の幅が潰れている: {w}px"
+        # 使用中だけ「別名で保存」が出る
+        assert page.locator("#cformsaveas").is_visible(), \
+            "使用中なのに「別名で保存」が出ない"
+        assert page.locator("#cformsave").inner_text().strip() == "上書き保存", \
+            "使用中の保存ボタンが「上書き保存」と名乗っていない"
         # 名前チップと「保存済み」バッジが出る(手順・部品エディタと同型)
         page.wait_for_function(
             "() => document.querySelector('#cformation')"
@@ -3069,7 +3099,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
-        row.locator("button", has_text="呼び出す").click()
+        open_form("いつもの").locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '保存済み'", timeout=8000)
@@ -3084,13 +3114,12 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => document.querySelector('#cformation')"
             ".textContent.includes('いつものB')", timeout=8000)
-        row = page.locator("#formlist .devrow", has_text="いつものB")
         # 実行中の呼び出しは断られる
         page.click("#crun1")
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).some("
             "  d => d.running || d.awaiting)", timeout=10000)
-        row.locator("button", has_text="呼び出す").click()
+        open_form("いつものB").locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => document.querySelector('#formmsg')"
             ".textContent.includes('実行中')", timeout=8000)
@@ -3098,6 +3127,42 @@ def run_coupling(c: Checker, page, proj: Project,
         prompt_value[0] = "自動テスト"
     c.check("プリセット: 保存・上書き保存・改名・呼び出し・実行中ガード",
             t_formation_roundtrip)
+
+    def t_formation_save_as():
+        """呼び出した内容から、別名で新しいプリセットを作れること。
+
+        以前は上書き保存しか道が無く、呼び出したプリセットを土台に別の
+        組み合わせを残せなかった。
+        """
+        lane(0).locator(".lloops").fill("7")
+        page.wait_for_function(
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '未保存の変更'", timeout=8000)
+        prompt_value[0] = "いつものC"
+        page.click("#cformsaveas")
+        page.wait_for_function(
+            "() => document.querySelector('#formlist')"
+            ".textContent.includes('いつものC')", timeout=8000)
+        # 元のプリセットは変わらず残る
+        assert form_row("いつものB").count() == 1, "別名で保存すると元が消える"
+        # 以後は新しい方を編集している(名前チップが追従し、保存済みに戻る)
+        page.wait_for_function(
+            "() => document.querySelector('#cformation')"
+            ".textContent.includes('いつものC')", timeout=8000)
+        page.wait_for_function(
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '保存済み'", timeout=8000)
+        # 元を呼び出すと、別名で保存する前の値(9)に戻る
+        open_form("いつものB").locator("button", has_text="呼び出す").click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('#lanes .lane .lloops')[0]"
+            ".value === '9'", timeout=8000)
+        # 後片づけ
+        row_icon(page, "#formlist", "いつものC", 1).click()
+        page.wait_for_timeout(600)
+        prompt_value[0] = "自動テスト"
+    c.check("プリセット: 別名で保存すると元を残して新しく作れる(新設)",
+            t_formation_save_as)
 
     def t_f10_starts_together():
         # F10 = 現在の盤面のままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)。

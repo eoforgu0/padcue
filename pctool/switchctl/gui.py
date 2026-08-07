@@ -959,6 +959,22 @@ header { position:relative; }
 .devrow.open .devdetail { display:flex; flex-direction:column; gap:8px; }
 /* 未接続・異常のとき、対処の場所であることを縁取りで自ら名乗る(原則 §1) */
 .devrow.flagged { border-color:var(--err); background:var(--err-bg); }
+/* プリセットの行 = 装置の開閉行から丸印の列だけを抜いた形。詳細は名前の
+   位置まで下げて、どの行の中身かを字下げで示す */
+.devrow.foldable.formrow { grid-template-columns:16px 1fr auto; }
+.devrow.foldable.formrow .devdetail { grid-column:2 / -1; }
+.fjoin { color:var(--muted); font-size:11.5px; }
+.fdevs { display:flex; flex-direction:column; gap:3px; }
+/* 装置 / 手順 / 開始ラベル / 周回。周回は右端で桁を揃え、1P と 2P の値を
+   目で突き合わせられるようにする(手順一覧の所要フレーム数と同じ作法) */
+.fdev { display:grid; grid-template-columns:auto minmax(0, 1fr) auto auto;
+  column-gap:6px; align-items:baseline; font-size:11.5px; }
+.fdevname { color:var(--muted); }
+.fproc { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fresume { color:var(--muted); white-space:nowrap; }
+.floops { color:var(--muted); font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
+.fact { display:flex; justify-content:flex-end; }
 /* 装置ごとの縦レーン(台数に関わらず常に1本以上。原則 §1 系: 1台と2台は
    同型)。2台以上は横に並べて両方を常に1画面に。幅が足りなければ縦積みに
    落ちる(minmax の下限) */
@@ -1459,9 +1475,12 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
               title="呼び出したプリセットの名前"></span>
         <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
         <span class="chip" id="cforminfo" style="display:none"></span>
-        <button class="small" id="cformsave"
-                title="いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)を保存します">
-          プリセットへ保存</button>
+        <!-- 保存は2つ。押す前に何が起きるか名前で分かるように、使用中は
+             「上書き保存」と名乗り、別名で残す道を隣に出す(原則 §5) -->
+        <button class="small" id="cformsave">プリセットへ保存</button>
+        <button class="small" id="cformsaveas" style="display:none"
+                title="いまの割り当てを、別の名前の新しいプリセットとして保存します">
+          別名で保存…</button>
         <span class="sep-v"></span>
         <button class="primary" id="crun1"
                 title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
@@ -3502,6 +3521,8 @@ async function applyFormation(f) {
     lane.loops.value = String(fd.loops | 0);
     lane.pendingResume = fd.resume || '';
   }
+  // 呼び出したものは中身を開いて見せる(いまの運転がどれかを示す)
+  formOpen.set(f.name, true);
   await api('/api/couple', 'POST', {on: !!f.linked,
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
@@ -3513,6 +3534,20 @@ async function applyFormation(f) {
 }
 
 let formsKey = '';
+const formOpen = new Map();    // プリセット名 → 中身を開いているか
+
+function applyFormOpenState(row, name) {
+  const open = !!formOpen.get(name);
+  row.classList.toggle('open', open);
+  const t = row.querySelector('.devtoggle');
+  t.textContent = open ? '▼' : '▶';
+  t.title = open ? 'たたむ' : '中身を見る';
+}
+
+function toggleFormOpen(row, name) {
+  formOpen.set(name, !formOpen.get(name));
+  applyFormOpenState(row, name);
+}
 
 function renderFormations() {
   const devs = state.devices || [];
@@ -3528,38 +3563,71 @@ function renderFormations() {
       '装置ごとの手順・周回・連結の割り当てを保存できます'));
     return;
   }
+  const arms = armLabels();
   for (const f of forms) {
-    // 行アイコン作法(手順・部品・装置と同型): ドットは無し(格納庫に
-    // 生きた状態を並べない §3 と同じ理由で、プリセットにも進行状態は無い)
-    const row = el('div', 'proc devrow');
+    // 装置カードの開閉行と同型(原則 §5)。ドットの列は持たない(格納庫に
+    // 生きた状態を並べない §3 と同じ理由で、プリセットに進行状態は無い)。
+    // 呼び出し中の1件は、手順一覧の選択行と同じ強調にする
+    const row = el('div', 'proc devrow foldable formrow');
+    if (loadedFormation === f.name) row.classList.add('sel');
+    const toggle = el('button', 'devtoggle', '▶');
+    toggle.onclick = (e) => { e.stopPropagation(); toggleFormOpen(row, f.name); };
+    row.append(toggle);
+    // 名前 + 連結の別(手順一覧の「名前+所要フレーム数」と同じ作法)
+    const pname = el('div', 'pname');
+    const nb = el('b', null, f.name);
+    nb.title = f.name;
+    pname.append(nb, el('span', 'fr', f.linked ? '⧉ 連結' : '単独'));
+    row.append(pname);
     const rops = el('span', 'rowops');
     rops.append(
-      rowIcon('pencil', 'このプリセットの名前を変える', false, () => renFormation(f.name)),
+      rowIcon('pencil', 'このプリセットの名前を変える', false,
+              () => renFormation(f.name)),
       rowIcon('trash', 'このプリセットを削除', true, async () => {
         if (!confirm(`プリセット「${f.name}」を消します。よろしいですか?`)) return;
         await api('/api/formation_delete', 'POST', {name: f.name});
         if (loadedFormation === f.name) loadedFormation = '';
+        formOpen.delete(f.name);
         refresh();
       }));
-    row.append(el('b', null, f.name), rops);
-    const meta = el('div', 'meta');
-    const parts = (f.devices || []).map(fd => {
+    row.append(rops);
+    row.onclick = (e) => {
+      if (e.target.closest('button,input')) return;
+      toggleFormOpen(row, f.name);
+    };
+    const detail = el('div', 'devdetail');
+    // 合流は連結しているときにしか起きないので、単独のプリセットでは出さない
+    if (f.linked) {
+      detail.append(el('div', 'fjoin',
+        '自動合流: ' + (f.auto_join
+          ? (arms[f.arm] || `選択肢${(f.arm | 0) + 1}`) : 'しない')));
+    }
+    const list = el('div', 'fdevs');
+    for (const fd of (f.devices || [])) {
       const d = formationDevice(fd);
       const nm = d ? d.name
                    : (fd.name || `ID ${String(fd.id).slice(-4).toUpperCase()}`);
-      return `${nm} ${fd.proc}×${fd.loops || '∞'}`;
-    });
-    const arms = armLabels();
-    meta.append(el('span', null,
-      (f.linked ? '連結 ・ ' : '') + parts.join(' ＋ ')
-      + (f.auto_join ? ` ・ 合流: ${arms[f.arm] || `選択肢${(f.arm | 0) + 1}`}`
-                     : ' ・ 合流: 手動')));
+      const line = el('div', 'fdev');
+      const proc = el('span', 'fproc', fd.proc);
+      proc.title = fd.proc;
+      const loops = el('span', 'floops', '×' + (fd.loops || '∞'));
+      loops.title = fd.loops ? `${fd.loops} 周` : '止めるまでくり返す';
+      line.append(el('span', 'fdevname', nm), proc,
+                  el('span', 'fresume', fd.resume ? fd.resume + ' から' : ''),
+                  loops);
+      list.append(line);
+    }
+    detail.append(list);
+    const act = el('div', 'fact');
     const use = el('button', 'small', '呼び出す');
-    use.title = '割り当て(連結・手順・周回・合流)をこの内容にします。開始はしません';
+    use.title = '割り当て(連結・手順・周回・開始ラベル・合流)をこの内容に'
+              + 'します。開始はしません';
     use.onclick = () => applyFormation(f);
-    meta.append(use);
-    row.append(meta);
+    act.append(use);
+    detail.append(act);
+    row.append(detail);
     box.append(row);
+    applyFormOpenState(row, f.name);
   }
 }
 async function renFormation(old) {
@@ -3590,25 +3658,36 @@ function buildFormationData() {
   return data;
 }
 
-// 保存の作法(原則 §4): プリセット未使用時は名前を聞いて新規保存、
-// 使用中は同名で上書き。成功はバッジの点滅で伝える(文は出さない)
-document.getElementById('cformsave').onclick = async () => {
+// 保存の作法(原則 §4): 使用中は同名で上書き、「別名で保存…」は名前を
+// 聞いて新しいプリセットにする(以後はそちらを編集していることにする)。
+// 成功はバッジの点滅で伝える(文は出さない)
+async function saveFormation(asNew) {
   const data = buildFormationData();
   if (!data) return;
-  let name = loadedFormation;
+  let name = asNew ? '' : loadedFormation;
   if (!name) {
-    name = prompt('プリセットの名前');
+    name = prompt(asNew ? '新しいプリセットの名前' : 'プリセットの名前',
+                  asNew ? loadedFormation : '');
     if (!name) return;
   }
+  // 気づかずに別のプリセットを潰さないための確認。「上書き保存」は
+  // ボタン名のとおりなので聞かない
+  const exists = (state.formations || []).some(f => f.name === name);
+  if (exists && (asNew || name !== loadedFormation)
+      && !confirm(`「${name}」は既にあります。上書きしますか?`)) return;
   const r = await api('/api/formation_save', 'POST', {name, data});
   if (r.error) { show('cactmsg', 'err', r.error); return; }
   loadedFormation = name;
+  // 保存した中身をその場で見せる(呼び出し中の1件は開いておく、と同じ規則)
+  formOpen.set(name, true);
   const info = document.getElementById('cforminfo');
   info.textContent = '保存済み'; info.className = 'chip ok';
   info.style.display = '';
   flashChip('cforminfo');
   refresh();
-};
+}
+document.getElementById('cformsave').onclick = () => saveFormation(false);
+document.getElementById('cformsaveas').onclick = () => saveFormation(true);
 
 // 連結バーと CTA の毎秒更新
 function renderCoupling() {
@@ -3638,6 +3717,7 @@ function renderCoupling() {
   const fchip = document.getElementById('cformation');
   const finfo = document.getElementById('cforminfo');
   const fsave = document.getElementById('cformsave');
+  const fsaveas = document.getElementById('cformsaveas');
   if (loadedFormation) {
     fchip.style.display = '';
     fchip.textContent = loadedFormation;
@@ -3645,12 +3725,20 @@ function renderCoupling() {
     finfo.style.display = '';
     finfo.textContent = dirty ? '未保存の変更' : '保存済み';
     finfo.className = 'chip' + (dirty ? ' warn' : ' ok');
-    fsave.title = 'いまの割り当てを、このプリセットに同じ名前で保存し直します';
+    if (fsave.textContent !== '上書き保存') fsave.textContent = '上書き保存';
+    fsave.title = `いまの割り当てを、プリセット「${loadedFormation}」に`
+                 + '同じ名前で保存し直します';
+    fsaveas.style.display = '';
   } else {
     fchip.style.display = 'none';
     finfo.style.display = 'none';
+    if (fsave.textContent !== 'プリセットへ保存') {
+      fsave.textContent = 'プリセットへ保存';
+    }
     fsave.title = 'いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)に'
                  + '名前を付けて保存します';
+    // 上書きする相手がいないので「別名で」は「保存」と同じ意味になる
+    fsaveas.style.display = 'none';
   }
   // 実行系ボタン
   const someBusy = devs.slice(0, 2).some(d => !d.error
