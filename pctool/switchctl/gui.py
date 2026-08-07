@@ -915,12 +915,11 @@ main { display:grid; gap:14px; padding:14px; align-items:start;
 /* 中身が広いとき、列そのものを広げずに中で横スクロールさせる
    (これが無いと画面全体が横に伸びる) */
 main > * { min-width:0; }
-/* 左ペインは3画面とも同じ幅(いちばん広い実行・監視の 320px)に揃える。
-   画面ごとに違うと、切り替えのたびに本文の開始位置が動いてちらつく
-   (2026-08-04 ユーザー指摘) */
-main.home { grid-template-columns:320px 1fr; }
-main.flow { grid-template-columns:320px 1fr 260px; }
-main.part { grid-template-columns:320px 1fr; }
+/* 左ペインの幅は画面ごと。手順の一覧だけ1行に名前と所要フレーム数を並べるため
+   広く取る(他の2画面は名前だけなので狭くてよい) */
+main.home { grid-template-columns:280px 1fr; }
+main.flow { grid-template-columns:400px 1fr 260px; }
+main.part { grid-template-columns:280px 1fr; }
 @media (max-width:900px){ main.home, main.flow, main.part { grid-template-columns:1fr; } }
 .card { background:var(--surface); border:1px solid var(--line);
   border-radius:10px; padding:13px 15px; }
@@ -949,6 +948,13 @@ main > .card { min-width:0; }
 .proc b { font-size:13px; }
 .proc .meta { grid-column:2 / -1; color:var(--muted); font-size:11.5px;
   margin-top:2px; }
+/* 手順名と、その右に置く所要フレーム数。桁を揃えて(tabular-nums)縦に並べ、
+   1P と 2P の長さを目で突き合わせられるようにする(2台運用で「相方と同じ
+   時間だけ待つ」を手順に書くため)。名前が長いときは名前側を詰める */
+.pname { display:flex; align-items:baseline; gap:8px; min-width:0; }
+.pname b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pname .fr { margin-left:auto; color:var(--muted); font-size:11px;
+  font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer; }
 /* 並べ替えのつまみ。行クリック(選択)と衝突しないよう専用の持ち手にする */
 .grab { color:var(--muted); opacity:.35; cursor:grab; user-select:none;
   font-size:11px; touch-action:none; }
@@ -4276,7 +4282,20 @@ function renderProcRow(p) {
   g.title = 'ドラッグで並べ替え・フォルダへ移動(実行・監視と共通の並び)';
   bindOrgDrag(g, d, 'proc', p.name);
   d.append(g);
-  d.append(el('b', null, p.name));
+  // 名前の右に所要フレーム数。2台運用では「相方の操作と同じ時間だけ待つ」を
+  // 手順に書くので、一覧を見たまま2つの手順の長さを突き合わせられるようにする。
+  // 単位は毎行「フレーム」と書くと名前がそのぶん切れるので F と略す。
+  // 読み方はその場に触れれば分かるようにしておく
+  const nm = el('span', 'pname');
+  const b = el('b', null, p.name);
+  b.title = p.name;   // 長い名前は詰めて出すので、確かめられるように
+  nm.append(b);
+  if (p.frames != null) {
+    const fr = el('span', 'fr', `${p.frames}F`);
+    fr.title = `${p.frames} フレーム(${(p.seconds || 0).toFixed(1)} 秒)`;
+    nm.append(fr);
+  }
+  d.append(nm);
   const ops = el('span', 'rowops');
   ops.append(
     rowIcon('pencil', 'この手順の名前を変える', false, () => renFlow(p.name)),

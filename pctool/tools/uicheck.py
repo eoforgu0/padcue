@@ -1251,6 +1251,33 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert page.locator("#flowlist .proc b").all_inner_texts() == before,             page.locator("#flowlist .proc b").all_inner_texts()
     c.check("一覧の並べ替えが保存され両画面で共有される", t_list_reorder_shared)
 
+    def t_proc_row_frames():
+        """一覧の各手順に、名前の右で所要フレーム数が読めること。
+
+        2台運用では「相方の操作と同じ時間だけ待つ」を手順に書くので、
+        一覧を開いたまま2つの手順の長さを突き合わせられる必要がある。
+        """
+        rows = page.locator("#flowlist > .proc:not(.folder-row)")
+        n = rows.count()
+        assert n >= 2, n
+        for i in range(n):
+            name = rows.nth(i).locator("b").inner_text()
+            r, err = proj.build_safe(name)
+            assert r, f"{name}: {err}"
+            fr = rows.nth(i).locator(".fr")
+            assert fr.count() == 1, rows.nth(i).inner_text()
+            assert fr.inner_text() == f"{r.total_frames}F", \
+                f"{name}: {fr.inner_text()} != {r.total_frames}F"
+            # 単位は略しているので、触れば読み方が分かること
+            assert "フレーム" in (fr.get_attribute("title") or ""), \
+                fr.get_attribute("title")
+        # 数字を足しても行が枠から溢れない(名前は詰めて出る)
+        over = page.evaluate(
+            "() => [...document.querySelectorAll('#flowlist .proc')]"
+            ".map(r => r.scrollWidth - r.clientWidth).filter(x => x > 0)")
+        assert over == [], over
+    c.check("一覧の手順に所要フレーム数が出る", t_proc_row_frames)
+
     def t_row_icons_rename():
         """一覧の行アイコンから名前を変えられること(開いていない手順でも)。"""
         target = page.locator("#flowlist .proc b").last.inner_text()
