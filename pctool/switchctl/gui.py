@@ -1082,6 +1082,10 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
 .marks span { position:absolute; top:0; font-size:11px; font-weight:700;
   color:var(--accent); border-left:2px solid var(--accent); padding-left:5px;
   white-space:nowrap; line-height:18px; }
+/* 右端付近のラベルは、文字を罫線の左側へ反転させて枠内に収める
+   (手順末尾のラベルは left:100% になり、右向きのままだと枠外へはみ出す) */
+.marks span.flip { border-left:0; border-right:2px solid var(--accent);
+  padding-left:0; padding-right:5px; transform:translateX(-100%); }
 .axis { position:relative; height:22px; margin-left:56px; }
 .axis i { position:absolute; top:0; border-left:1px solid var(--line); height:6px; }
 .axis span { position:absolute; top:8px; transform:translateX(-50%);
@@ -2469,7 +2473,11 @@ function renderTimelineInto(box, tl) {
     const marks = el('div', 'marks');
     for (const l of tl.labels) {
       const m = el('span', null, l.text);
-      m.style.left = (100 * l.frame / total) + '%';
+      const pct = Math.min(100, 100 * l.frame / total);
+      m.style.left = pct + '%';
+      // 右端付近は文字を左向きに(85% は「短いラベル名なら収まる」目安。
+      // 文字幅の実測はここでは DOM 未接続でできない)
+      if (pct > 85) m.classList.add('flip');
       marks.append(m);
     }
     box.append(marks);
