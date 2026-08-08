@@ -745,6 +745,9 @@ class _Handler(BaseHTTPRequestHandler):
                     "listing": dict(l.listing),
                     **l.status,
                 })
+                # 実行中なら、その実行を始めた時刻(画面の「終了予定」の起点)
+                if l.run_started_at:
+                    d["run_started_at"] = l.run_started_at
                 if d.get("awaiting"):
                     r, _e = self.project.build_safe(d.get("proc") or "")
                     if r and r.wait_branch_arms:
@@ -917,9 +920,29 @@ header { position:relative; }
 .menu button:hover { background:var(--accent-soft); color:var(--accent); }
 .menu button.on { font-weight:700; color:var(--accent); }
 .menu button.on::before { content:'✓ '; }
-.menu.setpanel { min-width:238px; }
+.menu.setpanel { min-width:436px; }
 .setsec { font-size:11px; color:var(--muted); letter-spacing:.06em;
   padding:5px 9px 3px; }
+/* 通知の設定: 行=場面、列=知らせ方。列見出しを「音」「タブ名を点滅」だけに
+   すると、どの欄が何の設定なのかを行ごとに読み直さずに済む */
+/* 列はすべて中身の幅(max-content)。1列目を 1fr にすると、狭いパネルでは
+   場面名が1文字ずつ縦に折り返す */
+.ngrid { display:grid; padding:2px 9px 7px; font-size:12.5px;
+  grid-template-columns:repeat(6, max-content);
+  column-gap:8px; row-gap:6px; align-items:center; }
+.ngrid .nghead { color:var(--muted); font-size:11px; }
+.ngrid .nghead.snd { grid-column:2 / 6; }
+.ngrid .ngtab, .ngrid .nghead:last-child { justify-self:center; }
+.ngrid .nglab { display:flex; align-items:center; gap:7px; cursor:pointer;
+  white-space:nowrap; }
+.ngrid select { font-size:12px; padding:2px 5px; }
+.ngrid input[type=range] { width:74px; }
+.ngrid button { padding:1px 7px; }
+.ngrid select:disabled, .ngrid input:disabled, .ngrid button:disabled {
+  opacity:.4; }
+/* 設定の中の補足(どのキーが何をするか)。名前では言い切れないぶんだけ */
+.sethint { padding:0 9px 7px; font-size:11px; color:var(--muted);
+  line-height:1.65; }
 .setsec.line { border-top:1px solid var(--line); margin-top:5px;
   padding-top:8px; }
 .setrow { padding:3px 9px 5px; display:flex; flex-wrap:wrap; gap:9px;
@@ -960,9 +983,13 @@ header { position:relative; }
 /* 未接続・異常のとき、対処の場所であることを縁取りで自ら名乗る(原則 §1) */
 .devrow.flagged { border-color:var(--err); background:var(--err-bg); }
 /* プリセットの行 = 装置の開閉行から丸印の列だけを抜いた形。詳細は名前の
-   位置まで下げて、どの行の中身かを字下げで示す */
-.devrow.foldable.formrow { grid-template-columns:16px 1fr auto; }
+   位置まで下げて、どの行の中身かを字下げで示す。名前は行幅を目一杯使い、
+   操作(呼び出す・改名・削除)は2行目に置く(2026-08-08 ユーザー指摘) */
+.devrow.foldable.formrow { grid-template-columns:16px 1fr; }
+.devrow.foldable.formrow .fact,
 .devrow.foldable.formrow .devdetail { grid-column:2 / -1; }
+/* 連結の別は名前の前に(「何の組か」を先に読む)。名前より控えめに */
+.fkind { color:var(--muted); font-size:11px; white-space:nowrap; flex:none; }
 .fjoin { color:var(--muted); font-size:11.5px; }
 .fdevs { display:flex; flex-direction:column; gap:3px; }
 /* 装置 / 手順 / 開始ラベル / 周回。周回は右端で桁を揃え、1P と 2P の値を
@@ -974,7 +1001,9 @@ header { position:relative; }
 .fresume { color:var(--muted); white-space:nowrap; }
 .floops { color:var(--muted); font-variant-numeric:tabular-nums;
   white-space:nowrap; }
-.fact { display:flex; justify-content:flex-end; }
+/* 2行目の操作。行アイコン(✎ 🗑)は一覧の作法どおり右端へ(原則 §3) */
+.fact { display:flex; align-items:center; gap:6px; margin-top:5px; }
+.fact .rowops { margin-left:auto; }
 /* 装置ごとの縦レーン(台数に関わらず常に1本以上。原則 §1 系: 1台と2台は
    同型)。2台以上は横に並べて両方を常に1画面に。幅が足りなければ縦積みに
    落ちる(minmax の下限) */
@@ -1048,6 +1077,10 @@ main > .card { min-width:0; }
 .pname b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pname .fr { margin-left:auto; color:var(--muted); font-size:11px;
   font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer; }
+/* 行の名前に付く ID。名前のすぐ右に薄く小さく置く(下段へ落とすと、装置の
+   ID なのか Switch 本体の ID なのかが読み取れない。2026-08-08 ユーザー指摘) */
+.rowid { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
 /* 並べ替えのつまみ。行クリック(選択)と衝突しないよう専用の持ち手にする */
 .grab { color:var(--muted); opacity:.35; cursor:grab; user-select:none;
   font-size:11px; touch-action:none; }
@@ -1136,8 +1169,13 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .kv { display:grid;
   grid-template-columns:max-content 1fr;
   column-gap:14px; row-gap:2px; font-size:12.5px; }
-.kv dt { color:var(--muted); margin-right:8px; }
+.kv dt { color:var(--muted); margin-right:8px; align-self:start; }
 .kv dd { margin:0; font-variant-numeric:tabular-nums; }
+/* 値が2つ以上ある項目(ずれの最大)は、値の中へ項目名を押し込まず、親項目の
+   下に名前と値の対でぶら下げる(2026-08-08 ユーザー指摘) */
+.kvsub { display:grid; grid-template-columns:max-content auto;
+  column-gap:10px; row-gap:2px; }
+.kvsubk { color:var(--muted); }
 /* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
 .prenote { font-size:12.5px; color:var(--ink); background:var(--accent-soft);
            border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
@@ -1154,6 +1192,11 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .msg.warn { background:var(--warn-bg); color:var(--warn); }
 .msg.err { background:var(--err-bg); color:var(--err); }
 .msg.ok { background:var(--ok-bg); color:var(--ok); }
+/* 成功の一言(押したボタンのそばに数秒だけ)。行の中の席なので、出ても
+   消えても他の行の位置が動かない */
+.okflash { color:var(--ok); font-size:12px; white-space:nowrap;
+  opacity:0; transition:opacity .3s; }
+.okflash.on { opacity:1; }
 .tl-wrap { overflow-x:auto; }
 /* 部品グリッドは縦横ともこの領域の中でスクロールする(高さは fitPartGrid が
    画面内に収まるよう設定)。横バーが表の最下端ではなく領域の下端に出る */
@@ -1347,6 +1390,11 @@ table.grid td.ax input { text-align:right; }
 table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   background:color-mix(in srgb, var(--line) 22%, transparent); }
 .hint { color:var(--muted); font-size:11.5px; margin-top:8px; line-height:1.7; }
+/* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレと凡例)は、間を詰めて
+   ひとまとまりに見せる */
+.hint + .hint { margin-top:2px; }
+/* 中身が空の注釈行は、余白だけを占めない(実行していないときの ETA 行) */
+.hint:empty { display:none; }
 /* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない) */
 .tlprog { float:right; color:var(--accent); font-weight:700;
   letter-spacing:0; font-variant-numeric:tabular-nums; }
@@ -1373,6 +1421,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 /* 実行中の行に付く印(一覧の中でどれが動いているか) */
 .proc .playmark { margin-left:4px; }
 /* 手動操作中はカード全体を縁取って、終い忘れに気づけるようにする */
+/* 対象を切り替えている間は、図を薄くして触れなくする(押せてしまうと、
+   その入力がどちらの装置へ行ったのか言えない) */
+#padfig.busy { opacity:.45; pointer-events:none; }
 #manualcard.on { border-color:var(--ok); box-shadow:0 0 0 2px var(--ok-bg); }
 #manualcard.on h2::after { content:' ● 操作中'; color:var(--ok);
   font-weight:700; letter-spacing:0; }
@@ -1397,19 +1448,18 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
             aria-haspopup="true" aria-expanded="false">⚙</button>
     <div id="setlist" class="menu setpanel" style="display:none">
       <div class="setsec">通知</div>
-      <div id="notifyways">
-        <button data-w="sound">音</button>
-        <button data-w="tab">タブ名を点滅</button>
-        <button data-w="off">通知なし</button>
+      <!-- 「いつ」を行に、「どう知らせるか」を列に取る(世間の通知設定と
+           同じ形)。音と点滅は別々に選べる — 片方だけ・両方・どちらも切、が
+           場面ごとに要る(2026-08-08 ユーザー要望)。中身は JS で組む -->
+      <div class="ngrid" id="notifygrid"></div>
+      <div class="setsec line">キーボード</div>
+      <div class="setrow">
+        <label><input type="checkbox" id="hotkeys">ファンクションキーを使う</label>
       </div>
-      <div class="setrow" id="notifyvolrow">
-        <label>音量 <input type="range" id="notifyvol"
-                          min="0" max="100" step="5"></label>
-        <button class="small" id="notifytest">♪ 試す</button>
-      </div>
-      <div class="setrow" id="notifywhen">
-        <label><input type="checkbox" id="notifydone">実行が終わったとき</label>
-        <label><input type="checkbox" id="notifyawait">操作待ちになったとき</label>
+      <!-- どのキーが何をするかは、入切を決めるこの場所でしか読まれない -->
+      <div class="sethint">
+        F9 = 両方を今すぐ止める ／ F10 = まとめて開始<br>
+        連結しているときだけ効きます(受け付けはビープ音)
       </div>
       <div class="setsec line">配色</div>
       <div id="themelist">
@@ -1506,11 +1556,18 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <span class="sep-v"></span>
         <span class="lbl">選択肢を両方へ同時に送る</span>
         <span id="cbotharms" class="row" style="margin:0;gap:6px"></span>
+        <!-- 正常に送れたことは、押したそばに数秒だけ出して自ら消える。
+             毎回メッセージ欄が増えると、そのたびに下の行がずれる -->
+        <span id="cokmsg" class="okflash"></span>
       </div>
       <!-- cmsg = 連動停止の理由と再開、ワンショットの案内(状態から毎秒作る) -->
       <div id="cmsg"></div>
-      <!-- cactmsg = 連結バーの操作(開始/停止/選択)の結果。次の操作まで残す -->
+      <!-- cactmsg = 連結バーの操作の結果のうち、残すもの(失敗・警告)。
+           成功はボタンのそばに出して数秒で自ら消える(cokmsg) -->
       <div id="cactmsg"></div>
+      <!-- 組の開始時刻と終了予定(終わりが決まるときだけ)。開始ズレの上に、
+           同じ注釈行の作法で置く -->
+      <div class="hint" id="ceta"></div>
       <div class="hint" id="chint"></div>
     </div>
     <!-- 連結していないとき(2台以上)は、これだけが残る -->
@@ -1834,6 +1891,20 @@ function showIn(box, cls, text) {
   box.append(m);
 }
 
+// 成功の一言を、押したボタンのそばに数秒だけ出して自ら消す。
+// 正常・軽量・自分で押したと分かっている操作(選択肢の同時送出など)は、
+// 消えない知らせの席を作るほどではない——出すたびに下の行がずれる方が邪魔
+// (2026-08-08 ユーザー指摘)。失敗と警告は従来どおり残す(×で消す)
+function flashOk(box, text) {
+  clearTimeout(box._t);
+  box.textContent = text;
+  box.classList.add('on');
+  box._t = setTimeout(() => {
+    box.classList.remove('on');
+    box.textContent = '';
+  }, 3500);
+}
+
 // 保存済みバッジを一瞬光らせる(保存成功の合図)。クラスを付け直すだけでは
 // 2回目以降アニメーションが再発火しないため、リフローを1回挟む
 function flashChip(id) {
@@ -1914,12 +1985,41 @@ function applyTheme(v) {
 // 届く。ブラウザは裏に回るとタイマーを絞られる(隠れて5分たつと毎分1回)
 // ので、画面の定期取得で捉えると放置運転の知らせが最大1分遅れる。
 // ここは受け取って知らせるだけ
-const NOTIFY_DEFAULT = {way: 'sound', vol: 40, done: true, wait: true};
+// 場面ごとに「音(種類・音量)」と「タブ名の点滅」を別々に持つ。同じ場面で
+// 両方を選べる(音は席を外していると聞こえ、点滅は戻ったときに残っている)
+const NOTIFY_KINDS = [['done', '実行が終わった'],
+                      ['error', '異常で止まった'],
+                      ['await', '操作を待っている']];
+const NOTIFY_DEFAULT = {
+  done: {sound: true, snd: 'bell', vol: 40, tab: true},
+  error: {sound: true, snd: 'alert', vol: 60, tab: true},
+  await: {sound: true, snd: 'call', vol: 50, tab: true},
+};
+
+// 旧い形(way: 音/タブ/なし の3択+共通の音量)からの移し替え。移さないと、
+// これまでの設定が既定に戻って「切っていたはずの通知が鳴る」ことになる
+function migrateNotify(o) {
+  const out = JSON.parse(JSON.stringify(NOTIFY_DEFAULT));
+  if (!o || !o.way) {                       // 既に新しい形(場面ごと)
+    for (const [k] of NOTIFY_KINDS) {
+      if (o && o[k]) Object.assign(out[k], o[k]);
+    }
+    return out;
+  }
+  const on = {sound: o.way === 'sound', tab: o.way === 'tab'};
+  for (const [k] of NOTIFY_KINDS) {
+    // 旧 done は「終了と異常」、旧 wait は「操作待ち」を受け持っていた
+    const kept = k === 'await' ? o.wait !== false : o.done !== false;
+    Object.assign(out[k], on, {vol: o.vol | 0},
+                  kept ? {} : {sound: false, tab: false});
+  }
+  return out;
+}
+
 let notify = (() => {
   try {
-    return Object.assign({}, NOTIFY_DEFAULT,
-                         JSON.parse(localStorage.getItem('padctl-notify') || '{}'));
-  } catch (e) { return Object.assign({}, NOTIFY_DEFAULT); }
+    return migrateNotify(JSON.parse(localStorage.getItem('padctl-notify') || '{}'));
+  } catch (e) { return JSON.parse(JSON.stringify(NOTIFY_DEFAULT)); }
 })();
 
 // 音を出す土台。通知(チーン)と F9/F10 の受け付けビープが共用する
@@ -1939,27 +2039,36 @@ function tone(freq, at, dur, vol) {
   o.stop(at + dur + 0.02);
 }
 
-// 意味が違えば形も違う(原則 §5)。終了=チーン、異常=低く下がる2音、
-// 操作待ち=呼びかけるように上がる2音
-function chime(kind) {
+// 鳴らせる音。意味が違えば形も違う(原則 §5)が、どれが聞き取りやすいかは
+// 部屋とゲーム音による。場面ごとに選べるようにする(2026-08-08 ユーザー要望)
+const SOUNDS = {
+  // 基音に薄い倍音を重ねると、澄んだ鈴の音になる
+  bell: {ja: '鈴', hint: 'チーンと澄んだ余韻', play: (t, v) => {
+    tone(1046.5, t, 1.2, v); tone(2093, t, 0.5, v * 0.22); }},
+  call: {ja: '呼び出し', hint: '上がる2音', play: (t, v) => {
+    tone(880, t, 0.3, v * 0.8); tone(1174.7, t + 0.14, 0.7, v * 0.8); }},
+  alert: {ja: '警告', hint: '低く下がる2音', play: (t, v) => {
+    tone(392, t, 0.5, v); tone(294, t + 0.24, 0.8, v); }},
+  chime: {ja: 'チャイム', hint: 'ピンポン', play: (t, v) => {
+    tone(659.3, t, 0.6, v); tone(523.3, t + 0.28, 1.0, v); }},
+  // ゲームの音に紛れにくい、はっきりした音(「気づきにくい」への逃げ道)
+  beeps: {ja: '電子音3回', hint: '短く3回。ゲーム音に紛れにくい', play: (t, v) => {
+    for (let i = 0; i < 3; i++) tone(1318.5, t + i * 0.17, 0.12, v); }},
+};
+
+function playSound(name, vol) {
   try {
     audioCtx = audioCtx || new AudioContext();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    const v = Math.max(0, Math.min(100, notify.vol | 0)) / 100 * 0.5;
+    const v = Math.max(0, Math.min(100, vol | 0)) / 100 * 0.5;
     if (!v) return;
-    const t = audioCtx.currentTime + 0.02;
-    if (kind === 'error') {
-      tone(392, t, 0.5, v);
-      tone(294, t + 0.24, 0.8, v);
-    } else if (kind === 'await') {
-      tone(880, t, 0.3, v * 0.8);
-      tone(1174.7, t + 0.14, 0.7, v * 0.8);
-    } else {
-      // 基音に薄い倍音を重ねると、澄んだ鈴の音になる
-      tone(1046.5, t, 1.2, v);
-      tone(2093, t, 0.5, v * 0.22);
-    }
+    (SOUNDS[name] || SOUNDS.bell).play(audioCtx.currentTime + 0.02, v);
   } catch (e) { /* 音が出せない環境では黙って続ける */ }
+}
+
+function chime(kind) {
+  const c = notify[kind] || notify.done;
+  playSound(c.snd, c.vol);
 }
 
 // タブ名の点滅。画面に戻った時点で必ず止める(消せない表示を残さない)。
@@ -1996,11 +2105,24 @@ const NOTIFY_TEXT = {done: '実行が終わりました', error: '異常で止�
                      await: '操作を待っています'};
 
 function onNotify(kind) {
-  if (notify.way === 'off') return;
-  if (!(kind === 'await' ? notify.wait : notify.done)) return;
-  if (notify.way === 'sound') chime(kind);
-  else blinkTitle(NOTIFY_TEXT[kind] || NOTIFY_TEXT.done);
+  const c = notify[kind] || notify.done;
+  if (!c) return;
+  // 音と点滅は排他ではない。両方入なら両方(席を外していれば音で気づき、
+  // 戻ってきたときにはタブ名が残っている)
+  if (c.sound) chime(kind);
+  if (c.tab) blinkTitle(NOTIFY_TEXT[kind] || NOTIFY_TEXT.done);
 }
+
+// ============ キーボードのショートカット ============
+// F9/F10 は画面を見ずに打てるのが取り柄だが、そのぶん他のソフトの割り当てと
+// 取り違えて誤爆しうる。**既定では効かせず**、⚙ で入にした人にだけ効かせる
+// (2026-08-08 ユーザー指示)
+let hotkeys = {on: false};
+try {
+  Object.assign(hotkeys,
+                JSON.parse(localStorage.getItem('padctl-hotkeys') || '{}'));
+} catch (e) { /* 読めなければ切のまま */ }
+const HOTKEY_LEGEND = 'F9 = 全部止める ／ F10 = まとめて開始(受け付けはビープ音)';
 
 // 音は「利用者が一度でも触ってから」でないと鳴らせない決まりがある。
 // 実行を押した時点で必ず満たされるが、CLI から始めた実行にも間に合うよう、
@@ -2027,28 +2149,80 @@ try {
   const btn = document.getElementById('setbtn');
   const panel = document.getElementById('setlist');
   const themes = document.getElementById('themelist');
-  const ways = document.getElementById('notifyways');
-  const volrow = document.getElementById('notifyvolrow');
-  const vol = document.getElementById('notifyvol');
-  const when = document.getElementById('notifywhen');
-  const cbDone = document.getElementById('notifydone');
-  const cbWait = document.getElementById('notifyawait');
+  const grid = document.getElementById('notifygrid');
+  const hk = document.getElementById('hotkeys');
   let cur = localStorage.getItem('padctl-theme') || 'auto';
   const markTheme = () => themes.querySelectorAll('button').forEach(
     b => b.classList.toggle('on', b.dataset.t === cur));
-  const paint = () => {
-    ways.querySelectorAll('button').forEach(
-      b => b.classList.toggle('on', b.dataset.w === notify.way));
-    // 効かない欄は置かない(音量は音のときだけ、鳴らすときは通知するときだけ)
-    volrow.style.display = notify.way === 'sound' ? '' : 'none';
-    when.style.display = notify.way === 'off' ? 'none' : '';
-    vol.value = notify.vol;
-    cbDone.checked = !!notify.done;
-    cbWait.checked = !!notify.wait;
-  };
   const save = () => {
     localStorage.setItem('padctl-notify', JSON.stringify(notify));
     paint();
+  };
+  // 行 = 場面、列 = 知らせ方。音を切った行は、種類と音量を押せなくする
+  // (残しておくと「切ってあるのに音量を触れる」ちぐはぐな欄になる)
+  const cells = [];
+  grid.append(el('div'), el('div', 'nghead snd', '音'),
+              el('div', 'nghead', 'タブ名を点滅'));
+  for (const [k, ja] of NOTIFY_KINDS) {
+    const c = notify[k];
+    const cbS = document.createElement('input');
+    cbS.type = 'checkbox';
+    cbS.className = 'ngsound';
+    cbS.dataset.k = k;
+    cbS.title = `${ja}ときに音で知らせます`;
+    const snd = document.createElement('select');
+    snd.className = 'ngsnd';
+    snd.dataset.k = k;
+    snd.title = '鳴らす音';
+    for (const [id, s] of Object.entries(SOUNDS)) {
+      const o = new Option(s.ja, id);
+      o.title = s.hint;
+      snd.append(o);
+    }
+    const vol = document.createElement('input');
+    vol.type = 'range';
+    vol.className = 'ngvol';
+    vol.dataset.k = k;
+    vol.min = '0'; vol.max = '100'; vol.step = '5';
+    vol.title = '音量';
+    const test = el('button', 'small', '♪');
+    test.title = 'この音を試しに鳴らします';
+    const cbT = document.createElement('input');
+    cbT.type = 'checkbox';
+    cbT.className = 'ngtab';
+    cbT.dataset.k = k;
+    cbT.title = `${ja}ときにタブ名を点滅させます(画面に戻ると消えます)`;
+    cbS.onchange = () => { c.sound = cbS.checked; save();
+                           if (c.sound) playSound(c.snd, c.vol); };
+    snd.onchange = () => { c.snd = snd.value; save(); playSound(c.snd, c.vol); };
+    vol.oninput = () => { c.vol = parseInt(vol.value, 10) || 0; save(); };
+    vol.onchange = () => playSound(c.snd, c.vol);
+    test.onclick = () => playSound(c.snd, c.vol);
+    cbT.onchange = () => { c.tab = cbT.checked; save(); };
+    // 場面名は列見出しの下に入切が来るよう、チェックとは別の席に置く
+    // (label の for で結び、名前を押しても切り替わる)
+    cbS.id = `ngsound-${k}`;
+    const lab = el('label', 'nglab', ja);
+    lab.htmlFor = cbS.id;
+    grid.append(lab, cbS, snd, vol, test, cbT);
+    cells.push({k, c, cbS, snd, vol, test, cbT});
+  }
+  const paint = () => {
+    for (const x of cells) {
+      x.cbS.checked = !!x.c.sound;
+      x.snd.value = x.c.snd;
+      x.vol.value = x.c.vol;
+      x.snd.disabled = x.vol.disabled = x.test.disabled = !x.c.sound;
+      x.cbT.checked = !!x.c.tab;
+    }
+    hk.checked = !!hotkeys.on;
+  };
+  hk.onchange = () => {
+    hotkeys.on = hk.checked;
+    localStorage.setItem('padctl-hotkeys', JSON.stringify(hotkeys));
+    paint();
+    // 凡例(chint)の出入りは次の毎秒更新を待たず、その場で合わせる
+    if (state && state.devices) renderCoupling();
   };
   applyTheme(cur);
   markTheme();
@@ -2074,18 +2248,6 @@ try {
       markTheme();
     };
   });
-  ways.querySelectorAll('button').forEach(b => {
-    b.onclick = () => {
-      notify.way = b.dataset.w;
-      save();
-      if (notify.way === 'sound') chime('done');   // 選んだ音がその場で分かる
-    };
-  });
-  vol.oninput = () => { notify.vol = parseInt(vol.value, 10) || 0; save(); };
-  vol.onchange = () => chime('done');
-  document.getElementById('notifytest').onclick = () => chime('done');
-  cbDone.onchange = () => { notify.done = cbDone.checked; save(); };
-  cbWait.onchange = () => { notify.wait = cbWait.checked; save(); };
   document.addEventListener('click', close);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   if (window.matchMedia) {
@@ -2409,8 +2571,14 @@ function buildDevRow(d) {
     if (e.target.closest('button,input')) return;
     toggleDevOpen(row.name);
   };
+  // 名前 + その装置の ID。ID は名前に付く補足なので名前のすぐ右に薄く置く
+  // (下段に置くと、装置の ID なのか本体の ID なのか読み取れない。
+  //  2026-08-08 ユーザー指摘)
   row.nameEl = el('b', null, row.name);
-  card.append(row.nameEl);
+  row.idEl = el('span', 'rowid');
+  const nameWrap = el('div', 'pname');
+  nameWrap.append(row.nameEl, row.idEl);
+  card.append(nameWrap);
   const rops = el('span', 'rowops');
   // 名前の変更は手順・部品の一覧と同じ作法(行右端の ✎)
   rops.append(rowIcon('pencil', 'この装置の名前を変える', false, async () => {
@@ -2494,9 +2662,15 @@ function updateDevRow(row, d, multi) {
   row.dot.title = d.error || devStateJa(d);
   // 生きた状態(実行中の手順など)はレーン側だけに出す。ここは装置の
   // 登録と名づけの情報(個体IDと、繋がる本体の名前)だけにする
+  row.idEl.textContent = devIdJa(d.id);
+  row.idEl.title = d.id || 'この装置にまだ接続していないため、ID が分かりません';
   row.meta.textContent = '';
-  row.meta.append(el('span', null, devIdJa(d.id)
-    + (d.host_info ? ` ・ ${consoleJa(d.host_info)}` : '')));
+  // 下段は「どの本体に繋がっているか」だけ。繋がる先が分からないうちは
+  // 行そのものを出さない(空の行が余白だけ食うのを防ぐ)
+  row.meta.style.display = d.host_info ? '' : 'none';
+  if (d.host_info) {
+    row.meta.append(el('span', null, `${consoleJa(d.host_info)} に接続中`));
+  }
   if (document.activeElement !== row.host) row.host.value = d.host || '';
   row.conn.disabled = row.host.value.trim() === (d.host || '').trim();
   // 1台だけのときは登録解除を出さない(従来の1台運用で誤って台帳を空に
@@ -2506,8 +2680,21 @@ function updateDevRow(row, d, multi) {
   // ファーム等の項目自体が無い)。繋がるまでは接続行だけを見せる
   row.kv.textContent = '';
   if (!d.error) {
-    for (const [k, v] of statusRows(d, '').slice(1)) {
-      row.kv.append(el('dt', null, k), el('dd', null, String(v)));
+    for (const [k, v, t] of statusRows(d, '').slice(1)) {
+      const dt = el('dt', null, k);
+      if (t) dt.title = t;
+      const dd = el('dd');
+      // 値が複数ある項目は、子項目(名前と値の対)にして親の下へぶら下げる
+      if (v && typeof v === 'object' && v.sub) {
+        const inner = el('div', 'kvsub');
+        for (const [k2, v2, t2] of v.sub) {
+          const kk = el('span', 'kvsubk', k2);
+          if (t2) kk.title = t2;
+          inner.append(kk, el('span', null, v2));
+        }
+        dd.append(inner);
+      } else dd.textContent = String(v);
+      row.kv.append(dt, dd);
     }
   }
   // 未接続・異常のとき、対処の場所であることを自ら名乗る(赤い縁取り+自動で
@@ -2613,12 +2800,17 @@ function renderConsoles(devs) {
       show('consolemsg', r.error ? 'err' : '', r.error || '');
       refresh();
     }));
-    row.append(dot, el('b', null, consoleJa(hi)), rops);
+    // 装置の行と同じ作法: 名前の右にこの本体の ID、下段は繋がっている相手。
+    // 名前を付けていない本体は consoleJa が「本体 4C3C」と ID 由来の仮名を
+    // 返すので、ここでは総称にする(同じ4桁が2度並ぶのを避ける)
+    const nameWrap = el('div', 'pname');
+    const idEl = el('span', 'rowid', devIdJa(hi));
+    idEl.title = hi;   // フル識別子は title に(表示は下4桁)
+    nameWrap.append(el('b', null, named[hi] || 'Switch 本体'), idEl);
+    row.append(dot, nameWrap, rops);
     const meta = el('div', 'meta');
-    const idSpan = el('span', null, devIdJa(hi)
-      + (conn.length ? ` ・ ${conn.join(' と ')} が接続中` : ''));
-    idSpan.title = hi;   // フル識別子は title に(表示は下4桁)
-    meta.append(idSpan);
+    meta.append(el('span', null, conn.length
+      ? `${conn.join(' と ')} が接続中` : 'いまは接続なし'));
     row.append(meta);
     box.append(row);
   }
@@ -2680,10 +2872,15 @@ document.getElementById('devadd').onclick = async () => {
 
 // 「状態」欄の行。1台でも2台でも同じ内容を出す
 function statusRows(d, np) {
+  // 1項目=1つの値。「procon / bInterval=1」のように値の中へ項目名を書くと、
+  // 読む側が値を切り分ける手間を負い、横幅も食う(2026-08-08 ユーザー指摘)
   const rows = [
     ['状態', stateJa(d.state) + (np ? ` (手順: ${np})` : '')],
     ['ファーム', `${d.fw} (${d.partition})`],
-    ['方式', `${d.mode} / bInterval=${d.binterval}`],
+    ['方式', d.mode],
+    ['読み取り間隔', `${d.binterval} ms`,
+     'Switch 本体が入力を読みに来る間隔として、この装置が USB で宣言している値'
+     + '(bInterval)。実測はこれより長いことがあります'],
     // 「USB」= マイコンと Switch 本体がケーブルで繋がって認識されているか。
     // ここが未接続だと、手順を実行してもゲームには何も届かない
     ['Switch との接続', d.usb_mounted ? '接続(USB)' : '未接続(USB)']];
@@ -2708,12 +2905,19 @@ function statusRows(d, np) {
   // 何も出ていないのが「遅れていない」のか「測っていない」のか区別できず、
   // 「実は遅れていたのに気づかなかった」がそのまま起きる(2026-08-04)。
   // 最大値はしきい値と無関係に記録しているので、常に実力が読める
+  // 測っている場所が2つあるので、親項目の下に名前と値の対で並べる。
+  // 1行に押し込むと長く、どちらの数字なのかも読み取りにくい(同上の指摘)
   if ('max_late_us' in d) {
-    let v = `切り替え ${d.max_late_us}µs`;
-    if ('deliver_max_us' in d) v += ` / 送出まで ${d.deliver_max_us}µs`;
-    const over = (d.late_events || 0) + (d.deliver_late || 0);
-    if (over) v += ` ⚠ 超過 ${over} 回`;
-    rows.push(['ずれの最大(実測)', v]);
+    const late = (v, n) => `${v}µs` + (n ? ` ⚠ 超過 ${n} 回` : '');
+    const sub = [['フレームの刻み', late(d.max_late_us, d.late_events),
+                  '手順を1フレーム進める時計が、予定の時刻からどれだけ'
+                  + '遅れて動いたか']];
+    if ('deliver_max_us' in d) {
+      sub.push(['本体へ届くまで', late(d.deliver_max_us, d.deliver_late),
+                '入力が変わってから、Switch 本体が実際に読み取るまで。'
+                + '本体の読み取り間隔ぶん(実測 5〜8ms)は必ずかかります']);
+    }
+    rows.push(['ずれの最大(実測)', {sub}]);
   }
   // ログ自体が溢れて捨てられていたら、上の数字も「見えている範囲だけ」に
   // なる。黙っていると「記録に無い=起きていない」と読まれるので必ず出す
@@ -2730,6 +2934,53 @@ function statusRows(d, np) {
                + ` / 通常入力 ${d.dropped_inputs || 0} 件`]);
   }
   return rows;
+}
+
+// ---- 実行の時刻(開始・終了予定・残り) ----
+// 放置して回すので「あと何分で終わるか」が要る(2026-08-08 ユーザー要望)。
+// 終わりが決まらないとき(周回0=止めるまで/総量が未着)は開始時刻だけ出す
+function hhmmss(ms) {
+  const t = new Date(ms);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
+}
+
+function spanJa(ms) {
+  let s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s - h * 3600) / 60);
+  s -= h * 3600 + m * 60;
+  if (h) return `${h} 時間 ${m} 分`;
+  if (m) return `${m} 分 ${s} 秒`;
+  return `${s} 秒`;
+}
+
+// この装置の実行が終わる時刻(ミリ秒)。null = 終わりが決まらない
+function runEndAt(d) {
+  if (!d || d.error || !(d.running || d.awaiting)) return null;
+  if (!d.loop_n || !d.total_frames) return null;   // 0 = 止めるまでくり返す
+  const period = (d.frame_period_ns || 16666667) / 1e6;
+  return Date.now()
+    + Math.max(0, d.total_frames - (d.frames_elapsed || 0)) * period;
+}
+
+const ETA_TITLE = '終了予定は、残りのフレーム数から割り出した目安です'
+                + '(待機分岐で止まっている時間は含みません)';
+
+// 注釈1行ぶんを書く。ends の1つでも決まらなければ終了予定は出さない
+// (「終わりの分からない実行が混ざっている」ので、組の終わりも決まらない)
+function etaLine(box, startedSec, ends) {
+  if (!startedSec) {
+    if (box.textContent) { box.textContent = ''; box.title = ''; }
+    return;
+  }
+  let s = `開始 ${hhmmss(startedSec * 1000)}`;
+  if (ends.length && ends.every(x => x != null)) {
+    const end = Math.max(...ends);
+    s += ` ・ 終了予定 ${hhmmss(end)}(残り ${spanJa(end - Date.now())})`;
+  }
+  if (box.textContent !== s) box.textContent = s;
+  box.title = ETA_TITLE;
 }
 
 // 実行を受け付けない状態の理由(押して失敗する前にボタン側で出す)。
@@ -2899,8 +3150,9 @@ function buildLane(d) {
   // クラスは見た目には使わない、uicheck がこのまとまりを読むための識別子
   lane.msg = el('div', 'lmsg');
   card.append(lane.msg);
-  // 実行(設定は上、行動は下。原則 §2)
-  card.append(el('div', 'subh', '実行'));
+  // 実行(設定は上、行動は下。原則 §2)。小見出し「実行」は置かない——
+  // レーン=実行の場所であることは形で分かるので、見出しは面積を食うだけ
+  // (2026-08-08 ユーザー指摘)
   lane.prenote = el('div', 'prenote');
   lane.prenote.style.display = 'none';
   card.append(lane.prenote);
@@ -2934,6 +3186,10 @@ function buildLane(d) {
   lane.stopi = el('button', 'danger', '⏹ 今すぐ止める');
   row2.append(lane.run1, lane.run, el('span', 'sep-v'), lane.stopg, lane.stopi);
   card.append(row2);
+  // 開始時刻と終了予定(単独で実行しているときだけ。連結した組は連結バーが
+  // 組全体で出すので、同じことを2か所に置かない)
+  lane.eta = el('div', 'hint');
+  card.append(lane.eta);
   lane.nowplaying = el('div', 'lnowplaying');
   lane.actmsg = el('div', 'lactmsg');
   lane.awaitbox = el('div', 'lawait');
@@ -3199,6 +3455,9 @@ function updateLane(lane, d) {
   } else {
     lane.badge.style.display = 'none';
   }
+  // 開始・終了予定は、連結して開始した組では連結バーが組全体で出す
+  etaLine(lane.eta, (!inRun && (running || awaiting)) ? d.run_started_at : 0,
+          [runEndAt(d)]);
   // 待機分岐の表示。三態色(計画 §2b): 青=相方待ち(自動で進む予定)/
   // 緑=そろって進んだ直後/黄=人の操作が要る・相方が来ない。赤は装置異常専用
   const autoJoinLive = inRun && c.auto_join && !c.oneshot_manual;
@@ -3331,11 +3590,20 @@ function renderLanes() {
   const m = devs.find(x => x.name === msel.value) || devs[0];
   const mBusy = !!m && !m.error && (m.running || m.awaiting);
   document.getElementById('manual').disabled =
-    recOn || !m || !!m.error || (mBusy && !manualOn);
-  msel.disabled = manualOn || recOn;   // 操作中の対象替えは事故のもと
+    recOn || !m || !!m.error || (mBusy && !manualOn) || manualSwitching;
+  // 手動操作中でも対象は替えられる(内部では前の装置を終えて次を始める)。
+  // 記録中だけは不可 — 記録は1つの装置の操作を綴ったもので、途中で相手が
+  // 変わると何を記録したのか言えなくなる
+  msel.disabled = recOn || manualSwitching;
+  // 押しても失敗するだけの選択肢は選べなくする(原則 §5)。自動実行中の
+  // 装置は手動操作を受け付けない
+  for (const o of msel.options) {
+    const x = devs.find(v => v.name === o.value);
+    o.disabled = !!x && (!!x.error || !!x.running || !!x.awaiting);
+  }
   const rb = document.getElementById('rec');
   if (!recOn) {
-    rb.disabled = mBusy || !manualOn;
+    rb.disabled = mBusy || !manualOn || manualSwitching;
     rb.title = manualOn ? '' : '先に「手動操作を開始」を押すと記録できます';
   }
 }
@@ -3447,8 +3715,9 @@ function beep(freq) {
 }
 
 // F9 = 全部止める / F10 = まとめて開始(現在の盤面、⟳ 周回実行と同じ)。
-// 連結中のみ(誤爆防止)
+// 連結中のみ(誤爆防止)。⚙ で入にしていないときは何もしない
 document.addEventListener('keydown', async e => {
+  if (!hotkeys.on) return;
   const c = cpl();
   if (!c || !c.on || (state.devices || []).length < 2) return;
   if (e.key === 'F9') {
@@ -3521,8 +3790,11 @@ async function applyFormation(f) {
     lane.loops.value = String(fd.loops | 0);
     lane.pendingResume = fd.resume || '';
   }
-  // 呼び出したものは中身を開いて見せる(いまの運転がどれかを示す)
+  // 呼び出したものは中身を開いて見せる(いまの運転がどれかを示す)。
+  // 開閉は一覧の作り直しの判定材料に入っていないので、ここで印を落とす
+  // (同じプリセットを呼び直したときは他に変化が無く、開かないままになる)
   formOpen.set(f.name, true);
+  formsKey = '';
   await api('/api/couple', 'POST', {on: !!f.linked,
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
@@ -3573,12 +3845,20 @@ function renderFormations() {
     const toggle = el('button', 'devtoggle', '▶');
     toggle.onclick = (e) => { e.stopPropagation(); toggleFormOpen(row, f.name); };
     row.append(toggle);
-    // 名前 + 連結の別(手順一覧の「名前+所要フレーム数」と同じ作法)
+    // 連結の別 + 名前。名前に行幅を目一杯使わせる(右端に別の欄を置くと、
+    // 狭い左ペインでは名前が1〜2文字しか見えない。2026-08-08 ユーザー指摘)
     const pname = el('div', 'pname');
     const nb = el('b', null, f.name);
     nb.title = f.name;
-    pname.append(nb, el('span', 'fr', f.linked ? '⧉ 連結' : '単独'));
+    pname.append(el('span', 'fkind', f.linked ? '⧉ 連結' : '単独'), nb);
     row.append(pname);
+    // 呼び出す・改名・削除は2行目に置き、たたんだままでも押せるようにする
+    // (呼び出しが一番よく使う操作なのに、開かないと押せなかった。同指摘)
+    const act = el('div', 'fact');
+    const use = el('button', 'small', '呼び出す');
+    use.title = '割り当て(連結・手順・周回・開始ラベル・合流)をこの内容に'
+              + 'します。開始はしません';
+    use.onclick = () => applyFormation(f);
     const rops = el('span', 'rowops');
     rops.append(
       rowIcon('pencil', 'このプリセットの名前を変える', false,
@@ -3590,7 +3870,8 @@ function renderFormations() {
         formOpen.delete(f.name);
         refresh();
       }));
-    row.append(rops);
+    act.append(use, rops);
+    row.append(act);
     row.onclick = (e) => {
       if (e.target.closest('button,input')) return;
       toggleFormOpen(row, f.name);
@@ -3618,13 +3899,6 @@ function renderFormations() {
       list.append(line);
     }
     detail.append(list);
-    const act = el('div', 'fact');
-    const use = el('button', 'small', '呼び出す');
-    use.title = '割り当て(連結・手順・周回・開始ラベル・合流)をこの内容に'
-              + 'します。開始はしません';
-    use.onclick = () => applyFormation(f);
-    act.append(use);
-    detail.append(act);
     row.append(detail);
     box.append(row);
     applyFormOpenState(row, f.name);
@@ -3786,8 +4060,11 @@ function renderCoupling() {
                       : '両方が選択待ちのときに押せます';
       b.onclick = async () => {
         const r = await api('/api/select_both', 'POST', {arm: i});
-        show('cactmsg', r.error ? 'err' : 'ok',
-             r.error || `両方へ「${a}」を送りました(ズレ ${r.skew_ms}ms)`);
+        // 押した本人が見ている軽い操作なので、成功はそばで数秒だけ。
+        // 何を送ったかはボタンの名前で分かるので繰り返さない
+        if (r.error) show('cactmsg', 'err', r.error);
+        else flashOk(document.getElementById('cokmsg'),
+                     `送りました(ズレ ${r.skew_ms}ms)`);
         refresh();
       };
       both.append(b);
@@ -3819,6 +4096,8 @@ function renderCoupling() {
                     && c.formations[run.formation] || {}).total_laps || {};
     const remainTxt = Object.entries(ls.remain || {})
       .filter(([, v]) => v > 0).map(([k, v]) => `${k} 残り${v}周`).join('・');
+    // 再開の成功も押したそばで数秒だけ(選択肢の同時送出と同じ作法)
+    const ok = el('span', 'okflash');
     const rs = el('button', 'small',
                   `⟲ 続きから再開${remainTxt ? `(${remainTxt})` : ''}`);
     rs.title = '残り周回を引き継いで、両方まとめて再開します';
@@ -3826,8 +4105,8 @@ function renderCoupling() {
     if (rs.disabled) rs.title = '両方が見えるようになると押せます';
     rs.onclick = async () => {
       const r = await api('/api/couple_resume', 'POST', {});
-      show('cactmsg', r.error ? 'err' : 'ok',
-           r.error || '続きから再開しました');
+      if (r.error) show('cactmsg', 'err', r.error);
+      else flashOk(ok, '再開しました');
       refresh();
     };
     row.append(rs);
@@ -3844,12 +4123,13 @@ function renderCoupling() {
         const r = await api('/api/run', 'POST',
                             {name: planp.name || '',
                              loops: rem, dev: d.name});
-        show('cactmsg', r.error ? 'err' : 'ok',
-             r.error || `${d.name} だけ再開しました(残り${rem}周)`);
+        if (r.error) show('cactmsg', 'err', r.error);
+        else flashOk(ok, `${d.name} を再開しました`);
         refresh();
       };
       row.append(b);
     }
+    row.append(ok);
     t.append(row);
     m.append(t);
     const x = el('button', 'msgclose', '×');
@@ -3867,11 +4147,19 @@ function renderCoupling() {
       + '(この1回は自動で選びません)'));
   }
   }
-  // ヒント(実測の開始ズレ+見えないホットキーの凡例だけに圧縮。原則 §5)
+  // 組の開始と終了予定(遅い方が終わる時刻)。連結中はここだけに出す
+  const rmem = (run.members || [])
+    .map(n => devs.find(x => x.name === n)).filter(Boolean);
+  etaLine(document.getElementById('ceta'), active ? run.started_at : 0,
+          rmem.map(runEndAt));
+  // ヒント(実測の開始ズレ+見えないホットキーの凡例だけに圧縮。原則 §5)。
+  // 「前回の」は付けない——実行中はいま走っている組のズレなので、いつの値かを
+  // 語ると却って迷う(2026-08-08 ユーザー指摘)
   const bits = [];
-  if (run.skew_ms != null) bits.push(`前回の開始ズレ ${run.skew_ms}ms`
+  if (run.skew_ms != null) bits.push(`開始ズレ ${run.skew_ms}ms`
     + `(${run.members ? run.members.join('→') : ''})`);
-  bits.push('F9 = 全部止める ／ F10 = まとめて開始(受け付けはビープ音)');
+  // 効かない設定の説明は置かない(入にした人にだけ凡例が要る)
+  if (hotkeys.on) bits.push(HOTKEY_LEGEND);
   document.getElementById('chint').textContent = bits.join('・');
 }
 
@@ -5604,7 +5892,8 @@ const AXKEY = {KeyW:['ly',2047], KeyS:['ly',-2048], KeyA:['lx',-2048], KeyD:['lx
                ArrowUp:['ry',2047], ArrowDown:['ry',-2048],
                ArrowLeft:['rx',-2048], ArrowRight:['rx',2047]};
 let manualOn = false;
-let manualDev = '';   // 手動操作の対象(開始時に固定。'' = 台帳の1台目)
+let manualDev = '';   // 手動操作の対象('' = 台帳の1台目)
+let manualSwitching = false;   // 対象を替えている最中(その間だけ入力を止める)
 const held = new Set();
 // ゲームパッドのボタン並びは標準配列。Switch の並びに合わせて対応づける
 const PAD_BTN = ['B','A','Y','X','L','R','ZL','ZR','MINUS','PLUS','LS','RS',
@@ -5636,7 +5925,7 @@ window.addEventListener('keydown', e => {
   // キーボードを操作として使うのは「実行・監視の画面」かつ「文字入力中で
   // ない」ときだけ。他の画面や入力欄で W を打つとスティックが倒れて
   // しまう(手動操作は継続していてもキーは取らない)
-  if (!manualOn || view !== 'home') return;
+  if (!manualOn || manualSwitching || view !== 'home') return;
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
             || t.isContentEditable)) return;
@@ -5645,24 +5934,76 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { held.delete(e.code); });
 window.addEventListener('blur', () => held.clear());
 
+function paintManual() {
+  document.getElementById('manual').textContent =
+    manualOn ? '手動操作を終了' : '手動操作を開始';
+  const chip = document.getElementById('manualchip');
+  chip.textContent = manualSwitching ? '切り替え中…'
+    : manualOn ? '操作中(この画面にフォーカス)' : '停止中';
+  chip.className = 'chip' + (manualSwitching ? ' wait' : manualOn ? ' ok' : '');
+  const fig = document.getElementById('padfig');
+  fig.style.display = manualOn ? '' : 'none';
+  // 切り替えの間は図を薄くして触れなくする。図ごと閉じると、対象を替える
+  // たびにパネルが開閉して画面が跳ねる(2026-08-08 ユーザー要望)
+  fig.classList.toggle('busy', manualSwitching);
+  document.getElementById('manualcard').classList.toggle('on', manualOn);
+}
+
 async function setManual(on) {
   if (manualOn === on) return true;
-  if (on) manualDev = manualTarget();   // 対象は開始時に固定(途中で替えない)
+  if (on) manualDev = manualTarget();   // 開始時の対象
   manualOn = on;
   const r = await api('/api/passthrough', 'POST',
                       {enable: manualOn, dev: manualDev});
   if (r.error) { manualOn = false; show('manualmsg', 'err', r.error); }
-  document.getElementById('manual').textContent =
-    manualOn ? '手動操作を終了' : '手動操作を開始';
-  const chip = document.getElementById('manualchip');
-  chip.textContent = manualOn ? '操作中(この画面にフォーカス)' : '停止中';
-  chip.className = 'chip' + (manualOn ? ' ok' : '');
-  document.getElementById('padfig').style.display = manualOn ? '' : 'none';
-  document.getElementById('manualcard').classList.toggle('on', manualOn);
+  paintManual();
   if (!manualOn) { held.clear(); figClear(); ptError(''); }
   return !r.error;
 }
 document.getElementById('manual').onclick = () => setManual(!manualOn);
+
+// 手動操作を続けたまま対象を替える。内部では「前の装置の手動操作を終える →
+// 次の装置で始める」だが、使う側からは対象を選び直すだけに見せる。
+// 切り替えの間だけ入力を止める(押した瞬間の入力が、どちらに届いたのか
+// 分からない状態を作らない)
+async function switchManualDev(next) {
+  if (!manualOn || manualSwitching || next === manualDev) return;
+  const prev = manualDev;
+  manualSwitching = true;
+  held.clear();
+  figClear();
+  paintManual();
+  try {
+    // 前の装置は必ず中立(全ボタンを離した状態)にしてから手を離す。
+    // enable:false は装置側で中立に戻る
+    await api('/api/passthrough', 'POST', {enable: false, dev: prev});
+    const r = await api('/api/passthrough', 'POST', {enable: true, dev: next});
+    if (!r.error) {
+      manualDev = next;
+      show('manualmsg', '', '');
+      return;
+    }
+    // 次の装置が受け付けない(実行中・未接続)。黙って手動操作が切れると
+    // 「操作中のつもりで空を押す」ことになるので、元の装置へ戻す
+    const back = await api('/api/passthrough', 'POST',
+                           {enable: true, dev: prev});
+    const sel = document.getElementById('manualdev');
+    if (back.error) {
+      manualOn = false;
+      show('manualmsg', 'err', `${r.error}(手動操作を終了しました)`);
+    } else {
+      if (sel.value !== prev) sel.value = prev;
+      show('manualmsg', 'err', r.error);
+    }
+  } finally {
+    manualSwitching = false;
+    paintManual();
+    refresh();
+  }
+}
+document.getElementById('manualdev').onchange = (e) => {
+  if (manualOn) switchManualDev(e.target.value);
+};
 
 // ---- コントローラー図: クリック中だけ入力にする ----
 let figBtns = 0;
@@ -5709,7 +6050,7 @@ function ptError(text) {
   box.style.display = '';
 }
 setInterval(async () => {
-  if (!manualOn || ptBusy) return;
+  if (!manualOn || ptBusy || manualSwitching) return;
   ptBusy = true;
   try {
     // ブラウザからフォーカスが外れている間は中立を送る。外れた瞬間の

@@ -333,14 +333,54 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert "open" in (row.get_attribute("class") or ""), \
             "開いたのに見た目が変わらない"
         keys = row.locator(".kv dt").all_inner_texts()
-        for want in ("方式", "ファーム", "ジャイロ", "ずれの最大(実測)"):
+        for want in ("方式", "読み取り間隔", "ファーム", "ジャイロ",
+                     "ずれの最大(実測)"):
             assert want in keys, f"{want} の行が無い: {keys}"
         kv_text = row.locator(".kv").inner_text()
         assert "有効化済み" in kv_text, f"ジャイロの値が読めない: {kv_text!r}"
+        # 1項目=1つの値。値の中に項目名を書かない(2026-08-08 指摘)
+        assert "bInterval=" not in kv_text, \
+            f"値の中に項目名が残っている: {kv_text!r}"
+        # 値が2つある項目は、子項目(名前と値の対)にして親の下へ
+        sub = row.locator(".kvsub .kvsubk").all_inner_texts()
+        assert sub == ["フレームの刻み", "本体へ届くまで"], sub
+        assert "切り替え" not in kv_text, \
+            f"何の切り替えか分からない語が残っている: {kv_text!r}"
         row.locator(".devtoggle").click()
         page.wait_for_timeout(300)
         assert "open" not in (row.get_attribute("class") or ""), "閉じたのに開いたまま"
     c.check("装置行の詳細が開閉でき、診断 kv が全て見える(新設)", t_dev_row_kv)
+
+    def t_dev_id_beside_name():
+        """ID は名前の右(何の ID かが読み取れる)。下段は繋がる本体だけ。"""
+        row = dev_row(page)
+        idtxt = row.locator(".rowid").first.inner_text()
+        assert idtxt.startswith("ID "), f"名前の右に ID が無い: {idtxt!r}"
+        meta = row.locator(".meta").first
+        if meta.is_visible():
+            assert "ID " not in meta.inner_text(), \
+                f"下段にも ID が出ている: {meta.inner_text()!r}"
+    c.check("装置の ID は名前の右に出る(新設)", t_dev_id_beside_name)
+
+    def t_lane_eta():
+        """実行中のレーンに、開始時刻と終了予定(周回が有限なら)が出ること。"""
+        l = lane(page)
+        l.locator(".lloops").fill("2")
+        l.locator("button", has_text="周回実行").click()
+        wait_state(page, "実行中")
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('#lanes .lane .hint')]"
+            "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
+        txt = [t for t in l.locator(".hint").all_inner_texts() if "開始 " in t][0]
+        assert "残り" in txt, txt
+        l.locator("button", has_text="今すぐ止める").click()
+        wait_state(page, "待機中")
+        # 実行していない間は行ごと消える(空の行が余白を食わない)
+        page.wait_for_function(
+            "() => ![...document.querySelectorAll('#lanes .lane .hint')]"
+            "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
+        l.locator(".lloops").fill("0")
+    c.check("実行中は開始時刻と終了予定が出る(新設)", t_lane_eta)
 
     def t_pairing_warning():
         """登録未完(本体が新規ペアリングを再要求し続けている)を注入すると、
@@ -655,36 +695,75 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             t_lane_proc_survives_reload)
 
     def t_notify_settings():
-        """⚙ の通知設定: 3択で効かない欄が出入りし、選択が残ること。"""
+        """⚙ の通知設定: 場面ごとに音と点滅を別々に選べ、選択が残ること。"""
         sel_before = lane(page).locator(".lproc").input_value()
         page.click("#setbtn")
         page.wait_for_timeout(200)
-        assert "on" in (page.locator('#notifyways button[data-w="sound"]')
-                        .get_attribute("class") or ""), "既定が音になっていない"
-        assert page.locator("#notifyvolrow").is_visible(), "音量が出ていない"
-        assert page.locator("#notifywhen").is_visible(), "鳴らすときが出ていない"
-        page.locator('#notifyways button[data-w="tab"]').click()
+        snd = page.locator('#notifygrid input.ngsound[data-k="done"]')
+        tab = page.locator('#notifygrid input.ngtab[data-k="done"]')
+        kind = page.locator('#notifygrid select.ngsnd[data-k="done"]')
+        vol = page.locator('#notifygrid input.ngvol[data-k="done"]')
+        # 3つの場面ぶんの行がある(終了・異常・操作待ち)
+        assert page.locator("#notifygrid input.ngsound").count() == 3, \
+            "場面ごとの行になっていない"
+        assert snd.is_checked() and tab.is_checked(), "既定で通知が切れている"
+        # 音を切ると、その行の音の種類と音量は触れなくなる(効かない欄)
+        snd.uncheck()
         page.wait_for_timeout(200)
-        assert page.locator("#notifyvolrow").is_hidden(), \
-            "音以外でも音量の欄が残っている(効かない欄)"
-        assert page.locator("#notifywhen").is_visible()
-        page.locator('#notifyways button[data-w="off"]').click()
+        assert kind.is_disabled() and vol.is_disabled(), \
+            "音を切っても種類・音量が押せる"
+        assert tab.is_checked(), "音を切ると点滅まで切れる(別々に選べていない)"
+        kind2 = page.locator('#notifygrid select.ngsnd[data-k="await"]')
+        kind2.select_option("beeps")
         page.wait_for_timeout(200)
-        assert page.locator("#notifywhen").is_hidden(), \
-            "通知なしでも「鳴らすとき」が残っている"
         page.reload()
         page.wait_for_timeout(1400)
         page.click("#setbtn")
         page.wait_for_timeout(200)
-        assert "on" in (page.locator('#notifyways button[data-w="off"]')
-                        .get_attribute("class") or ""), "選択が残っていない"
-        page.locator('#notifyways button[data-w="sound"]').click()
+        assert not page.locator(
+            '#notifygrid input.ngsound[data-k="done"]').is_checked(), \
+            "選択が残っていない"
+        assert page.locator(
+            '#notifygrid select.ngsnd[data-k="await"]').input_value() \
+            == "beeps", "選んだ音が残っていない"
+        page.locator('#notifygrid input.ngsound[data-k="done"]').check()
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(150)
         assert lane(page).locator(".lproc").input_value() == sel_before, \
             "通知設定の読み込み直しで手順の選択が変わった"
-    c.check("通知の3択で効かない欄が出入りし、選択が残る(新設)", t_notify_settings)
+    c.check("通知は場面ごとに音と点滅を別々に選べ、選択が残る(新設)",
+            t_notify_settings)
+
+    def t_hotkeys_off_by_default():
+        """F9/F10 は既定で効かず、⚙ で入にすると効くこと(誤爆防止)。"""
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        assert not page.locator("#hotkeys").is_checked(), \
+            "ファンクションキーが既定で入になっている"
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(150)
+        # 1台運用ではそもそも連結が無いので、押しても何も起きないことだけ
+        # 見る(2台での実効は連結の検査群が持つ)
+        page.keyboard.press("F9")
+        page.wait_for_timeout(400)
+        assert chip_text() == "待機中", f"F9 で状態が動いた: {chip_text()}"
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        page.locator("#hotkeys").check()
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.reload()
+        page.wait_for_timeout(1400)
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        assert page.locator("#hotkeys").is_checked(), "入切が残っていない"
+        page.locator("#hotkeys").uncheck()   # 既定へ戻す(後の検査に響かせない)
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(150)
+    c.check("ファンクションキーは既定で切、⚙ で入切できる(新設)",
+            t_hotkeys_off_by_default)
 
     def t_notify_on_finish():
         """実行が終わると通知が届く(タブ名の点滅で確かめる)。
@@ -694,7 +773,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         """
         page.click("#setbtn")
         page.wait_for_timeout(200)
-        page.locator('#notifyways button[data-w="tab"]').click()
+        page.locator('#notifygrid input.ngsound[data-k="done"]').uncheck()
+        page.locator('#notifygrid input.ngtab[data-k="done"]').check()
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.evaluate("() => stopBlink()")
@@ -710,22 +790,12 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
                       "  new Event('visibilitychange'))")
         page.wait_for_timeout(200)
         assert page.title() == "padctl", f"点滅が止まらない: {page.title()!r}"
-        page.click("#setbtn")
-        page.wait_for_timeout(200)
-        page.locator('#notifyways button[data-w="sound"]').click()
-        page.wait_for_timeout(150)
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(150)
     c.check("実行が終わると通知が届き、画面に戻ると消える(新設)",
             t_notify_on_finish)
 
     def t_notify_silent_on_manual_stop():
         """「今すぐ止める」で止めたときは通知しない(押した本人が見ている)。"""
-        page.click("#setbtn")
-        page.wait_for_timeout(200)
-        page.locator('#notifyways button[data-w="tab"]').click()
-        page.wait_for_timeout(150)
-        page.keyboard.press("Escape")
+        # 直前の検査で「終了 = タブ名の点滅」にしてあるので、そのまま使う
         page.evaluate("() => stopBlink()")
         l = lane(page)
         l.locator(".lloops").fill("0")
@@ -737,9 +807,10 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert page.title() == "padctl", \
             f"自分で止めたのに知らせが出た: {page.title()!r}"
         l.locator(".lloops").fill("1")
+        # 既定(音で知らせる)へ戻す
         page.click("#setbtn")
         page.wait_for_timeout(200)
-        page.locator('#notifyways button[data-w="sound"]').click()
+        page.locator('#notifygrid input.ngsound[data-k="done"]').check()
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(150)
@@ -2445,9 +2516,10 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             assert any("今すぐ止める" in b for b in btns), btns
             assert lane(i).locator(".lproc").count() == 1, "手順の選択が無い"
             assert lane(i).locator(".lloops").count() == 1, "周回の欄が無い"
+            # 小見出しは「タイムライン」だけ。レーン=実行の場所なので、
+            # 「実行」の見出しは面積を食うだけだった(2026-08-08 指摘)
             subhs = lane(i).locator(".subh").all_inner_texts()
-            assert any("実行" in s for s in subhs), subhs
-            assert any("タイムライン" in s for s in subhs), subhs
+            assert subhs == ["タイムライン"], subhs
     c.check("レーンは装置名入りのボタンと実行一式を持つ", t_lane_layout)
 
     def t_lane_procs_independent():
@@ -2544,13 +2616,39 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             " && state.devices[1].state === 'PASSTHRU'", timeout=8000)
         assert page.evaluate("state.devices[0].state") == "IDLE", \
             "対象でない 1P まで手動操作になった"
-        assert page.locator("#manualdev").is_disabled(), \
-            "手動操作中に対象を替えられる"
         page.click("#manual")            # 終了
         page.wait_for_function(
             "() => state.devices[1].state === 'IDLE'", timeout=8000)
-    c.check("手動操作は選んだ装置だけに届き、操作中は対象を固定",
-            t_manual_targets_selected_device)
+    c.check("手動操作は選んだ装置だけに届く", t_manual_targets_selected_device)
+
+    def t_manual_switch_target_while_on():
+        """手動操作を続けたまま対象を替えられること(2026-08-08 要望)。
+
+        内部では「前の装置を終える → 次で始める」だが、使う側からは選び直す
+        だけに見える。図は閉じずに薄くなり、前の装置は必ず中立へ戻る。
+        """
+        page.select_option("#manualdev", "2P")
+        page.click("#manual")
+        page.wait_for_function(
+            "() => state.devices[1].state === 'PASSTHRU'", timeout=8000)
+        assert not page.locator("#manualdev").is_disabled(), \
+            "手動操作中に対象を替えられない"
+        page.select_option("#manualdev", "1P")
+        page.wait_for_function(
+            "() => state.devices[0].state === 'PASSTHRU'"
+            " && state.devices[1].state === 'IDLE'", timeout=8000)
+        # 続いている(終了ボタンのまま・図も出たまま)
+        assert "終了" in text(page, "#manual"), text(page, "#manual")
+        assert page.locator("#padfig").is_visible(), "対象を替えると図が閉じる"
+        assert "操作中" in text(page, "#manualchip"), text(page, "#manualchip")
+        assert page.evaluate("() => manualDev") == "1P", \
+            "送り先が新しい対象に切り替わっていない"
+        page.click("#manual")            # 終了
+        page.wait_for_function(
+            "() => state.devices[0].state === 'IDLE'", timeout=8000)
+        page.select_option("#manualdev", "2P")
+    c.check("手動操作中でも対象を切り替えられる(新設)",
+            t_manual_switch_target_while_on)
 
     def t_lane_resume_refreshes_on_return():
         """「手順を編集」でラベルだけを足して保存 → 実行・監視へ戻ったとき、
@@ -2637,9 +2735,12 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             " !== 'none'", timeout=10000)
         assert "ID 4C3C" in text(page, "#consolelist"), \
             text(page, "#consolelist")
-        idspan = page.locator("#consolelist .meta span").first
+        # ID は名前の右(装置の行と同じ作法)。フル識別子は title に
+        idspan = page.locator("#consolelist .rowid").first
         assert idspan.get_attribute("title") == "0100005e0053013c", \
             "フル識別子が title に無い"
+        assert "ID " not in page.locator("#consolelist .meta").first \
+            .inner_text(), "下段にも ID が出ている"
         # 接続中の判定は devicepool の収集(最大1秒)を待つ必要がある。
         # 即時 assert だと境界で稀に落ちる(2026-08-07 に実際に発生)
         page.wait_for_function(
@@ -2809,6 +2910,15 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "もう一回" not in bar, \
             "廃止した「もう一回(同じ条件)」ボタンが残っている"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
+        # ファンクションキーは既定で切。効かないものの凡例は出さない
+        assert "F9" not in page.locator("#chint").inner_text(), \
+            "切っているのにホットキーの凡例が出ている"
+        page.click("#setbtn")
+        page.wait_for_timeout(200)
+        page.locator("#hotkeys").check()   # 以後の F9/F10 の検査のため入に
+        page.wait_for_timeout(150)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(250)
         # #chint は実測(開始ズレ)+見えないホットキーの凡例だけに圧縮済み
         # (µs との区別・連動停止の条件、といった教育文は乗せない。原則 §5)
         hint = page.locator("#chint").inner_text()
@@ -2882,8 +2992,17 @@ def run_coupling(c: Checker, page, proj: Project,
         hint = page.locator("#chint").inner_text()
         assert "開始ズレ" in hint and "ms" in hint, \
             f"開始ズレの実測が出ない: {hint}"
+        assert "前回" not in hint, f"いつの値かを語る語が残っている: {hint}"
+        # 組の開始時刻と終了予定(1回実行なので終わりが決まる)。連結中は
+        # 組全体をここに出し、レーンには出さない(同じ情報を2か所に置かない)
+        page.wait_for_function(
+            "() => document.getElementById('ceta')"
+            ".textContent.includes('終了予定')", timeout=8000)
+        assert not any("終了予定" in t
+                       for t in lane(0).locator(".hint").all_inner_texts()), \
+            "連結中なのにレーンにも終了予定が出ている"
         wait_idle()          # 人が選ばなくても自動合流で完走する
-    c.check("まとめて1回実行 → 連結バッジ・開始ズレms・自動合流で完走",
+    c.check("まとめて1回実行 → 連結バッジ・開始ズレms・終了予定・自動合流で完走",
             t_pair_run_and_auto_join)
 
     def t_wait_colors():
@@ -2932,11 +3051,22 @@ def run_coupling(c: Checker, page, proj: Project,
             "ワンショット中なのに自動で選ばれた"
         assert "両方そろいました" in page.locator("#cmsg").inner_text()
         page.locator("#cbotharms button", has_text="出た(両方へ)").click()
+        # 正常・軽量・自分で押した操作の成功は、ボタンのそばに数秒だけ出て
+        # 自ら消える(毎回メッセージの席が増えて下の行がずれない。2026-08-08)
+        page.wait_for_function(
+            "() => document.getElementById('cokmsg')"
+            ".textContent.includes('送りました')", timeout=8000)
+        assert page.locator("#cactmsg").inner_text().strip() == "", \
+            "成功なのに、消えない知らせの席を使っている"
+        page.wait_for_function(
+            "() => document.getElementById('cokmsg').textContent === ''",
+            timeout=8000)
         wait_idle()
         assert not page.evaluate(
             "document.getElementById('coneshot').classList.contains('armed')"
         ), "人が選んだのにワンショットが解除されない"
-    c.check("「次の合流は自分で選ぶ」は1回だけ自動を止める", t_oneshot_manual)
+    c.check("「次の合流は自分で選ぶ」は1回だけ自動を止め、成功文は自ら消える",
+            t_oneshot_manual)
 
     def t_manual_stop_not_coupled():
         lane(0).locator(".lloops").fill("0")
@@ -3099,7 +3229,15 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
-        open_form("いつもの").locator("button", has_text="呼び出す").click()
+        # 呼び出しはたたんだままでも押せる(一番よく使う操作が開閉の奥に
+        # あると面倒。2026-08-08 指摘)
+        crow = form_row("いつもの")
+        if "open" in (crow.get_attribute("class") or ""):
+            crow.locator(".devtoggle").click()
+            page.wait_for_timeout(250)
+        assert crow.locator("button", has_text="呼び出す").is_visible(), \
+            "たたむと「呼び出す」が押せない"
+        crow.locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '保存済み'", timeout=8000)

@@ -39,6 +39,7 @@ class DeviceLink:
         self.error_exc: Exception | None = None   # 同・例外そのもの(表示整形用)
         self.host_info: str = ""         # つながっている本体の識別子(16進16桁)
         self.at: float = 0.0             # キャッシュ時刻(UNIX 秒)
+        self.run_started_at: float = 0.0  # 実行中ならその開始時刻(0 = 実行なし)
         self._wt_at: float = 0.0         # 書き戻し(write-through)の時刻(単調時計)
         self._stop = False
         self._thread: threading.Thread | None = None
@@ -109,8 +110,24 @@ class DeviceLink:
         self._wt_at = time.monotonic()
         if status is not None:
             self.status = status
+            self._note_run(status)
         if listing is not None:
             self.listing = listing
+
+    def _note_run(self, status: dict) -> None:
+        """実行の開始時刻を控える(画面の「終了予定」の表示に使う)。
+
+        装置は「いつ始めたか」を持たず、経過フレーム数だけを返す。待機分岐で
+        止まっている間はフレームが進まないので、経過から逆算した開始時刻は
+        待った分だけ後ろへずれていく。そこで実行中になった瞬間を控える
+        (操作の書き戻しでは即座に、外(CLI)からの実行は収集の周期ぶん=最大
+        1秒の遅れで気づく。秒どまりの表示には足りる)。
+        """
+        on = bool(status.get("running") or status.get("awaiting"))
+        if not on:
+            self.run_started_at = 0.0
+        elif not self.run_started_at:
+            self.run_started_at = time.time()
 
     # ---- 収集 ----
 
@@ -163,6 +180,7 @@ class DeviceLink:
                     # こちらの(古い)結果でそれを上書きしない
                     self.info, self.status, self.listing = \
                         info, status, listing
+                    self._note_run(status)
                 else:
                     self.info = info
                 self.error = ""
