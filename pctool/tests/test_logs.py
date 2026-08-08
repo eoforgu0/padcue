@@ -223,18 +223,42 @@ def test_finish_logs_record_loop_counts(dev):
     assert spec == 1000 and done < 1000, e
 
 
+def _wait_next_lap(c, lap, why, timeout=10.0):
+    """次の周回境界に入るまで待ち、その間ずっと実行が続いていることを見る。"""
+    end = time.time() + timeout
+    while True:
+        st = c.status()
+        if st["session_loop"] != lap:
+            return st["session_loop"]
+        assert st["running"], why
+        assert time.time() < end, f"周回境界に届かなかった: {st}"
+        time.sleep(0.005)
+
+
 def test_stop_cancel_revokes_graceful(dev):
-    """区切り停止の予約を cancel で取り消すと、実行が続くこと(2026-08-04)。"""
+    """区切り停止の予約を cancel で取り消すと、実行が続くこと(2026-08-04)。
+
+    「取り消せた」の証拠は **周回境界を跨いでも止まらないこと**。時間で
+    待って running を見るだけだと、境界に届く前を見ているに過ぎない
+    (200倍速では 32 フレームの手順が1周 3ms 弱)。逆に予約と取り消しの
+    隙間に境界が来ると仕様どおり本当に停止するので、負荷しだいで落ちる
+    テストになっていた。周の頭に合わせてから予約し、次の境界を跨ぐまで
+    見張る形に直した(2026-08-08)。
+    """
     c = _client(dev)
-    h, _ = _push(c, "短い手順", "press A 2\nwait 30")
-    c.run("短い手順", h, loop_n=100000)
+    # 1周を長めに取る(200倍速で約 0.5 秒)。予約と取り消しの隙間に周回境界が
+    # 来ないだけの余裕を作るため
+    h, _ = _push(c, "長い周", "press A 2\nwait 6000")
+    c.run("長い周", h, loop_n=100000)
+    lap = _wait_next_lap(c, c.status()["session_loop"],
+                         "開始直後に止まった")   # 周の頭に合わせる
     c.stop("graceful")
     assert c.status().get("stop_graceful") is True
     c.stop("cancel")
     st = c.status()
     assert st.get("stop_graceful") is False, st
-    time.sleep(0.3)                      # 数周ぶん流しても止まらない
-    assert c.status()["running"] is True, "取り消したのに止まった"
+    _wait_next_lap(c, lap, "取り消したのに周の途中で止まった")
+    assert c.status()["running"] is True, "取り消したのに周回境界で止まった"
     c.stop("immediate")
     time.sleep(0.05)
     assert c.status()["running"] is False

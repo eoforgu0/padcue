@@ -714,7 +714,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "音を切っても種類・音量が押せる"
         assert tab.is_checked(), "音を切ると点滅まで切れる(別々に選べていない)"
         kind2 = page.locator('#notifygrid select.ngsnd[data-k="await"]')
-        kind2.select_option("beeps")
+        kind2.select_option("chime")   # 既定と違う音(選択が残ることを見る)
         page.wait_for_timeout(200)
         page.reload()
         page.wait_for_timeout(1400)
@@ -725,7 +725,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "選択が残っていない"
         assert page.locator(
             '#notifygrid select.ngsnd[data-k="await"]').input_value() \
-            == "beeps", "選んだ音が残っていない"
+            == "chime", "選んだ音が残っていない"
         page.locator('#notifygrid input.ngsound[data-k="done"]').check()
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")

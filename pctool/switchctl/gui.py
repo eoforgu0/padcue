@@ -1990,10 +1990,11 @@ function applyTheme(v) {
 const NOTIFY_KINDS = [['done', '実行が終わった'],
                       ['error', '異常で止まった'],
                       ['await', '操作を待っている']];
+// 既定の割り当ては、実際に聴き比べて決めたもの(2026-08-08 ユーザー選択)
 const NOTIFY_DEFAULT = {
-  done: {sound: true, snd: 'bell', vol: 40, tab: true},
+  done: {sound: true, snd: 'call', vol: 40, tab: true},
   error: {sound: true, snd: 'alert', vol: 60, tab: true},
-  await: {sound: true, snd: 'call', vol: 50, tab: true},
+  await: {sound: true, snd: 'beeps', vol: 50, tab: true},
 };
 
 // 旧い形(way: 音/タブ/なし の3択+共通の音量)からの移し替え。移さないと、
@@ -2041,19 +2042,33 @@ function tone(freq, at, dur, vol) {
 
 // 鳴らせる音。意味が違えば形も違う(原則 §5)が、どれが聞き取りやすいかは
 // 部屋とゲーム音による。場面ごとに選べるようにする(2026-08-08 ユーザー要望)
+// 名前は**音そのものの形**で付ける。「呼び出し」「警告」のように用途を
+// 示す名前にすると、別の場面へ割り当てたときに名前と実感が食い違う
+// (2026-08-08 ユーザー指摘)。並びは短い順・単純な順。癖の強い音は入れない
+// —— 選ばれずに選択肢を増やすだけになるため
 const SOUNDS = {
+  tick: {ja: 'ピッ', hint: '短く1回', play: (t, v) => {
+    tone(1174.7, t, 0.09, v); }},
+  double: {ja: 'ピピッ', hint: '短く2回', play: (t, v) => {
+    tone(1174.7, t, 0.09, v); tone(1174.7, t + 0.15, 0.09, v); }},
+  beeps: {ja: 'ピピピッ', hint: '短く3回。ゲームの音に紛れにくい',
+    play: (t, v) => {
+      for (let i = 0; i < 3; i++) tone(1318.5, t + i * 0.17, 0.12, v); }},
+  pon: {ja: 'ポーン', hint: '柔らかい単音', play: (t, v) => {
+    tone(784, t, 0.7, v); }},
   // 基音に薄い倍音を重ねると、澄んだ鈴の音になる
-  bell: {ja: '鈴', hint: 'チーンと澄んだ余韻', play: (t, v) => {
+  bell: {ja: 'チーン', hint: '澄んだ長い余韻', play: (t, v) => {
     tone(1046.5, t, 1.2, v); tone(2093, t, 0.5, v * 0.22); }},
-  call: {ja: '呼び出し', hint: '上がる2音', play: (t, v) => {
+  call: {ja: '上がる2音', hint: '低 → 高', play: (t, v) => {
     tone(880, t, 0.3, v * 0.8); tone(1174.7, t + 0.14, 0.7, v * 0.8); }},
-  alert: {ja: '警告', hint: '低く下がる2音', play: (t, v) => {
+  alert: {ja: '下がる2音', hint: '高 → 低。低めで沈む', play: (t, v) => {
     tone(392, t, 0.5, v); tone(294, t + 0.24, 0.8, v); }},
-  chime: {ja: 'チャイム', hint: 'ピンポン', play: (t, v) => {
+  chime: {ja: 'ピンポン', hint: '玄関チャイム風', play: (t, v) => {
     tone(659.3, t, 0.6, v); tone(523.3, t + 0.28, 1.0, v); }},
-  // ゲームの音に紛れにくい、はっきりした音(「気づきにくい」への逃げ道)
-  beeps: {ja: '電子音3回', hint: '短く3回。ゲーム音に紛れにくい', play: (t, v) => {
-    for (let i = 0; i < 3; i++) tone(1318.5, t + i * 0.17, 0.12, v); }},
+  up3: {ja: '上がる3音', hint: 'ド・ミ・ソ', play: (t, v) => {
+    [523.3, 659.3, 784].forEach((f, i) => tone(f, t + i * 0.13, 0.5, v)); }},
+  down3: {ja: '下がる3音', hint: 'ソ・ミ・ド', play: (t, v) => {
+    [784, 659.3, 523.3].forEach((f, i) => tone(f, t + i * 0.13, 0.5, v)); }},
 };
 
 function playSound(name, vol) {
