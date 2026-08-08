@@ -395,9 +395,9 @@ def cmd_status(args) -> int:
                   f"{d.get('session_loop')} 周目 / "
                   f"{d.get('frames_elapsed')} フレーム")
         if "max_late_us" in d:
-            v = f"切り替え {d['max_late_us']}µs"
+            v = f"フレームの刻み {d['max_late_us']}µs"
             if "deliver_max_us" in d:
-                v += f" / 送出まで {d['deliver_max_us']}µs"
+                v += f" / 読み取り待ち {d['deliver_max_us']}µs"
             print(f"ずれ最大   : {v}")
         return 0
     with _client(args) as c:
@@ -421,9 +421,9 @@ def cmd_status(args) -> int:
         # ずれの実測は 0 でも出す。出ていないのが「遅れていない」のか
         # 「測っていない」のか分からないと、計器として意味を成さない
         if "max_late_us" in st:
-            line = f"ずれ最大   : 切り替え {st['max_late_us']}µs"
+            line = f"ずれ最大   : フレームの刻み {st['max_late_us']}µs"
             if "deliver_max_us" in st:
-                line += f" / 送出まで {st['deliver_max_us']}µs"
+                line += f" / 読み取り待ち {st['deliver_max_us']}µs"
             over = st.get("late_events", 0) + st.get("deliver_late", 0)
             if over:
                 line += f"  ⚠ 超過 {over} 回"
