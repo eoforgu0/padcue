@@ -341,9 +341,15 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         # 1項目=1つの値。値の中に項目名を書かない(2026-08-08 指摘)
         assert "bInterval=" not in kv_text, \
             f"値の中に項目名が残っている: {kv_text!r}"
-        # 値が2つある項目は、子項目(名前と値の対)にして親の下へ
-        sub = row.locator(".kvsub .kvsubk").all_inner_texts()
-        assert sub == ["フレームの刻み", "本体へ届くまで"], sub
+        # 値が2つある項目は、親が見出しだけの行になり、子は字下げして
+        # 他の項目と同じ2列(名前=左・値=右)に並ぶ
+        assert "ずれの最大(実測)" in row.locator("dt.kvhead").all_inner_texts()
+        sub = row.locator("dt.kvsub").all_inner_texts()
+        assert sub == ["フレームの刻み", "読み取り待ち"], sub
+        # 子の名前と値、どちらにホバーしても説明が出る
+        for sel in ("dt.kvsub", "dt.kvsub + dd"):
+            t = row.locator(sel).first.get_attribute("title") or ""
+            assert "1フレーム進める" in t, f"{sel} に説明が無い: {t!r}"
         assert "切り替え" not in kv_text, \
             f"何の切り替えか分からない語が残っている: {kv_text!r}"
         row.locator(".devtoggle").click()
@@ -371,8 +377,13 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_function(
             "() => [...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
-        txt = [t for t in l.locator(".hint").all_inner_texts() if "開始 " in t][0]
-        assert "残り" in txt, txt
+        eta = l.locator(".hint .stat")
+        # 項目名と値は別の席(単色の1行に連ねない。2026-08-08 指摘)
+        assert eta.count() == 2, eta.all_inner_texts()
+        assert "残り" in eta.nth(1).inner_text(), eta.nth(1).inner_text()
+        # 値の中の「(残り …)」の手前は詰めない
+        assert " (残り" in eta.nth(1).locator(".statv").inner_text(), \
+            eta.nth(1).inner_text()
         l.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         # 実行していない間は行ごと消える(空の行が余白を食わない)
@@ -768,7 +779,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     def t_notify_on_finish():
         """実行が終わると通知が届く(タブ名の点滅で確かめる)。
 
-        音は自動では聴けないので、同じ知らせを受け取る「タブ名を点滅」に
+        音は自動では聴けないので、同じ知らせを受け取る「タブで知らせる」に
         して見る。届く経路(サーバの見張り → /api/events)は同じ。
         """
         page.click("#setbtn")
@@ -792,6 +803,27 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert page.title() == "padctl", f"点滅が止まらない: {page.title()!r}"
     c.check("実行が終わると通知が届き、画面に戻ると消える(新設)",
             t_notify_on_finish)
+
+    def t_favicon_marks_notice():
+        """知らせが出ている間はタブのアイコンにも印が付くこと(新設)。
+
+        別のタブを見ていると、タブ名は幅で切れて読めないことがある。
+        アイコンはタブが見えている限り目に入るので、そこでも知らせる。
+        """
+        icon = ("() => (document.querySelector('link[rel=icon]') || {}).href"
+                " || ''")
+        idle = page.evaluate(icon)
+        assert idle.startswith("data:image/png"), \
+            f"ふだんのアイコンが描かれていない: {idle[:40]!r}"
+        page.evaluate("() => blinkTitle('実行が終わりました')")
+        page.wait_for_timeout(200)
+        alerted = page.evaluate(icon)
+        assert alerted != idle, "知らせが出てもアイコンが変わらない"
+        page.evaluate("() => stopBlink()")
+        page.wait_for_timeout(200)
+        assert page.evaluate(icon) == idle, "知らせが消えてもアイコンが戻らない"
+    c.check("知らせが出るとタブのアイコンにも印が付く(新設)",
+            t_favicon_marks_notice)
 
     def t_notify_silent_on_manual_stop():
         """「今すぐ止める」で止めたときは通知しない(押した本人が見ている)。"""
@@ -2910,21 +2942,22 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "もう一回" not in bar, \
             "廃止した「もう一回(同じ条件)」ボタンが残っている"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
-        # ファンクションキーは既定で切。効かないものの凡例は出さない
-        assert "F9" not in page.locator("#chint").inner_text(), \
-            "切っているのにホットキーの凡例が出ている"
+        # #chint は実測(開始ズレ)だけ。ホットキーの凡例は入切を決める ⚙ にある
+        # ——値の位置に別の話が地続きで並ぶ形をやめた(2026-08-08 指摘)
+        hint = page.locator("#chint").inner_text()
+        assert "F9" not in hint and "F10" not in hint, \
+            f"ホットキーの凡例が #chint に残っている: {hint}"
+        assert "µs" not in hint and "連動停止が効くのは" not in hint, \
+            f"廃止したはずの教育文が #chint に残っている: {hint}"
         page.click("#setbtn")
         page.wait_for_timeout(200)
+        legend = page.locator(".sethint").first.inner_text()
+        assert "F9" in legend and "F10" in legend, \
+            f"⚙ にホットキーの説明が無い: {legend}"
         page.locator("#hotkeys").check()   # 以後の F9/F10 の検査のため入に
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(250)
-        # #chint は実測(開始ズレ)+見えないホットキーの凡例だけに圧縮済み
-        # (µs との区別・連動停止の条件、といった教育文は乗せない。原則 §5)
-        hint = page.locator("#chint").inner_text()
-        assert "F9 = 全部止める" in hint and "F10 = まとめて開始" in hint, hint
-        assert "µs" not in hint and "連動停止が効くのは" not in hint, \
-            f"廃止したはずの教育文が #chint に残っている: {hint}"
     c.check("連結すると連結バーの一式が現れる", t_link_shows_bar)
 
     def t_unlink_and_relink():
@@ -3238,6 +3271,10 @@ def run_coupling(c: Checker, page, proj: Project,
         assert crow.locator("button", has_text="呼び出す").is_visible(), \
             "たたむと「呼び出す」が押せない"
         crow.locator("button", has_text="呼び出す").click()
+        page.wait_for_timeout(700)
+        # 押しても開閉は変わらない(ボタンと開閉は別の機能。2026-08-08 指摘)
+        assert "open" not in (form_row("いつもの").get_attribute("class") or ""), \
+            "呼び出すボタンで詳細が勝手に開いた"
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '保存済み'", timeout=8000)

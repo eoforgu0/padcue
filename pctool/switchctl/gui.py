@@ -1171,11 +1171,10 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
   column-gap:14px; row-gap:2px; font-size:12.5px; }
 .kv dt { color:var(--muted); margin-right:8px; align-self:start; }
 .kv dd { margin:0; font-variant-numeric:tabular-nums; }
-/* 値が2つ以上ある項目(ずれの最大)は、値の中へ項目名を押し込まず、親項目の
-   下に名前と値の対でぶら下げる(2026-08-08 ユーザー指摘) */
-.kvsub { display:grid; grid-template-columns:max-content auto;
-  column-gap:10px; row-gap:2px; }
-.kvsubk { color:var(--muted); }
+/* 値が2つ以上ある項目(ずれの最大)は、親を見出しだけの行にし、子は字下げして
+   他の項目と同じ2列に並べる(名前=左・値=右。2026-08-08 ユーザー指摘) */
+.kv dt.kvhead { grid-column:1 / -1; }
+.kv dt.kvsub { padding-left:14px; }
 /* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
 .prenote { font-size:12.5px; color:var(--ink); background:var(--accent-soft);
            border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
@@ -1390,9 +1389,13 @@ table.grid td.ax input { text-align:right; }
 table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   background:color-mix(in srgb, var(--line) 22%, transparent); }
 .hint { color:var(--muted); font-size:11.5px; margin-top:8px; line-height:1.7; }
-/* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレと凡例)は、間を詰めて
-   ひとまとまりに見せる */
+/* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレ)は、間を詰めてひとまとまりに */
 .hint + .hint { margin-top:2px; }
+/* 注釈行の中の「項目名 値」。項目どうしは余白で切り、値は本文の色にする
+   (単色の1行に「・」で連ねると、どこまでが値なのか読めない。2026-08-08) */
+.stat { display:inline-flex; align-items:baseline; gap:6px; margin-right:22px; }
+.stat:last-child { margin-right:0; }
+.statv { color:var(--ink); font-variant-numeric:tabular-nums; }
 /* 中身が空の注釈行は、余白だけを占めない(実行していないときの ETA 行) */
 .hint:empty { display:none; }
 /* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない) */
@@ -2086,6 +2089,31 @@ function chime(kind) {
   playSound(c.snd, c.vol);
 }
 
+// タブのアイコン。タブ名は幅が狭いと切れてしまうが、アイコンはタブが
+// 見えている限り必ず目に入る。別のタブを見ている人はここで気づく
+// (2026-08-08 ユーザー選択)。CDN は使えないので canvas で描く
+const setFavicon = (() => {
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  document.head.append(link);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 32;
+  const g = cv.getContext('2d');
+  return (color) => {
+    g.clearRect(0, 0, 32, 32);
+    g.fillStyle = color;
+    g.beginPath();
+    g.arc(16, 16, 13, 0, Math.PI * 2);
+    g.fill();
+    link.href = cv.toDataURL('image/png');
+  };
+})();
+// ふだんは藍、知らせが出ている間は橙。配色の設定とは無関係に固定
+// (タブの中では、その時のテーマではなく「いつもの色かどうか」で見分ける)
+const FAV_IDLE = '#3f6fd0';
+const FAV_ALERT = '#e0561f';
+setFavicon(FAV_IDLE);
+
 // タブ名の点滅。画面に戻った時点で必ず止める(消せない表示を残さない)。
 // 点滅の両側とも知らせの文言にしてあるのは、隠れたタブではタイマーが
 // 絞られて切り替えが止まりうるため(どちらで止まっても読める)
@@ -2096,6 +2124,7 @@ function blinkTitle(text) {
   stopBlink();
   let on = true;
   document.title = '● ' + text;
+  setFavicon(FAV_ALERT);
   blinkTimer = setInterval(() => {
     on = !on;
     document.title = (on ? '● ' : '○ ') + text;
@@ -2107,6 +2136,7 @@ function stopBlink() {
   clearInterval(blinkTimer);
   blinkTimer = null;
   document.title = BASE_TITLE;
+  setFavicon(FAV_IDLE);
 }
 document.addEventListener('visibilitychange',
                           () => { if (!document.hidden) stopBlink(); });
@@ -2137,7 +2167,6 @@ try {
   Object.assign(hotkeys,
                 JSON.parse(localStorage.getItem('padctl-hotkeys') || '{}'));
 } catch (e) { /* 読めなければ切のまま */ }
-const HOTKEY_LEGEND = 'F9 = 全部止める ／ F10 = まとめて開始(受け付けはビープ音)';
 
 // 音は「利用者が一度でも触ってから」でないと鳴らせない決まりがある。
 // 実行を押した時点で必ず満たされるが、CLI から始めた実行にも間に合うよう、
@@ -2177,7 +2206,7 @@ try {
   // (残しておくと「切ってあるのに音量を触れる」ちぐはぐな欄になる)
   const cells = [];
   grid.append(el('div'), el('div', 'nghead snd', '音'),
-              el('div', 'nghead', 'タブ名を点滅'));
+              el('div', 'nghead', 'タブで知らせる'));
   for (const [k, ja] of NOTIFY_KINDS) {
     const c = notify[k];
     const cbS = document.createElement('input');
@@ -2206,7 +2235,8 @@ try {
     cbT.type = 'checkbox';
     cbT.className = 'ngtab';
     cbT.dataset.k = k;
-    cbT.title = `${ja}ときにタブ名を点滅させます(画面に戻ると消えます)`;
+    cbT.title = `${ja}ときに、タブの名前を点滅させてアイコンに印を付けます`
+              + '(画面に戻ると消えます)';
     cbS.onchange = () => { c.sound = cbS.checked; save();
                            if (c.sound) playSound(c.snd, c.vol); };
     snd.onchange = () => { c.snd = snd.value; save(); playSound(c.snd, c.vol); };
@@ -2236,8 +2266,6 @@ try {
     hotkeys.on = hk.checked;
     localStorage.setItem('padctl-hotkeys', JSON.stringify(hotkeys));
     paint();
-    // 凡例(chint)の出入りは次の毎秒更新を待たず、その場で合わせる
-    if (state && state.devices) renderCoupling();
   };
   applyTheme(cur);
   markTheme();
@@ -2696,20 +2724,24 @@ function updateDevRow(row, d, multi) {
   row.kv.textContent = '';
   if (!d.error) {
     for (const [k, v, t] of statusRows(d, '').slice(1)) {
+      // 値が複数ある項目は、親を見出しだけの行にして子を字下げする。子も
+      // 他の項目と同じ2列(名前=左・値=右)に並べる——値の欄へ子ごと押し込むと、
+      // どこが値なのか読めない(2026-08-08 ユーザー指摘)
+      if (v && typeof v === 'object' && v.sub) {
+        const head = el('dt', 'kvhead', k);
+        if (t) head.title = t;
+        row.kv.append(head);
+        for (const [k2, v2, t2] of v.sub) {
+          const sdt = el('dt', 'kvsub', k2);
+          const sdd = el('dd', null, v2);
+          if (t2) sdt.title = sdd.title = t2;   // 名前でも値でも説明が出る
+          row.kv.append(sdt, sdd);
+        }
+        continue;
+      }
       const dt = el('dt', null, k);
       if (t) dt.title = t;
-      const dd = el('dd');
-      // 値が複数ある項目は、子項目(名前と値の対)にして親の下へぶら下げる
-      if (v && typeof v === 'object' && v.sub) {
-        const inner = el('div', 'kvsub');
-        for (const [k2, v2, t2] of v.sub) {
-          const kk = el('span', 'kvsubk', k2);
-          if (t2) kk.title = t2;
-          inner.append(kk, el('span', null, v2));
-        }
-        dd.append(inner);
-      } else dd.textContent = String(v);
-      row.kv.append(dt, dd);
+      row.kv.append(dt, el('dd', null, String(v)));
     }
   }
   // 未接続・異常のとき、対処の場所であることを自ら名乗る(赤い縁取り+自動で
@@ -2925,12 +2957,18 @@ function statusRows(d, np) {
   if ('max_late_us' in d) {
     const late = (v, n) => `${v}µs` + (n ? ` ⚠ 超過 ${n} 回` : '');
     const sub = [['フレームの刻み', late(d.max_late_us, d.late_events),
-                  '手順を1フレーム進める時計が、予定の時刻からどれだけ'
-                  + '遅れて動いたか']];
+                  '手順を1フレーム進める時計が、予定の時刻からどれだけ遅れて'
+                  + '動いたか。ここが大きいと、押した長さそのものがずれます']];
+    // 測っているのは「新しい入力を USB の送出口へ載せられた時刻 − 入力が
+    // 変わった時刻」(app_usb.c)。前のデータを Switch が読み取りに来るまで
+    // 載せられないので、実体は**本体のポーリング待ち**。「届くまで」でも
+    // 「ゲームが読むまで」でもない(2026-08-08 ユーザーの問いを受けて改称)
     if ('deliver_max_us' in d) {
-      sub.push(['本体へ届くまで', late(d.deliver_max_us, d.deliver_late),
-                '入力が変わってから、Switch 本体が実際に読み取るまで。'
-                + '本体の読み取り間隔ぶん(実測 5〜8ms)は必ずかかります']);
+      sub.push(['読み取り待ち', late(d.deliver_max_us, d.deliver_late),
+                '入力が変わってから、その値を USB の送出口へ載せられるまで。'
+                + 'Switch 本体が前のデータを読み取りに来るまでは載せられない'
+                + 'ので、本体の読み取り間隔ぶん(実測 5〜8ms)は必ずかかります'
+                + '(ゲームが実際に使うまでの時間は含みません)']);
     }
     rows.push(['ずれの最大(実測)', {sub}]);
   }
@@ -2982,19 +3020,33 @@ function runEndAt(d) {
 const ETA_TITLE = '終了予定は、残りのフレーム数から割り出した目安です'
                 + '(待機分岐で止まっている時間は含みません)';
 
-// 注釈1行ぶんを書く。ends の1つでも決まらなければ終了予定は出さない
+// 注釈行を「項目名 値」の組で書く。単色の1行に「・」で連ねると、どこまでが
+// 値でどこからが別の話なのかが読み取れない(2026-08-08 ユーザー指摘)。
+// 中身が同じ間は作り直さない(残り時間は毎秒変わるので、毎回作ると無駄)
+function statLine(box, items) {
+  const key = JSON.stringify(items);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.textContent = '';
+  for (const [k, v] of items) {
+    if (v == null || v === '') continue;
+    const s = el('span', 'stat');
+    s.append(el('span', null, k), el('span', 'statv', v));
+    box.append(s);
+  }
+}
+
+// 開始時刻と終了予定の1行。ends の1つでも決まらなければ終了予定は出さない
 // (「終わりの分からない実行が混ざっている」ので、組の終わりも決まらない)
 function etaLine(box, startedSec, ends) {
-  if (!startedSec) {
-    if (box.textContent) { box.textContent = ''; box.title = ''; }
-    return;
-  }
-  let s = `開始 ${hhmmss(startedSec * 1000)}`;
+  if (!startedSec) { statLine(box, []); box.title = ''; return; }
+  const items = [['開始', hhmmss(startedSec * 1000)]];
   if (ends.length && ends.every(x => x != null)) {
     const end = Math.max(...ends);
-    s += ` ・ 終了予定 ${hhmmss(end)}(残り ${spanJa(end - Date.now())})`;
+    items.push(['終了予定',
+                `${hhmmss(end)} (残り ${spanJa(end - Date.now())})`]);
   }
-  if (box.textContent !== s) box.textContent = s;
+  statLine(box, items);
   box.title = ETA_TITLE;
 }
 
@@ -3805,11 +3857,9 @@ async function applyFormation(f) {
     lane.loops.value = String(fd.loops | 0);
     lane.pendingResume = fd.resume || '';
   }
-  // 呼び出したものは中身を開いて見せる(いまの運転がどれかを示す)。
-  // 開閉は一覧の作り直しの判定材料に入っていないので、ここで印を落とす
-  // (同じプリセットを呼び直したときは他に変化が無く、開かないままになる)
-  formOpen.set(f.name, true);
-  formsKey = '';
+  // 開閉には触らない。**ボタンを押すことと詳細の開閉は別の機能**で、
+  // 呼び出すたびに開くと、畳んでおきたい人の意思を毎回上書きしてしまう
+  // (2026-08-08 ユーザー指摘)。呼び出し中であることは行の強調で伝わる
   await api('/api/couple', 'POST', {on: !!f.linked,
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
@@ -3967,8 +4017,9 @@ async function saveFormation(asNew) {
   const r = await api('/api/formation_save', 'POST', {name, data});
   if (r.error) { show('cactmsg', 'err', r.error); return; }
   loadedFormation = name;
-  // 保存した中身をその場で見せる(呼び出し中の1件は開いておく、と同じ規則)
-  formOpen.set(name, true);
+  // 新しく現れた行だけ中身を見せる(まだ開閉を決めていないので)。既にある
+  // ものには触らない——押すたびに開くと、畳んでおく意思を毎回上書きする
+  if (!formOpen.has(name)) formOpen.set(name, true);
   const info = document.getElementById('cforminfo');
   info.textContent = '保存済み'; info.className = 'chip ok';
   info.style.display = '';
@@ -4167,15 +4218,16 @@ function renderCoupling() {
     .map(n => devs.find(x => x.name === n)).filter(Boolean);
   etaLine(document.getElementById('ceta'), active ? run.started_at : 0,
           rmem.map(runEndAt));
-  // ヒント(実測の開始ズレ+見えないホットキーの凡例だけに圧縮。原則 §5)。
-  // 「前回の」は付けない——実行中はいま走っている組のズレなので、いつの値かを
-  // 語ると却って迷う(2026-08-08 ユーザー指摘)
+  // 実測の開始ズレだけ(原則 §5)。「前回の」は付けない——実行中はいま走って
+  // いる組のズレなので、いつの値かを語ると却って迷う。ホットキーの凡例も
+  // 置かない——入切を決める ⚙ に書いてあり、使う人はそこで読む
+  // (値の位置に別の話が地続きで並ぶ形そのものが読みにくい。2026-08-08 指摘)
   const bits = [];
-  if (run.skew_ms != null) bits.push(`開始ズレ ${run.skew_ms}ms`
-    + `(${run.members ? run.members.join('→') : ''})`);
-  // 効かない設定の説明は置かない(入にした人にだけ凡例が要る)
-  if (hotkeys.on) bits.push(HOTKEY_LEGEND);
-  document.getElementById('chint').textContent = bits.join('・');
+  if (run.skew_ms != null) {
+    const who = (run.members || []).length ? ` (${run.members.join('→')})` : '';
+    bits.push(['開始ズレ', `${run.skew_ms}ms${who}`]);
+  }
+  statLine(document.getElementById('chint'), bits);
 }
 
 document.getElementById('clink').onclick = async () => {
