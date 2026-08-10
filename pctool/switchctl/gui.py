@@ -4185,8 +4185,6 @@ function renderCoupling() {
              + 'もう一方も止めました(連結して開始した組のため)');
     const row = el('div', 'row');
     row.style.marginTop = '7px';
-    const totals = (c.formations && run.formation
-                    && c.formations[run.formation] || {}).total_laps || {};
     const remainTxt = Object.entries(ls.remain || {})
       .filter(([, v]) => v > 0).map(([k, v]) => `${k} 残り${v}周`).join('・');
     // 再開の成功も押したそばで数秒だけ(選択肢の同時送出と同じ作法)
