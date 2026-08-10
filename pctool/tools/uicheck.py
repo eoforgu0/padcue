@@ -2859,7 +2859,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
 def run_coupling(c: Checker, page, proj: Project,
                  prompt_value: list, dialogs: list):
-    """連結バー(案C・P3/P4): まとめて開始・自動合流・連動停止・プリセット。"""
+    """上部バー(案C・P3/P4): まとめて開始・自動合流・連動停止・プリセット。"""
     print("[連結(2台をまとめて動かす)]", flush=True)
     c1 = MockDevice(speed=1.0, device_id="mockcp100000")
     c2 = MockDevice(speed=1.0, device_id="mockcp200000")
@@ -2917,26 +2917,36 @@ def run_coupling(c: Checker, page, proj: Project,
             timeout=timeout_ms)
 
     def t_cta_only_before_link():
-        assert page.locator("#couplecta").is_visible(), "連結の入口が無い"
-        assert not page.locator("#coupler").is_visible(), \
-            "連結していないのに連結バーが見えている"
+        # 上部バーは2台以上なら常にある。連結していないときに残るのは
+        # 「2台にまたがるもの」= 連結の入口とプリセットの保存だけで、
+        # 連結の語彙(まとめて開始・合流・両方停止・開始ズレ)は消えている
+        assert page.locator("#coupler").is_visible(), "上部バーが無い"
+        assert page.locator("#clink").is_visible(), "連結の入口が無い"
+        bar = page.locator("#coupler").inner_text()
+        assert "プリセットへ保存" in bar, \
+            "連結していないとプリセットへ保存できない(保存の導線が無い)"
+        for ng in ("両方を今の周で止める", "両方を今すぐ止める", "自動合流",
+                   "進む先", "次の合流は自分で選ぶ", "選択肢を両方へ同時に送る",
+                   "連結を外す", "開始ズレ"):
+            assert ng not in bar, f"連結していないのに「{ng}」が出ている"
         body = page.locator("#lanes").inner_text()
         assert "連結して開始" not in body, "連結の語彙がレーンに漏れている"
-    c.check("連結する前は入口だけがあり、連結の語彙は無い",
+    c.check("連結する前は、入口とプリセットの保存だけが残る(新設)",
             t_cta_only_before_link)
 
     def t_link_shows_bar():
         page.click("#clink")
         page.wait_for_function(
-            "() => document.querySelector('#coupler').style.display !== 'none'",
-            timeout=8000)
-        assert not page.locator("#couplecta").is_visible()
+            "() => document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+        assert not page.locator("#clink").is_visible(), \
+            "連結したのに入口ボタンが残っている"
         bar = page.locator("#coupler").inner_text()
         for want in ("1回実行", "周回実行", "プリセットへ保存",
                      "両方を今の周で止める", "両方を今すぐ止める",
                      "連結を外す", "自動合流", "進む先",
                      "次の合流は自分で選ぶ", "選択肢を両方へ同時に送る"):
-            assert want in bar, f"連結バーに「{want}」が無い"
+            assert want in bar, f"連結したのに「{want}」が上部バーに無い"
         assert "連結中" not in bar, \
             "バーは連結中にしか存在しない純粋な重複チップが残っている"
         assert "もう一回" not in bar, \
@@ -2958,19 +2968,25 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(250)
-    c.check("連結すると連結バーの一式が現れる", t_link_shows_bar)
+    c.check("連結すると上部バーに連結の語彙が一式現れる", t_link_shows_bar)
 
     def t_unlink_and_relink():
         page.click("#cunlink")
         page.wait_for_function(
-            "() => document.querySelector('#coupler').style.display === 'none'",
-            timeout=8000)
-        assert page.locator("#couplecta").is_visible(), "外したのに入口が戻らない"
+            "() => !document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+        assert page.locator("#clink").is_visible(), "外したのに入口が戻らない"
+        # 語彙は消えるが、またがるもの(プリセットの保存)は残り続ける
+        assert page.locator("#cformsave").is_visible(), \
+            "連結を外すとプリセットの保存まで消えてしまう"
+        assert not page.locator("#cstopi").is_visible(), \
+            "外したのに「両方を今すぐ止める」が残っている"
         page.click("#clink")
         page.wait_for_function(
-            "() => document.querySelector('#coupler').style.display !== 'none'",
-            timeout=8000)
-    c.check("連結を外すとバーごと消え、入口に戻る", t_unlink_and_relink)
+            "() => document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+    c.check("連結を外すと語彙だけが消え、入口とプリセットは残る",
+            t_unlink_and_relink)
 
     def t_together_refused_when_solo_busy():
         # 片方が単独実行中に F10(= ⟳ 周回実行 と同じ、まとめて開始)を押すと
@@ -3209,7 +3225,7 @@ def run_coupling(c: Checker, page, proj: Project,
         return row
 
     def t_formation_roundtrip():
-        # 保存の作法は連結バーに一本化(原則 §4)。未使用時は #cformsave が
+        # 保存の作法は上部バーに一本化(原則 §4)。未使用時は #cformsave が
         # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に化ける
         assert page.locator("#cformsaveas").is_hidden(), \
             "上書きする相手がいないのに「別名で保存」が出ている"
@@ -3280,7 +3296,7 @@ def run_coupling(c: Checker, page, proj: Project,
             " === '保存済み'", timeout=8000)
         assert lane(0).locator(".lloops").input_value() == "9", \
             "呼び出しても上書き保存した割り当てに戻らない"
-        # 改名(格納庫の行アイコン ✎)。連結バーの名前チップも追従する
+        # 改名(格納庫の行アイコン ✎)。上部バーの名前チップも追従する
         prompt_value[0] = "いつものB"
         row_icon(page, "#formlist", "いつもの", 0).click()
         page.wait_for_function(
@@ -3338,6 +3354,60 @@ def run_coupling(c: Checker, page, proj: Project,
         prompt_value[0] = "自動テスト"
     c.check("プリセット: 別名で保存すると元を残して新しく作れる(新設)",
             t_formation_save_as)
+
+    def t_solo_formation():
+        # 前提を確定させる: 連結のプリセットを呼び出している状態から始める
+        # (呼び出すと連結が戻ることも、ここで一緒に確かめる)
+        form_row("いつものB").locator("button", has_text="呼び出す").click()
+        page.wait_for_function(
+            "() => document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+        # 割り当ては連結していなくても編集する。保存の導線は連結の語彙では
+        # なく「2台にまたがるもの」なので、外しても上部バーに残り続ける
+        page.click("#cunlink")
+        page.wait_for_function(
+            "() => !document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+        assert page.locator("#cformsave").is_visible(), \
+            "連結を外すとプリセットへ保存できない"
+        # 連結の別も割り当ての一部なので、外した時点で食い違いが出る
+        page.wait_for_function(
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '未保存の変更'", timeout=8000)
+        lane(0).locator(".lloops").fill("4")
+        prompt_value[0] = "単独で回す"
+        page.click("#cformsaveas")   # 元(連結のプリセット)は残したまま作る
+        page.wait_for_function(
+            "() => document.querySelector('#formlist')"
+            ".textContent.includes('単独で回す')", timeout=8000)
+        row = form_row("単独で回す")
+        assert "単独" in row.inner_text(), \
+            "連結していないのに「連結」として保存されている"
+        # 合流は連結してはじめて起きるので、単独のプリセットには出さない
+        assert row.locator(".fjoin").count() == 0, \
+            "単独のプリセットに自動合流が出ている"
+        # 連結の別も割り当ての一部。連結すると食い違いがバッジに出る
+        page.click("#clink")
+        page.wait_for_function(
+            "() => document.querySelector('#cforminfo').textContent"
+            " === '未保存の変更'", timeout=8000)
+        # 呼び出すと、単独で保存したときの状態(連結していない)に戻る
+        form_row("単独で回す").locator("button", has_text="呼び出す").click()
+        page.wait_for_function(
+            "() => !document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+        assert lane(0).locator(".lloops").input_value() == "4", \
+            "単独のプリセットを呼び出しても割り当てが戻らない"
+        # 後片づけ(以後の検査は連結中が前提)
+        row_icon(page, "#formlist", "単独で回す", 1).click()
+        page.wait_for_timeout(600)
+        page.click("#clink")
+        page.wait_for_function(
+            "() => document.querySelector('#coupler').classList"
+            ".contains('linked')", timeout=8000)
+        prompt_value[0] = "自動テスト"
+    c.check("プリセット: 連結していなくても保存でき「単独」として残る(新設)",
+            t_solo_formation)
 
     def t_f10_starts_together():
         # F10 = 現在の盤面のままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)。

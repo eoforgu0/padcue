@@ -708,7 +708,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "name": name, "frames": r.total_frames,
                     "seconds": round(r.seconds, 1), "hash": r.hash,
                     "warnings": len(r.warnings), "pre": r.pre,
-                    # 最初の待機分岐の選択肢の名前(連結バーの「進む先」の表示用)
+                    # 最初の待機分岐の選択肢の名前(上部バーの「進む先」の表示用)
                     "arms": (r.wait_branch_arms[0]
                              if r.wait_branch_arms else []),
                     "hidden": name in hidden_set,
@@ -953,7 +953,7 @@ header { position:relative; }
 .setrow button { display:inline-flex; width:auto; align-items:center;
   border:1px solid var(--line); }
 /* ラベル語(接続先・選択肢を両方へ同時に送る、など)の基本の見た目。強調したい
-   文脈(連結バー)だけ .coupler .lbl で太字に上書きする */
+   文脈(連結中の上部バー)だけ .coupler .lbl で太字に上書きする */
 .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em; }
 .sep-v { width:1px; height:18px; background:var(--line); margin:0 4px; }
 .tabs { display:flex; gap:4px; }
@@ -1016,10 +1016,16 @@ header { position:relative; }
 .subh { font-size:11.5px; letter-spacing:.1em; color:var(--muted);
   font-weight:700; margin:12px 0 7px; padding-top:10px;
   border-top:1px solid var(--line); }
-/* 連結バー(連結中にだけ存在する)。左の帯で「まとめる場所」を示す */
+/* 連結中は左の帯で「まとめる場所」であることを示す(外すと帯ごと消える) */
 .coupler { border-left:4px solid var(--accent); }
 .coupler .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em;
   font-weight:700; }
+/* 上部バーは「2台にまたがること」だけを置く場所。連結の語彙(まとめて開始・
+   自動合流・両方停止・開始ズレ)は連結しているときだけ現れ、外すと消える。
+   プリセットは2台ぶんの割り当てに名前を付けたもの=またがるものなので、
+   連結の有無に関わらず残る(1台で閉じることはレーンの仕事) */
+#coupler:not(.linked) .linkonly { display:none; }
+#coupler.linked #clink { display:none; }
 .chip.link { color:var(--accent); border-color:var(--accent);
   font-weight:700; }
 /* 相方待ち(連結中の正常な待ち)は藍。黄色は「人の操作が要る」専用、
@@ -1508,8 +1514,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div id="consolemsg"></div>
     </div>
     <!-- プリセット = 盤面(連結・装置×手順×周回×開始位置・合流の選択肢)のスナップ
-         ショット。2台以上のときだけ出る。保存の作法は連結バー側に一本化
-         (原則 §4)。ここは一覧と改名・削除・呼び出しだけ(原則 §3) -->
+         ショット。2台以上のときだけ出る。保存の作法は上部バー側に一本化
+         (原則 §4。連結の有無に関わらずそこにある)。ここは一覧と改名・
+         削除・呼び出しだけ(原則 §3) -->
     <div class="card" id="formcard" style="display:none">
       <h2>プリセット</h2>
       <div id="formlist"></div>
@@ -1517,13 +1524,19 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     </div>
   </div>
   <div class="stack v-home">
-    <!-- 連結バー: 2台をまとめる唯一の場所。連結中にだけ存在し、外すと
-         語彙ごと消える(案C の中核。モードや状態を覚えさせない)。
-         プリセットの保存作法も、割り当てを編集する場所であるここに一本化する
-         (原則 §4: 編集エディタ・部品エディタと同型) -->
-    <div class="card coupler" id="coupler" style="display:none">
+    <!-- 上部バー: 「2台にまたがること」だけを置く唯一の場所(原則 §2)。
+         1台で閉じること(手順・周回・開始と終了予定・停止)はレーンが持つ。
+         連結すると連結の語彙(まとめて開始・自動合流・両方停止・開始ズレ)が
+         ここに現れ、外すと語彙ごと消える(案C の中核。モードを覚えさせない)。
+         プリセット=2台ぶんの割り当てに名前を付けたもの、すなわち「またがる
+         もの」なので、連結の有無に関わらずここに残る(原則 §4: 割り当てを
+         編集する場所のそばで保存する) -->
+    <div class="card" id="coupler" style="display:none">
       <div class="row">
-        <span class="lbl">⧉ 連結</span>
+        <!-- 連結の入口。連結すると同じ位置に「⧉ 連結」の名乗りが入れ替わる -->
+        <button id="clink"
+                title="まとめて開始・自動合流・連動停止・選択肢を両方へ同時に送る、は連結したときにだけ現れます">⧉ 連結する</button>
+        <span class="lbl linkonly">⧉ 連結</span>
         <span class="chip" id="cformation" style="display:none"
               title="呼び出したプリセットの名前"></span>
         <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
@@ -1534,21 +1547,21 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <button class="small" id="cformsaveas" style="display:none"
                 title="いまの割り当てを、別の名前の新しいプリセットとして保存します">
           別名で保存…</button>
-        <span class="sep-v"></span>
-        <button class="primary" id="crun1"
+        <span class="sep-v linkonly"></span>
+        <button class="primary linkonly" id="crun1"
                 title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
-        <button class="primary" id="crun"
+        <button class="primary linkonly" id="crun"
                 title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
-        <span class="sep-v"></span>
-        <button id="cstopg"
+        <span class="sep-v linkonly"></span>
+        <button class="linkonly" id="cstopg"
                 title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
-        <button class="danger" id="cstopi"
+        <button class="danger linkonly" id="cstopi"
                 title="どちらも、その場で全ボタンを離して止まります">⏹ 両方を今すぐ止める</button>
-        <span class="sep-v"></span>
-        <button class="small" id="cunlink"
+        <span class="sep-v linkonly"></span>
+        <button class="small linkonly" id="cunlink"
                 title="連結を外しても、いま走っている組の連動は変わりません(連動は開始のされ方で決まります)。次の開始から独立になります">連結を外す</button>
       </div>
-      <div class="row" style="margin-top:7px">
+      <div class="row linkonly" style="margin-top:7px">
         <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0"
                title="両方が待機分岐に着いたら、右の選択肢を自動で選んで同時に進めます。片方の異常(装置の異常報告・約5秒見えない)では相方も止めます">
           <input type="checkbox" id="cauto">自動合流</label>
@@ -1564,21 +1577,17 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <span id="cokmsg" class="okflash"></span>
       </div>
       <!-- cmsg = 連動停止の理由と再開、ワンショットの案内(状態から毎秒作る) -->
-      <div id="cmsg"></div>
-      <!-- cactmsg = 連結バーの操作の結果のうち、残すもの(失敗・警告)。
-           成功はボタンのそばに出して数秒で自ら消える(cokmsg) -->
+      <div id="cmsg" class="linkonly"></div>
+      <!-- cactmsg = このバーの操作の結果のうち、残すもの(失敗・警告)。
+           成功はボタンのそばに出して数秒で自ら消える(cokmsg)。連結して
+           いなくてもプリセットの保存に失敗すればここに出るので、消さない -->
       <div id="cactmsg"></div>
       <!-- 組の開始時刻と終了予定(終わりが決まるときだけ)。開始ズレの上に、
-           同じ注釈行の作法で置く -->
-      <div class="hint" id="ceta"></div>
-      <div class="hint" id="chint"></div>
-    </div>
-    <!-- 連結していないとき(2台以上)は、これだけが残る -->
-    <div class="card" id="couplecta" style="display:none">
-      <div class="row">
-        <button id="clink"
-                title="まとめて開始・自動合流・連動停止・選択肢を両方へ同時に送る、は連結したときにだけ現れます">⧉ 連結する</button>
-      </div>
+           同じ注釈行の作法で置く。どちらも「組」があって初めて成り立つ値
+           なので、連結していないときは出さない(各装置の開始と終了予定は
+           レーンが自分で出す) -->
+      <div class="hint linkonly" id="ceta"></div>
+      <div class="hint linkonly" id="chint"></div>
     </div>
     <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
          実機が動く事故を防ぐ(2台化で生まれた組み合わせ) -->
@@ -3253,7 +3262,7 @@ function buildLane(d) {
   lane.stopi = el('button', 'danger', '⏹ 今すぐ止める');
   row2.append(lane.run1, lane.run, el('span', 'sep-v'), lane.stopg, lane.stopi);
   card.append(row2);
-  // 開始時刻と終了予定(単独で実行しているときだけ。連結した組は連結バーが
+  // 開始時刻と終了予定(単独で実行しているときだけ。連結した組は上部バーが
   // 組全体で出すので、同じことを2か所に置かない)
   lane.eta = el('div', 'hint');
   card.append(lane.eta);
@@ -3522,7 +3531,7 @@ function updateLane(lane, d) {
   } else {
     lane.badge.style.display = 'none';
   }
-  // 開始・終了予定は、連結して開始した組では連結バーが組全体で出す
+  // 開始・終了予定は、連結して開始した組では上部バーが組全体で出す
   etaLine(lane.eta, (!inRun && (running || awaiting)) ? d.run_started_at : 0,
           [runEndAt(d)]);
   // 待機分岐の表示。三態色(計画 §2b): 青=相方待ち(自動で進む予定)/
@@ -3562,7 +3571,7 @@ function updateLane(lane, d) {
         }
         // 順調なときは何も出さない(チップ「相方待ち」で足りる。原則 §5)
       } else if (inRun) {
-        // 連結中だが自動合流オフ(本人が手動にした)。連結バーの
+        // 連結中だが自動合流オフ(本人が手動にした)。上部バーの
         // 「選択肢を両方へ同時に送る」が見えているので導線文は出さない
       } else {
         lane.awaitbox.append(armRow(d, lane.name, lane.awaitbox));
@@ -3577,7 +3586,7 @@ function updateLane(lane, d) {
                    el('div', 'hint',
                       `連結中に ${lane.name} だけ進めると、次の合流の相手が`
                       + '1周ずれます。意図してずらす検証のとき以外は、待つか、'
-                      + '連結バーの「選択肢を両方へ同時に送る」を使ってください'),
+                      + '上部バーの「選択肢を両方へ同時に送る」を使ってください'),
                    armRow(d, lane.name, lane.awaitbox));
         lane.awaitbox.append(det);
       }
@@ -3611,8 +3620,8 @@ function renderLanes() {
   const devs = state.devices || [];
   const multi = devs.length >= 2;
   syncTargetSelects(devs, multi);
-  // 連結バー・CTA・編成カードの出し引きは装置数に関わらずここで行う
-  // (2台→1台に減ったとき、レーンだけ消えて連結バーが残らないように)
+  // 上部バー・プリセットカードの出し引きは装置数に関わらずここで行う
+  // (2台→1台に減ったとき、レーンだけ消えてバーが残らないように)
   renderCoupling();
   // 練習(模擬)と実機の混在は、押し間違いで実機が動く。目立つ注意を常設
   const mocks = devs.filter(d => d.host === '127.0.0.1'
@@ -3702,8 +3711,9 @@ function manualTarget() {
     ? document.getElementById('manualdev').value : '';
 }
 
-// ============ 連結バー(2台をまとめる唯一の場所。案C+D6〜D8) ============
-// 連動の実体はサーバ(coupler.py)。ここは盤面の写像と操作の入口だけ
+// ============ 上部バー(2台にまたがることだけの場所。案C+D6〜D8) ============
+// 連結はそのうちの一つ(2台をまとめる唯一の入口)。連動の実体はサーバ
+// (coupler.py)で、ここは盤面の写像と操作の入口だけ
 
 let loadedFormation = '';    // 呼び出した編成の名前('' = 未使用)
 let cplStopSeen = 0;         // 連動停止の知らせを × で閉じた時刻(at)
@@ -3864,8 +3874,8 @@ async function applyFormation(f) {
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
   loadedFormation = f.name;
-  // 成功は文で言わない(原則 §3・§5)。運転席が連結バーへ切り替わり、
-  // 名前チップ(cformation)が出ること自体で「反映した」が伝わる
+  // 成功は文で言わない(原則 §3・§5)。上部バーに名前チップ(cformation)が
+  // 出て、レーンの割り当てが入れ替わること自体で「反映した」が伝わる
   show('formmsg', '', '');
   refresh();
 }
@@ -4029,31 +4039,31 @@ async function saveFormation(asNew) {
 document.getElementById('cformsave').onclick = () => saveFormation(false);
 document.getElementById('cformsaveas').onclick = () => saveFormation(true);
 
-// 連結バーと CTA の毎秒更新
+// 上部バーの毎秒更新。バーは2台以上なら常にあり、連結の語彙だけが出入りする
+// (連結していないときに残るのは、2台にまたがる唯一のもの=プリセット)
 function renderCoupling() {
   const devs = state.devices || [];
   const multi = devs.length >= 2;
   const c = multi ? cpl() : null;
   document.getElementById('formcard').style.display = multi ? '' : 'none';
   const bar = document.getElementById('coupler');
-  const cta = document.getElementById('couplecta');
   if (!c) {
     bar.style.display = 'none';
-    cta.style.display = 'none';
     return;
   }
   renderFormations();
   const names = devs.slice(0, 2).map(d => d.name);
   const pair = `(${names.join('+')})`;
-  cta.style.display = c.on ? 'none' : '';
-  bar.style.display = c.on ? '' : 'none';
+  bar.style.display = '';
+  // 連結の語彙の出入りは CSS の一手に任せる(.linked の有無だけで決まる)。
+  // 帯(.coupler)も同時に付け外しして、連結中であることを枠の形でも示す
+  const cls = 'card' + (c.on ? ' coupler linked' : '');
+  if (bar.className !== cls) bar.className = cls;
   document.getElementById('clink').textContent =
     `⧉ ${names.join(' と ')} を連結する`;
-  if (!c.on) return;
-  const run = c.run || {};
-  const active = !!run.active;
   // プリセット名チップ+保存状態バッジ(手順エディタ・部品エディタと同型。
-  // 原則 §4)。未使用時はどちらも出さない(保存済み/未保存の概念が無い)
+  // 原則 §4)。未使用時はどちらも出さない(保存済み/未保存の概念が無い)。
+  // 連結していなくても割り当ては編集するので、ここは連結の外に置く
   const fchip = document.getElementById('cformation');
   const finfo = document.getElementById('cforminfo');
   const fsave = document.getElementById('cformsave');
@@ -4075,11 +4085,28 @@ function renderCoupling() {
     if (fsave.textContent !== 'プリセットへ保存') {
       fsave.textContent = 'プリセットへ保存';
     }
-    fsave.title = 'いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)に'
-                 + '名前を付けて保存します';
+    // 何が保存されるかは、いま連結しているかで実際に変わる(単独で保存した
+    // プリセットは呼び出しても連結しない)。名乗りもそれに合わせる
+    fsave.title = c.on
+      ? 'いまの割り当て(連結・手順・周回・開始ラベル・合流の選択肢)に'
+        + '名前を付けて保存します'
+      : 'いまの割り当て(単独・手順・周回・開始ラベル)に名前を付けて'
+        + '保存します。呼び出しても連結しません';
     // 上書きする相手がいないので「別名で」は「保存」と同じ意味になる
     fsaveas.style.display = 'none';
   }
+  if (!c.on) {
+    // 連結の語彙は CSS が畳むが、中身も消しておく(次に連結したとき、前の
+    // 組の開始ズレや連動停止の知らせが一瞬だけ蘇るのを防ぐ)
+    statLine(document.getElementById('ceta'), []);
+    statLine(document.getElementById('chint'), []);
+    const box = document.getElementById('cmsg');
+    box.dataset.key = '';
+    box.textContent = '';
+    return;
+  }
+  const run = c.run || {};
+  const active = !!run.active;
   // 実行系ボタン
   const someBusy = devs.slice(0, 2).some(d => !d.error
     && (d.running || d.awaiting));
