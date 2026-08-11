@@ -143,7 +143,7 @@ class DeviceClient:
     def put(self, name: str, data: bytes, chunk: int = 4096) -> str:
         """手順データを RAM へ転送し、デバイスが返したハッシュを検証して返す。
 
-        分割して送る。1フレームに全部載せると実機側に 64KB の緩衝が要り、
+        分割して送る。1パケットに全部載せると実機側に 64KB の緩衝が要り、
         内蔵 RAM に収まらないため(comm-protocol.md の PUT を参照)。
         """
         if not data:

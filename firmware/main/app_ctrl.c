@@ -45,18 +45,18 @@ static const char *TAG = "ctrl";
 #define T_RESP 0x80
 #define T_ERROR 0xFF
 
-// フレーム緩衝の大きさ。以前は理論上の最大(65535)を送受で2本取っていたが、
+// パケット緩衝の大きさ。以前は理論上の最大(65535)を送受で2本取っていたが、
 // 手順バッファ 96KB と合わせて約 229KB になり、WiFi/USB を足すと内蔵 RAM
 // (約 320KB)に収まらず malloc が失敗して起動できなかった(2026-07-30 実機)。
-// 大きな転送(手順の PUT・OTA)はすべて分割して送るので、1フレームは小さくてよい。
+// 大きな転送(手順の PUT・OTA)はすべて分割して送るので、1パケットは小さくてよい。
 // 8KB = 転送チャンク 4KB + JSON + 余裕
 #define MAX_FRAME 8192
-// 1応答に載せるログの最大件数(応答がフレームに収まらなくなるのを防ぐ)。
+// 1応答に載せるログの最大件数(応答がパケットに収まらなくなるのを防ぐ)。
 // 残りは次回の取得で返る
 #define MAX_LOG_ENTRIES_PER_RESP 48
 
-static uint8_t *s_rx;      // 受信フレーム組み立て用
-static uint8_t *s_tx;      // 送信フレーム組み立て用
+static uint8_t *s_rx;      // 受信パケット組み立て用
+static uint8_t *s_tx;      // 送信パケット組み立て用
 
 // ---- CRC32(zlib 互換)----
 static uint32_t crc32z(const uint8_t *p, size_t n, uint32_t crc) {
@@ -80,7 +80,8 @@ static int send_all(int sock, const uint8_t *p, size_t n) {
     return 0;
 }
 
-// JSON + blob を1フレームにして送る
+// JSON + blob を1パケットにして送る(関数名の frame は通信の枠の意。
+// ゲームの1描画周期を指す「フレーム」とは別物)
 static int send_frame(int sock, uint8_t type, cJSON *json, const uint8_t *blob,
                       size_t blob_len) {
     char *js = json ? cJSON_PrintUnformatted(json) : NULL;
@@ -186,7 +187,7 @@ static int cmd_hello(int sock) {
     return r;
 }
 
-// 手順の転送は分割して受ける。1フレームに全部載せると 64KB の緩衝が要り、
+// 手順の転送は分割して受ける。1パケットに全部載せると 64KB の緩衝が要り、
 // 内蔵 RAM に収まらない。受け取ったそばから手順バッファへ直接書き、
 // 最後の断片で確定する(total と一致した時点で完了)
 static int cmd_put(int sock, cJSON *req, const uint8_t *blob, size_t blob_len) {
@@ -711,7 +712,7 @@ static void handle_client(int sock) {
                      | ((uint32_t)s_rx[body_len + 2] << 16)
                      | ((uint32_t)s_rx[body_len + 3] << 24);
         if (crc32z(s_rx, body_len, 0) != crc) {
-            send_error(sock, "CRC", "フレームが破損しています");
+            send_error(sock, "CRC", "パケットが破損しています");
             return;
         }
         uint8_t type = s_rx[0];
@@ -806,7 +807,7 @@ esp_err_t app_ctrl_start(void) {
     s_rx = malloc(MAX_FRAME + 8);
     s_tx = malloc(MAX_FRAME + 8);
     if (!s_rx || !s_tx) {
-        ESP_LOGE(TAG, "フレーム緩衝 %d バイト×2 を確保できません(空き %u)",
+        ESP_LOGE(TAG, "パケット緩衝 %d バイト×2 を確保できません(空き %u)",
                  MAX_FRAME + 8, (unsigned)esp_get_free_heap_size());
         free(s_rx); free(s_tx); s_rx = NULL; s_tx = NULL;
         return ESP_ERR_NO_MEM;

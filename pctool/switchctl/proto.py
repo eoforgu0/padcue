@@ -53,12 +53,12 @@ def pack(msg: Message) -> bytes:
     payload = struct.pack("<H", len(js)) + js + msg.blob
     body = struct.pack("<B", msg.type) + payload
     if len(body) > _MAX_LEN:
-        raise ProtoError(f"フレームが大きすぎます: {len(body)}B")
+        raise ProtoError(f"パケットが大きすぎます: {len(body)}B")
     return struct.pack("<H", len(body)) + body + struct.pack("<I", zlib.crc32(body))
 
 
 def unpack_from(buf: bytes) -> tuple[Message, int] | None:
-    """buf 先頭から 1 フレームを取り出す。不完全なら None。
+    """buf 先頭から 1 パケットを取り出す。不完全なら None。
 
     返り値: (Message, 消費バイト数)
     """
@@ -73,11 +73,11 @@ def unpack_from(buf: bytes) -> tuple[Message, int] | None:
     if zlib.crc32(body) != crc:
         raise ProtoError("CRC 不一致")
     if body_len < 3:
-        raise ProtoError("フレームが短すぎます")
+        raise ProtoError("パケットが短すぎます")
     mtype = body[0]
     (js_len,) = struct.unpack_from("<H", body, 1)
     if 3 + js_len > body_len:
-        raise ProtoError("JSON 長がフレームを超えています")
+        raise ProtoError("JSON 長がパケットを超えています")
     try:
         obj = json.loads(body[3:3 + js_len].decode("utf-8")) if js_len else {}
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
