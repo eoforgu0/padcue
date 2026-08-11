@@ -836,6 +836,13 @@ PAGE = r"""<!doctype html>
      分類 2    部品・くり返し(手順ブロックの帯と枠)
      塗りの上 1  塗った面に載せる文字
 
+   **分類の色は意味の色より控えめにする**(彩度 18 前後)。くり返し・
+   分岐の枠は当初 41.7 あり、注意(52.7)に匹敵する目立ち方だった——
+   入れ子であることは枠の形と見出しの文字が既に言っているので、平常の
+   構造表示にその水準の色は要らない(2026-08-12 ユーザー指摘)。細い線は
+   色みが立ちにくいので下げすぎると灰に見えるが、そこは許容した——
+   ティール等へ色相を変える案も撮って比べたうえで、黄緑を残す判断
+
    **意味の色は6配色すべて同じ値**にする。系統が変えてよいのは中立・強調・
    分類だけ。以前は6配色それぞれに意味の色を手書きしていたため、琥珀ライトで
    「注意」と「強調」が色差 1.6 まで接近していた(10 未満は並べても判別が
@@ -863,7 +870,7 @@ PAGE = r"""<!doctype html>
   --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
   --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
   --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
-  --cat-part:#914b88; --cat-loop:#627127;
+  --cat-part:#914b88; --cat-loop:#666c4e;
   /* 塗りつぶした面(primary ボタン・ON セル)に載せる文字。6配色で共通 */
   --on-fill:#f8fafd;
 }
@@ -874,7 +881,7 @@ PAGE = r"""<!doctype html>
   --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
   --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
   --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
-  --cat-part:#c387ba; --cat-loop:#9fb168;
+  --cat-part:#c387ba; --cat-loop:#a4ac8e;
   --on-fill:#f8fafd;
 }
 [data-theme="sumi-light"] {
@@ -914,7 +921,7 @@ PAGE = r"""<!doctype html>
   --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
   --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
   --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
-  --cat-part:#914b88; --cat-loop:#627127;
+  --cat-part:#914b88; --cat-loop:#666c4e;
   --on-fill:#f8fafd;
 }
 [data-theme="kohaku-dark"] {
@@ -925,7 +932,7 @@ PAGE = r"""<!doctype html>
   --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
   --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
   --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
-  --cat-part:#c387ba; --cat-loop:#9fb168;
+  --cat-part:#c387ba; --cat-loop:#a4ac8e;
   --on-fill:#f8fafd;
 }
 * { box-sizing:border-box; }
