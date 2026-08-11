@@ -827,6 +827,22 @@ PAGE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>padctl</title>
 <style>
+/* ===== 文字の大きさ =====
+   役目ごとに1つ。以前は 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 14 / 15px の
+   9値が散っていて、階層が読み取れなかった(同じ役目に 0.5px 違いの2値が
+   当たっている状態。0.5px は見て分からないので、差を持つ意味がない)。
+   **値が同じでも役目が違えば別のトークンで持つ**——「見出し」と「記号」は
+   たまたま同じ 15px だが、片方を動かすときにもう片方まで動いては困る */
+:root {
+  --fs-tight:10px;   /* 狭い場所に収める: ON セル・バッジ・目盛り・列見出し */
+  --fs-sub:11px;     /* 補足・注釈: hint・ID・単位・チップ */
+  --fs-body:12px;    /* 本文とラベル、小さめの操作(button.small・折り畳み) */
+  --fs-name:13px;    /* 名前と小見出し: レーンの見出し・一覧の名前 */
+  --fs-title:15px;   /* 見出し: アプリ名 */
+  --fs-glyph:15px;   /* 単独の記号(⚙ ×)。読む文字ではなく押す的なので、
+                        見出しと同じ値でも別に持つ */
+  --fs-field:14px;   /* 打つ欄(input/select)。body から継承させる起点 */
+}
 /* ===== 配色 =====
    3系統 × ライト/ダーク。色を5つの役目に分ける(原則 §5):
 
@@ -940,13 +956,13 @@ PAGE = r"""<!doctype html>
    スクロールさせると、縦スクロールバーがヘッダーの高さまで貫通する
    (2026-08-04 ユーザー指摘。一般的なヘッダ+本文のアプリと同じ構造に) */
 html, body { height:100%; }
-body { margin:0; background:var(--bg); color:var(--ink); font-size:14px;
+body { margin:0; background:var(--bg); color:var(--ink); font-size:var(--fs-field);
   font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",Meiryo,sans-serif;
   overflow:hidden; display:flex; flex-direction:column; }
 header { display:flex; align-items:center; gap:10px; padding:9px 18px;
   border-bottom:1px solid var(--line); background:var(--surface); flex-wrap:wrap;
   flex:none; }
-header h1 { font-size:15px; margin:0; letter-spacing:.02em; }
+header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 header .spacer { margin-left:auto; }
 /* 装置の状態と接続先は同じことなので1つの枠にまとめる。
    状態だけ左端に離れていると、何の状態なのか・どこで直すのかが分からない */
@@ -959,7 +975,7 @@ header { position:relative; }
   border-color:var(--ok); }
 .iconbtn { border:1px solid var(--line); background:var(--surface);
   color:var(--ink); border-radius:8px; width:30px; height:28px;
-  cursor:pointer; font-size:15px; line-height:1; padding:0;
+  cursor:pointer; font-size:var(--fs-glyph); line-height:1; padding:0;
   display:inline-flex; align-items:center; justify-content:center; }
 .iconbtn:hover { border-color:var(--accent); color:var(--accent); }
 .menu { position:absolute; right:0; top:34px; z-index:30; min-width:210px;
@@ -967,37 +983,37 @@ header { position:relative; }
   padding:4px; box-shadow:0 6px 20px rgba(0,0,0,.18); }
 .menu button { display:block; width:100%; text-align:left; border:0;
   background:transparent; color:var(--ink); padding:6px 9px; cursor:pointer;
-  border-radius:6px; font-size:12.5px; }
+  border-radius:6px; font-size:var(--fs-body); }
 .menu button:hover { background:var(--accent-soft); color:var(--accent); }
 .menu button.on { font-weight:700; color:var(--accent); }
 .menu button.on::before { content:'✓ '; }
 .menu.setpanel { min-width:436px; }
-.setsec { font-size:11px; color:var(--muted); letter-spacing:.06em;
+.setsec { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em;
   padding:5px 9px 3px; }
 /* 通知の設定: 行=場面、列=知らせ方。列見出しを「音」「タブ名を点滅」だけに
    すると、どの欄が何の設定なのかを行ごとに読み直さずに済む */
 /* 列はすべて中身の幅(max-content)。1列目を 1fr にすると、狭いパネルでは
    場面名が1文字ずつ縦に折り返す */
-.ngrid { display:grid; padding:2px 9px 7px; font-size:12.5px;
+.ngrid { display:grid; padding:2px 9px 7px; font-size:var(--fs-body);
   grid-template-columns:repeat(6, max-content);
   column-gap:8px; row-gap:6px; align-items:center; }
-.ngrid .nghead { color:var(--muted); font-size:11px; }
+.ngrid .nghead { color:var(--muted); font-size:var(--fs-sub); }
 .ngrid .nghead.snd { grid-column:2 / 6; }
 .ngrid .ngtab, .ngrid .nghead:last-child { justify-self:center; }
 .ngrid .nglab { display:flex; align-items:center; gap:7px; cursor:pointer;
   white-space:nowrap; }
-.ngrid select { font-size:12px; padding:2px 5px; }
+.ngrid select { font-size:var(--fs-body); padding:2px 5px; }
 .ngrid input[type=range] { width:74px; }
 .ngrid button { padding:1px 7px; }
 .ngrid select:disabled, .ngrid input:disabled, .ngrid button:disabled {
   opacity:.4; }
 /* 設定の中の補足(どのキーが何をするか)。名前では言い切れないぶんだけ */
-.sethint { padding:0 9px 7px; font-size:11px; color:var(--muted);
+.sethint { padding:0 9px 7px; font-size:var(--fs-sub); color:var(--muted);
   line-height:1.65; }
 .setsec.line { border-top:1px solid var(--line); margin-top:5px;
   padding-top:8px; }
 .setrow { padding:3px 9px 5px; display:flex; flex-wrap:wrap; gap:9px;
-  align-items:center; font-size:12.5px; }
+  align-items:center; font-size:var(--fs-body); }
 .setrow label { display:flex; align-items:center; gap:5px; cursor:pointer; }
 .setrow input[type=range] { width:92px; }
 /* .menu button の全幅指定を、行の中のボタンには効かせない */
@@ -1005,11 +1021,11 @@ header { position:relative; }
   border:1px solid var(--line); }
 /* ラベル語(接続先・選択肢を両方へ同時に送る、など)の基本の見た目。強調したい
    文脈(連結中の上部バー)だけ .coupler .lbl で太字に上書きする */
-.lbl { font-size:11px; color:var(--muted); letter-spacing:.06em; }
+.lbl { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em; }
 .sep-v { width:1px; height:18px; background:var(--line); margin:0 4px; }
 .tabs { display:flex; gap:4px; }
 .tab { border:1px solid var(--line); border-radius:7px; padding:3px 14px;
-  cursor:pointer; font-size:12.5px; }
+  cursor:pointer; font-size:var(--fs-body); }
 .tab.on { background:var(--accent-soft); color:var(--accent); font-weight:700;
   border-color:transparent; }
 /* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常専用。
@@ -1028,7 +1044,7 @@ header { position:relative; }
 .devrow.foldable { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
 .devrow.foldable .meta { grid-column:3 / -1; }
 .devtoggle { border:0; background:transparent; cursor:pointer;
-  color:var(--muted); padding:0; width:16px; font-size:12px; text-align:center; }
+  color:var(--muted); padding:0; width:16px; font-size:var(--fs-body); text-align:center; }
 .devdetail { grid-column:1 / -1; display:none; margin-top:8px; padding-top:8px;
   border-top:1px solid var(--line); }
 .devrow.open .devdetail { display:flex; flex-direction:column; gap:8px; }
@@ -1042,13 +1058,13 @@ header { position:relative; }
 .devrow.foldable.formrow .fact,
 .devrow.foldable.formrow .devdetail { grid-column:2 / -1; }
 /* 連結の別は名前の前に(「何の組か」を先に読む)。名前より控えめに */
-.fkind { color:var(--muted); font-size:11px; white-space:nowrap; flex:none; }
-.fjoin { color:var(--muted); font-size:11.5px; }
+.fkind { color:var(--muted); font-size:var(--fs-sub); white-space:nowrap; flex:none; }
+.fjoin { color:var(--muted); font-size:var(--fs-sub); }
 .fdevs { display:flex; flex-direction:column; gap:3px; }
 /* 装置 / 手順 / 開始ラベル / 周回。周回は右端で桁を揃え、1P と 2P の値を
    目で突き合わせられるようにする(手順一覧の所要フレーム数と同じ作法) */
 .fdev { display:grid; grid-template-columns:auto minmax(0, 1fr) auto auto;
-  column-gap:6px; align-items:baseline; font-size:11.5px; }
+  column-gap:6px; align-items:baseline; font-size:var(--fs-sub); }
 .fdevname { color:var(--muted); }
 .fproc { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .fresume { color:var(--muted); white-space:nowrap; }
@@ -1062,7 +1078,7 @@ header { position:relative; }
    落ちる(minmax の下限) */
 .lanes { display:grid; grid-template-columns:repeat(auto-fit, minmax(430px, 1fr));
   gap:14px; align-items:start; }
-.lane h2 { display:flex; align-items:center; gap:7px; font-size:13px;
+.lane h2 { display:flex; align-items:center; gap:7px; font-size:var(--fs-name);
   color:var(--ink); letter-spacing:normal; }
 .lane h2 .tlprog { margin-left:auto; }
 /* 人の操作を待っている・異常で止まっているレーンは、外周のリングで名乗る。
@@ -1074,12 +1090,12 @@ header { position:relative; }
 .lane.needs { box-shadow:0 0 0 3px var(--warn); }
 .lane.faulted { box-shadow:0 0 0 3px var(--err); }
 /* レーン内の小見出し(1台時のカード見出しに相当) */
-.subh { font-size:11.5px; letter-spacing:.1em; color:var(--muted);
+.subh { font-size:var(--fs-sub); letter-spacing:.1em; color:var(--muted);
   font-weight:700; margin:12px 0 7px; padding-top:10px;
   border-top:1px solid var(--line); }
 /* 連結中は左の帯で「まとめる場所」であることを示す(外すと帯ごと消える) */
 .coupler { border-left:4px solid var(--accent); }
-.coupler .lbl { font-size:11px; color:var(--muted); letter-spacing:.06em;
+.coupler .lbl { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em;
   font-weight:700; }
 /* 上部バーは「2台にまたがること」だけを置く場所。連結の語彙(まとめて開始・
    自動合流・両方停止・開始ズレ)は連結しているときだけ現れ、外すと消える。
@@ -1093,10 +1109,10 @@ header { position:relative; }
    赤は装置の異常専用(計画 §2b の三態色) */
 .chip.wait { color:var(--accent); border-color:var(--accent); }
 .msg.wait { background:var(--accent-soft); color:var(--accent); }
-.lane h2 .runchip { font-size:10.5px; padding:1px 8px; }
+.lane h2 .runchip { font-size:var(--fs-tight); padding:1px 8px; }
 /* 連結中のレーン単独 SELECT は畳んでおく(合流の対応がずれる操作なので、
    ワンクリックでは押させない) */
-details.soloadv summary { cursor:pointer; font-size:12px;
+details.soloadv summary { cursor:pointer; font-size:var(--fs-body);
   color:var(--muted); }
 details.soloadv { margin-top:6px; }
 main { display:grid; gap:14px; padding:14px; align-items:start;
@@ -1122,7 +1138,7 @@ main > .card { min-width:0; }
   padding:6px 0 8px; margin-bottom:6px;
   border-bottom:1px solid var(--line); }
 .ebar .row { margin:0; }
-.card h2 { font-size:11.5px; letter-spacing:.1em; color:var(--muted);
+.card h2 { font-size:var(--fs-sub); letter-spacing:.1em; color:var(--muted);
   margin:0 0 9px; font-weight:700; }
 .stack { display:flex; flex-direction:column; gap:14px; }
 /* 行全体は「押せるもの」ではない(掴む・選ぶ・アイコンで操作、が同居する)。
@@ -1134,25 +1150,25 @@ main > .card { min-width:0; }
 .proc.sel { border-color:var(--accent); background:var(--accent-soft); }
 .proc { display:grid; grid-template-columns:14px 1fr auto;
   column-gap:6px; align-items:center; }
-.proc b { font-size:13px; }
-.proc .meta { grid-column:2 / -1; color:var(--muted); font-size:11.5px;
+.proc b { font-size:var(--fs-name); }
+.proc .meta { grid-column:2 / -1; color:var(--muted); font-size:var(--fs-sub);
   margin-top:2px; }
 /* 手順名と、その右に置く所要フレーム数。桁を揃えて(tabular-nums)縦に並べ、
    1P と 2P の長さを目で突き合わせられるようにする(2台運用で「相方と同じ
    時間だけ待つ」を手順に書くため)。名前が長いときは名前側を詰める */
 .pname { display:flex; align-items:baseline; gap:8px; min-width:0; }
 .pname b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.pname .fr { margin-left:auto; color:var(--muted); font-size:11px;
+.pname .fr { margin-left:auto; color:var(--muted); font-size:var(--fs-sub);
   font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer; }
 /* 所要フレーム数の席に出る「変換できない」の印。同じ席なので行は動かない */
 .pname .fr.err { color:var(--err); font-weight:700; }
 /* 行の名前に付く ID。名前のすぐ右に薄く小さく置く(下段へ落とすと、装置の
    ID なのか Switch 本体の ID なのかが読み取れない。2026-08-08 ユーザー指摘) */
-.rowid { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
+.rowid { color:var(--muted); font-size:var(--fs-sub); font-variant-numeric:tabular-nums;
   white-space:nowrap; }
 /* 並べ替えのつまみ。行クリック(選択)と衝突しないよう専用の持ち手にする */
 .grab { color:var(--muted); opacity:.35; cursor:grab; user-select:none;
-  font-size:11px; touch-action:none; }
+  font-size:var(--fs-sub); touch-action:none; }
 .proc:hover .grab { opacity:.9; }
 .proc.dragging { opacity:.35; }
 .drop-line { height:3px; border-radius:2px; background:var(--accent);
@@ -1176,7 +1192,7 @@ main > .card { min-width:0; }
    .proc の見た目を借りつつ、開閉の三角ぶんだけ列を1つ増やす */
 .folder-row { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
 .foldertoggle { border:0; background:transparent; cursor:pointer;
-  color:var(--muted); padding:0; width:16px; font-size:12px;
+  color:var(--muted); padding:0; width:16px; font-size:var(--fs-body);
   text-align:center; }
 .folder-row b { font-weight:700; }
 .foldericon { color:var(--muted); display:inline-flex; margin-right:5px; }
@@ -1186,7 +1202,7 @@ main > .card { min-width:0; }
    中」と「フォルダの外の先頭」が同じ位置に出て見分けが付かないので、
    行そのものを落とし先として見せる(選択中と同じ見え方に揃える) */
 .folder-row.into { border-color:var(--accent); background:var(--accent-soft); }
-.chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:11px;
+.chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:var(--fs-sub);
   border:1px solid var(--line); color:var(--muted); }
 .chip:empty { display:none; }   /* 中身が空のときは枠だけ残さない */
 /* 保存できた合図: バッジの枠がパッと光ってスッと消える。
@@ -1224,7 +1240,7 @@ button.primary { background:var(--accent-fill); color:var(--on-fill);
 button.primary:hover:not(:disabled) {
   background:color-mix(in srgb, var(--accent) 86%, var(--ink)); }
 button.danger:hover:not(:disabled) { background:var(--err-bg); }
-button.small { padding:2px 8px; font-size:12px; }
+button.small { padding:2px 8px; font-size:var(--fs-body); }
 button:disabled { opacity:.45; cursor:not-allowed; }
 /* 塗りのボタン(実行)は、薄めるのではなく中立色の塗りへ置き換える。
    薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
@@ -1250,14 +1266,14 @@ input, select { font:inherit; padding:3px 7px;
   border:1px solid var(--line-strong);
   border-radius:6px; background:var(--bg); color:var(--ink); }
 input[type=number] { width:88px; }
-label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
+label.f { display:flex; flex-direction:column; gap:3px; font-size:var(--fs-sub);
   color:var(--muted); margin-bottom:8px; }
 /* 項目名+値のペアを2組ずつ1行に並べる(行数が奇数でも最後の1組が
    崩れない。auto-flow の row 方向で4列を順に埋めるだけで、
    dt1,dd1,dt2,dd2 → dt3,dd3,dt4,dd4 … と自然にペアが揃う) */
 .kv { display:grid;
   grid-template-columns:max-content 1fr;
-  column-gap:14px; row-gap:2px; font-size:12.5px; }
+  column-gap:14px; row-gap:2px; font-size:var(--fs-body); }
 .kv dt { color:var(--muted); margin-right:8px; align-self:start; }
 .kv dd { margin:0; font-variant-numeric:tabular-nums; }
 /* 値が2つ以上ある項目(ずれの最大)は、親を見出しだけの行にし、子は字下げして
@@ -1265,7 +1281,7 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .kv dt.kvhead { grid-column:1 / -1; }
 .kv dt.kvsub { padding-left:14px; }
 /* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
-.prenote { font-size:12.5px; color:var(--ink); background:var(--accent-soft);
+.prenote { font-size:var(--fs-body); color:var(--ink); background:var(--accent-soft);
            border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
            padding:6px 10px; margin-bottom:9px; }
 /* 実行が始まったら沈める。押す前に読むものなので、実行中は役目を終えている
@@ -1274,11 +1290,11 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .prenote.dim { background:transparent; border-left-color:var(--line);
                color:var(--muted); }
 .prenote b { color:var(--accent); font-weight:700; margin-right:6px; }
-.msg { border-radius:7px; padding:6px 10px; font-size:12.5px; margin-top:8px;
+.msg { border-radius:7px; padding:6px 10px; font-size:var(--fs-body); margin-top:8px;
        display:flex; align-items:flex-start; gap:8px; }
 .msgtext { flex:1; min-width:0; }
 .msgclose { flex:none; border:0; background:transparent; color:inherit;
-            cursor:pointer; font-size:15px; line-height:1; padding:0 2px;
+            cursor:pointer; font-size:var(--fs-glyph); line-height:1; padding:0 2px;
             opacity:.65; }
 .msgclose:hover { opacity:1; }
 .msgclose:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
@@ -1287,7 +1303,7 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .msg.ok { background:var(--ok-bg); color:var(--ok); }
 /* 成功の一言(押したボタンのそばに数秒だけ)。行の中の席なので、出ても
    消えても他の行の位置が動かない */
-.okflash { color:var(--ok); font-size:12px; white-space:nowrap;
+.okflash { color:var(--ok); font-size:var(--fs-body); white-space:nowrap;
   opacity:0; transition:opacity .3s; }
 .okflash.on { opacity:1; }
 .tl-wrap { overflow-x:auto; }
@@ -1307,7 +1323,7 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
 .tlrow { display:grid; grid-template-columns:56px 1fr; align-items:center;
   margin-bottom:4px; }
 .tlrow .nm { color:var(--muted); text-align:right; padding-right:10px;
-  font-size:11.5px; font-weight:600; }
+  font-size:var(--fs-sub); font-weight:600; }
 .track { position:relative; height:18px; border-radius:4px;
   background:var(--surface-2); }
 .span { position:absolute; top:3px; height:12px; border-radius:2px; min-width:2px; }
@@ -1318,7 +1334,7 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
   pointer-events:none; background:color-mix(in srgb, var(--ink) 22%, transparent);
   border-right:2px solid var(--err); border-radius:3px 0 0 3px; }
 .marks { position:relative; height:20px; margin-left:56px; }
-.marks span { position:absolute; top:0; font-size:11px; font-weight:700;
+.marks span { position:absolute; top:0; font-size:var(--fs-sub); font-weight:700;
   color:var(--accent); border-left:2px solid var(--accent); padding-left:5px;
   white-space:nowrap; line-height:18px; }
 /* 右端付近のラベルは、文字を罫線の左側へ反転させて枠内に収める
@@ -1328,14 +1344,14 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
 .axis { position:relative; height:22px; margin-left:56px; }
 .axis i { position:absolute; top:0; border-left:1px solid var(--line); height:6px; }
 .axis span { position:absolute; top:8px; transform:translateX(-50%);
-  color:var(--muted); font-size:10.5px; font-variant-numeric:tabular-nums; }
+  color:var(--muted); font-size:var(--fs-tight); font-variant-numeric:tabular-nums; }
 /* --- 編集 --- */
 .pal { border:1px dashed var(--line); border-radius:7px; padding:3px 9px;
-  margin-bottom:5px; color:var(--muted); cursor:pointer; font-size:12.5px; }
+  margin-bottom:5px; color:var(--muted); cursor:pointer; font-size:var(--fs-body); }
 .pal:hover { border-color:var(--accent); color:var(--accent); }
 .blocks { display:flex; flex-direction:column; gap:4px; }
 .blk { border:1px solid var(--line); border-left:4px solid var(--muted);
-  border-radius:7px; padding:4px 9px; cursor:pointer; font-size:12.5px; }
+  border-radius:7px; padding:4px 9px; cursor:pointer; font-size:var(--fs-body); }
 .blk:hover { border-color:var(--accent); }
 .blk.sel { outline:2px solid var(--accent); outline-offset:1px; }
 /* 一時的に外したブロック/行。消さずに「今は無いもの」として見せる */
@@ -1365,7 +1381,7 @@ button.armed { border-color:var(--warn); color:var(--warn);
   background:var(--warn-bg); font-weight:700; }
 /* ブロックのドラッグつまみ */
 .bgrab { color:var(--muted); opacity:.3; cursor:grab; user-select:none;
-  font-size:11px; margin-right:6px; touch-action:none; }
+  font-size:var(--fs-sub); margin-right:6px; touch-action:none; }
 .blk:hover .bgrab, .nest > .head:hover .bgrab { opacity:.9; }
 .blk.dragging, .nest.dragging { opacity:.35; }
 #palette .pal { touch-action:none; }
@@ -1376,7 +1392,7 @@ button.armed { border-color:var(--warn); color:var(--warn);
 /* 押している間はキートップの文字も反転させる(地が濃色になるため、
    そのままだと押した瞬間に文字が読めなくなる。部品表の ON セルと同じ扱い) */
 #padfig .figc.on .ft { fill:var(--on-fill); }
-#padfig .ft { fill:var(--ink); font-size:13px; text-anchor:middle;
+#padfig .ft { fill:var(--ink); font-size:var(--fs-name); text-anchor:middle;
   pointer-events:none; font-weight:700; }
 .en input { vertical-align:-1px; opacity:.28; }
 .en input:checked { opacity:.28; }
@@ -1392,7 +1408,7 @@ table.grid td.ops input[type=checkbox]:not(:checked) { opacity:1;
 table.grid tr:hover td.ops input[type=checkbox] { opacity:1; }
 .blk .p { color:var(--accent); font-weight:700; }
 /* 覚え書き。手順の中身ではないので控えめに、でも読めるように */
-.note { color:var(--muted); font-size:11.5px; margin-left:10px;
+.note { color:var(--muted); font-size:var(--fs-sub); margin-left:10px;
   font-weight:400; }
 /* 手順ブロックの帯。色を持つのは「そこへ飛べる」「中身が別にある」
    「中に含む」もので、入力そのものは灰色(どの入力かは行の文字が
@@ -1409,15 +1425,15 @@ table.grid tr:hover td.ops input[type=checkbox] { opacity:1; }
    あるフローで末尾へ挿せなくなるため、少し広くとる */
 .nest { border:1px solid var(--cat-loop); border-radius:8px; padding:5px 7px 12px;
   margin:2px 0; }
-.nest > .head { color:var(--cat-loop); font-weight:700; font-size:12px;
+.nest > .head { color:var(--cat-loop); font-weight:700; font-size:var(--fs-body);
   margin-bottom:5px; cursor:pointer; border-radius:4px; padding:1px 3px; }
 .nest > .head:hover { background:var(--accent-soft); }
 /* 選択中は下線ではなく枠で示す(ブロックの選択表示と同じ見え方に揃える) */
 .nest.sel { outline:2px solid var(--accent); outline-offset:1px; }
 .nest .blocks { margin-left:9px; }
 .arm { border-left:2px dashed var(--cat-loop); padding-left:7px; margin:4px 0; }
-.arm > .t { color:var(--muted); font-size:11px; margin-bottom:3px; }
-table.grid { border-collapse:collapse; font-size:12px;
+.arm > .t { color:var(--muted); font-size:var(--fs-sub); margin-bottom:3px; }
+table.grid { border-collapse:collapse; font-size:var(--fs-body);
   font-variant-numeric:tabular-nums; }
 table.grid th, table.grid td { border:1px solid var(--line); padding:0; }
 table.grid th { background:var(--accent-soft); color:var(--accent); padding:2px 4px;
@@ -1441,7 +1457,7 @@ table.grid td.ax.fillmark { outline:2px dashed var(--accent);
    色を付けているのと同じ理由。全セルに ON/OFF が並ぶと形が読めなくなる) */
 table.grid td.b { padding:0; width:30px; }
 table.grid td.b .tg { display:block; width:100%; height:23px; border:0;
-  border-radius:0; background:transparent; padding:0; font-size:10px;
+  border-radius:0; background:transparent; padding:0; font-size:var(--fs-tight);
   letter-spacing:.04em; color:var(--muted); cursor:pointer; }
 table.grid td.b .tg:hover { background:var(--accent-soft); }
 table.grid td.b .tg.on { background:var(--accent-fill); color:var(--on-fill);
@@ -1468,7 +1484,7 @@ table.grid th.fn, table.grid td.fn:first-child {
 table.grid tr.alt td.fn:first-child {
   background:var(--surface-2); }
 table.grid th.gh { background:var(--surface); color:var(--muted); font-weight:400;
-  font-size:10.5px; letter-spacing:.06em; padding:1px 4px; text-align:left;
+  font-size:var(--fs-tight); letter-spacing:.06em; padding:1px 4px; text-align:left;
   /* 2段ヘッダの上段。下段(top:18px)と貼り付き位置を分ける(同じ top:0 だと
      縦スクロールで下段が上段に重なり、まとまりの見出しが消える) */
   top:0; height:18px; box-sizing:border-box; }
@@ -1491,7 +1507,7 @@ table.grid th.fn { z-index:5; }   /* 角セル(縦横両方の固定が交差す
 table.grid td.ax input { text-align:right; }
 table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   background:var(--surface-2); }
-.hint { color:var(--muted); font-size:11.5px; margin-top:8px; line-height:1.7; }
+.hint { color:var(--muted); font-size:var(--fs-sub); margin-top:8px; line-height:1.7; }
 /* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレ)は、間を詰めてひとまとまりに */
 .hint + .hint { margin-top:2px; }
 /* 注釈行の中の「項目名 値」。項目どうしは余白で切り、値は本文の色にする
@@ -1509,13 +1525,13 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 .tlprog .stat { margin-right:14px; }
 .tlprog .stat:last-child { margin-right:0; }
 /* 日が変わったところに出す日付。行そのものではないので薄く、左に寄せる */
-.logday { color:var(--muted); font-size:10.5px; margin:6px 0 2px;
+.logday { color:var(--muted); font-size:var(--fs-tight); margin:6px 0 2px;
   letter-spacing:.04em; }
 .logday:first-child { margin-top:0; }
 /* ログ。件数が増えるので高さを決めて中でスクロールさせる */
 .logs { height:230px; overflow-y:auto; background:var(--surface-2);
   border:1px solid var(--line); border-radius:8px; padding:6px 8px;
-  font-size:11.5px; line-height:1.65;
+  font-size:var(--fs-sub); line-height:1.65;
   font-family:"Consolas","Courier New",monospace; }
 /* 新しい行に追従している間、上端で行が半端に切れる。切れ目には「上に続きが
    ある」という手がかりの価値があるが、読む対象ではない場所に読めない字が
@@ -1536,9 +1552,9 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
    分かるようにする(選択と実行対象は別物) */
 .nowplaying { display:flex; align-items:center; gap:7px; margin-bottom:9px;
   padding:6px 10px; border-radius:8px;
-  background:var(--ok-bg); color:var(--ok); font-size:12.5px; }
-.nowplaying b { font-size:13px; }
-.playmark { color:var(--ok); font-size:11px; }
+  background:var(--ok-bg); color:var(--ok); font-size:var(--fs-body); }
+.nowplaying b { font-size:var(--fs-name); }
+.playmark { color:var(--ok); font-size:var(--fs-sub); }
 /* 入力値を勝手に直したセルの一瞬の強調(partmsg の説明とセットで出す) */
 table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 /* 実行中の行に付く印(一覧の中でどれが動いているか) */
@@ -3460,7 +3476,7 @@ function buildLane(d) {
   lane.loops.max = '100000';
   lane.loops.title = '実行中に変えた値は次の開始から効きます';
   const loopsHint = el('span', null, '0=止めるまで');
-  loopsHint.style.cssText = 'color:var(--muted);font-size:11px';
+  loopsHint.style.cssText = 'color:var(--muted);font-size:var(--fs-sub)';
   loopsLab.append(lane.loops, document.createTextNode(' '), loopsHint);
   const resLab = el('label', null, '開始ラベル ');
   lane.resume = document.createElement('select');
@@ -5005,7 +5021,7 @@ function renderProps() {
     const wrap = el('div');
     wrap.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:2px';
     for (const b of BUTTONS) {
-      const lab = el('label'); lab.style.cssText = 'font-size:11.5px;display:flex;gap:3px';
+      const lab = el('label'); lab.style.cssText = 'font-size:var(--fs-sub);display:flex;gap:3px';
       const cb = el('input'); cb.type = 'checkbox';
       cb.checked = (n.buttons || []).includes(b);
       bindChange(cb, () => {
