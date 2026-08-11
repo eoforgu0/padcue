@@ -305,8 +305,12 @@ class Coupler:
                 errs.append(f"{link.cfg.get('name')}: {e}")
                 continue
             # 印は停止が届いてから(届く前に付くと、その装置の本物の異常が
-            # 連動停止にならない)
-            self.note_manual_stop(link.cfg.get("name", ""))
+            # 連動停止にならない)。予約の取り消しは印も取り消す
+            # ——走り続けるので、人為停止のままだと本物の異常を見逃す
+            if mode == "cancel":
+                self.note_manual_cancel(link.cfg.get("name", ""))
+            else:
+                self.note_manual_stop(link.cfg.get("name", ""))
         if errs:
             return {"error": "止め切れませんでした — " + " / ".join(errs)}
         return {"ok": True}

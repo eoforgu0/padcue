@@ -637,8 +637,15 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         lines = page.locator("#logs .logline")
         n0 = lines.count()
         assert n0 > 0, "ログが1行も出ていない"
+        # 日付は日が変わったところに1行だけ。行が持つのは時刻(時:分:秒)。
+        # 毎行に日付を並べると、同じ文字列が縦に続いて本文が埋もれる
         first = page.locator("#logs .logline .lt").first.inner_text()
-        assert "/" in first and ":" in first, f"日時になっていない: {first!r}"
+        assert re.fullmatch(r"\d{2}:\d{2}:\d{2}", first), \
+            f"行の時刻になっていない: {first!r}"
+        days = page.locator("#logs .logday")
+        assert days.count() >= 1, "日付の見出しが出ていない"
+        assert "/" in days.first.inner_text(), \
+            f"日付の見出しが日付になっていない: {days.first.inner_text()!r}"
         l.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
         l.locator("button", has_text="今すぐ止める").click()
@@ -1243,7 +1250,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         texts = page.locator(sel).all_inner_texts()
         assert any("スティック L 上 100%" in t for t in texts), texts
         assert any("くり返し ×3" in t for t in texts), texts
-        assert any("120F(2.0秒)" in t for t in texts), texts
+        # 日本語の単位は数値との間を空ける(記号の単位 F・ms は詰める)
+        assert any("120F(2.0 秒)" in t for t in texts), texts
     c.check("編集画面: ブロックが読める形で並ぶ", t_open_editor)
 
     def t_select_and_edit():
@@ -1916,8 +1924,10 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(1200)
         head = page.locator("#parttable tr").nth(1).locator("th").all_inner_texts()
         assert head[0] == "フレーム", head
-        for c in ("A", "B", "ZL", "DU", "PLUS", "LX", "RY", "rep"):
+        # PLUS / MINUS は実物の刻印に合わせて「＋」「−」と出す(内部名は不変)
+        for c in ("A", "B", "ZL", "DU", "＋", "−", "LX", "RY", "rep"):
             assert c in head, f"{c} の列が最初から出ていない: {head}"
+        assert "PLUS" not in head, f"内部名が画面に出ている: {head}"
         assert "F" not in head, f"行番号の列が二重に出ている: {head}"
         assert "GP" in head, "ジャイロの列が最初から出ていない"
         rows = page.locator("#parttable tr").count() - 2   # 見出し2行

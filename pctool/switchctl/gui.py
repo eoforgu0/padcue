@@ -1012,8 +1012,9 @@ header { position:relative; }
   cursor:pointer; font-size:12.5px; }
 .tab.on { background:var(--accent-soft); color:var(--accent); font-weight:700;
   border-color:transparent; }
-/* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常・未接続専用。
-   ふだんの実行中・待機中を黄や赤にしない(色が警告の意味を失う) */
+/* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常専用。
+   ふだんの実行中・待機中を黄や赤にしない(色が警告の意味を失う)。
+   つながっていないだけは中立色——異常ではないため(2026-08-12 の原則改定) */
 .dot { width:9px; height:9px; border-radius:50%; background:var(--muted);
   display:inline-block; flex:none; }
 .dot.ok { background:var(--ok); }
@@ -1031,7 +1032,8 @@ header { position:relative; }
 .devdetail { grid-column:1 / -1; display:none; margin-top:8px; padding-top:8px;
   border-top:1px solid var(--line); }
 .devrow.open .devdetail { display:flex; flex-direction:column; gap:8px; }
-/* 未接続・異常のとき、対処の場所であることを縁取りで自ら名乗る(原則 §1) */
+/* 異常のとき、対処の場所であることを縁取りで自ら名乗る(原則 §1)。
+   未接続では縁取らない——つながっていないだけは異常ではない */
 .devrow.flagged { border-color:var(--err); background:var(--err-bg); }
 /* プリセットの行 = 装置の開閉行から丸印の列だけを抜いた形。詳細は名前の
    位置まで下げて、どの行の中身かを字下げで示す。名前は行幅を目一杯使い、
@@ -1356,9 +1358,11 @@ tr.off td.ax input, tr.off td.fn { opacity:.38; }
 .delx.cpy:hover { background:var(--accent-soft); color:var(--accent); }
 /* 区切り停止の予約中。押した本人に「効いている」と伝われば十分なので
    文字を足さずボタン自身の見た目を変える */
+/* 予約中のボタン。ラベル自身が「予約を取り消す」と名乗るので、記号は
+   足さない(以前は ⏳ を付けていたが、Windows ではこれだけがカラー絵文字に
+   なり、他の記号 ▶ ⟳ ◼ ⏹ ⧉ ↩ が単色なのと揃わなかった) */
 button.armed { border-color:var(--warn); color:var(--warn);
   background:var(--warn-bg); font-weight:700; }
-button.armed::after { content:' ⏳'; }
 /* ブロックのドラッグつまみ */
 .bgrab { color:var(--muted); opacity:.3; cursor:grab; user-select:none;
   font-size:11px; margin-right:6px; touch-action:none; }
@@ -1497,9 +1501,17 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 .statv { color:var(--ink); font-variant-numeric:tabular-nums; }
 /* 中身が空の注釈行は、余白だけを占めない(実行していないときの ETA 行) */
 .hint:empty { display:none; }
-/* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない) */
+/* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない)。
+   中は注釈行と同じ「項目どうしは余白で切る」作法(以前は全角空白1つで
+   区切っていて、どこまでが1つの値なのか読み取れなかった) */
 .tlprog { float:right; color:var(--accent); font-weight:700;
   letter-spacing:0; font-variant-numeric:tabular-nums; }
+.tlprog .stat { margin-right:14px; }
+.tlprog .stat:last-child { margin-right:0; }
+/* 日が変わったところに出す日付。行そのものではないので薄く、左に寄せる */
+.logday { color:var(--muted); font-size:10.5px; margin:6px 0 2px;
+  letter-spacing:.04em; }
+.logday:first-child { margin-top:0; }
 /* ログ。件数が増えるので高さを決めて中でスクロールさせる */
 .logs { height:230px; overflow-y:auto; background:var(--surface-2);
   border:1px solid var(--line); border-radius:8px; padding:6px 8px;
@@ -1685,7 +1697,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
         <label title="自動合流が選ぶ側。プリセットにも保存されます">進む先
           <select id="carm"></select></label>
         <button id="coneshot"
-                title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">✋ 次の合流は自分で選ぶ(1回だけ)</button>
+                title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">次の合流は自分で選ぶ(1回だけ)</button>
         <span class="sep-v"></span>
         <span class="lbl">選択肢を両方へ同時に送る</span>
         <span id="cbotharms" class="row" style="margin:0;gap:6px"></span>
@@ -1836,7 +1848,8 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <div id="props"></div>
     <div class="hint">
       追加: 左の一覧をクリック / 置きたい場所へドラッグ<br>
-      並べ替え: ⠿ をドラッグ(Alt+↑/↓ でも可)
+      並べ替え: ⠿ をドラッグ(Alt+↑/↓ でも可)<br>
+      Esc: 選択を外す(この欄が手順の設定に戻ります)
     </div>
   </div>
 
@@ -1949,6 +1962,12 @@ const SWAY = {width: 7, period: 2, interval: 60};
 const SHORT_HINT =
   '1フレームだけの入力は、まったく現れないことがあります';
 
+// 画面に出すボタンの名前。内部名(保存形式・通信・ファーム)は変えない。
+// PLUS / MINUS は実物のコントローラーに「+」「−」と刻まれているので、そちらに
+// 合わせる(部品表の列も狭くなる)。HOME / CAPTURE は実物にも英字で書かれて
+// おらず、短く言い換えると却って分からなくなるので英字のまま
+const BTN_LABEL = {PLUS: '＋', MINUS: '−'};
+function btnJa(name) { return BTN_LABEL[name] || name; }
 const GROUP_HEAD = {A:'ボタン', L:'肩ボタン', DU:'十字キー', PLUS:'その他',
                     LX:'スティック(-2048〜2047)',   // 向きは各列の説明で示す
                     GP:'ジャイロ・加速度', rep:'行の反復'};
@@ -2076,6 +2095,12 @@ window.addEventListener('beforeunload', e => {
   if (flowDirty || partDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
+// タブの切り替え。ボタンからも、画面の中の導線(部品ブロック→その部品)
+// からも呼ぶ。未保存の確認はここが持つ(どの入口から来ても同じ作法)
+function gotoView(name) {
+  const t = document.querySelector(`.tab[data-view="${name}"]`);
+  if (t) t.click();
+}
 for (const t of document.querySelectorAll('.tab')) {
   t.onclick = () => {
     if (view === 'flow' && t.dataset.view !== 'flow' && !confirmDiscard()) return;
@@ -2633,9 +2658,13 @@ const LOG_LEVEL = {
 function logRow(e) {
   const f = LOG_JA[e.kind];
   const at = e.at ? new Date(e.at * 1000) : null;
-  const t = at ? at.toLocaleString('ja-JP', {hour12: false}) : '';
-  return {time: t, level: LOG_LEVEL[e.kind] || '',
-          text: f ? f(e.a, e.b, e.c, e) : `${e.kind} a=${e.a} b=${e.b}`};
+  const p2 = n => String(n).padStart(2, '0');
+  return {
+    day: at ? `${at.getFullYear()}/${at.getMonth() + 1}/${at.getDate()}` : '',
+    time: at ? `${p2(at.getHours())}:${p2(at.getMinutes())}`
+               + `:${p2(at.getSeconds())}` : '',
+    level: LOG_LEVEL[e.kind] || '',
+    text: f ? f(e.a, e.b, e.c, e) : `${e.kind} a=${e.a} b=${e.b}`};
 }
 
 // 直近のログを控えておき、絞り込みを変えた瞬間に描き直せるようにする
@@ -2662,8 +2691,15 @@ function renderLogs(entries) {
   const list = flt ? entries.filter(e => e.dev === flt) : entries;
   box.textContent = '';
   if (!list.length) { box.textContent = '(なし)'; return; }
+  // 日付は日が変わったところで1行だけ出す。毎行くり返すと、同じ文字列が
+  // 縦に並んで読む対象(時刻と本文)が埋もれる
+  let lastDay = '';
   for (const e of list) {
     const r = logRow(e);
+    if (r.day && r.day !== lastDay) {
+      lastDay = r.day;
+      box.append(el('div', 'logday', r.day));
+    }
     const line = el('div', 'logline' + (r.level ? ' ' + r.level : ''));
     line.append(el('span', 'lt', r.time));
     // どの装置の記録かは2台以上のときだけ意味を持つ。保存キーは id なので
@@ -2680,14 +2716,14 @@ function renderLogs(entries) {
 document.getElementById('logdev').onchange = () => renderLogs(lastLogs);
 
 // ============ 装置の台帳(登録・本体の確認・名前変更)とヘッダの状態チップ ============
-// 丸印の色分け: 黄=選択待ち(人の操作が要る)だけ、赤=異常・未接続だけ。
-// 実行中・待機中はどちらも「正常」なので緑(色を警告の意味に取っておく)
+// 丸印は「その装置が使える状態か」だけを言う。実行中・選択待ちといった
+// 生きた実行状態は運転席(レーン)の仕事で、ここには並べない(原則 §1 系。
+// 以前は選択待ちで黄になり、格納庫が運転席と二重になっていた)。
+// つながっていないだけ = 灰(2台目を外して1台で回すのは正常な使い方で、
+// 異常ではない)。赤は、この装置が異常を報告していて対処が要るときだけ
 function devDot(d) {
-  // つながっていないだけ = 灰(2台目を外して1台で回すのは正常な使い方で、
-  // 異常ではない)。赤は、この装置が異常を報告しているときだけ
   if (d.error) return '';
   if (d.state === 'ERROR') return 'err';
-  if (d.state === 'AWAITING') return 'warn';
   return 'ok';
 }
 function devStateJa(d) { return d.error ? '未接続' : stateJa(d.state); }
@@ -2811,7 +2847,9 @@ function buildDevRow(d) {
   row.detail.append(row.kv);
   // 3) 登録を解除(2台以上のみ)
   row.rmWrap = el('div', 'row');
-  row.rm = el('button', 'small', '登録を解除');
+  // 破壊的な操作なので、同じ列の「探す」「接続」と同じ強さにはしない
+  // (原則 §5: 停止と同じく、位置と色の二重の区別)
+  row.rm = el('button', 'small danger', '登録を解除');
   row.rm.title = '装置は消えません。あとで再登録できます';
   row.rmWrap.append(row.rm);
   row.detail.append(row.rmWrap);
@@ -2868,6 +2906,9 @@ function updateDevRow(row, d, multi) {
   }
   if (document.activeElement !== row.host) row.host.value = d.host || '';
   row.conn.disabled = row.host.value.trim() === (d.host || '').trim();
+  row.conn.title = row.conn.disabled
+    ? 'いまの接続先と同じです(欄を書き換えると押せます)'
+    : '入力した接続先に切り替えます';
   // 1台だけのときは登録解除を出さない(従来の1台運用で誤って台帳を空に
   // しない。どうしても外すときは CLI の device remove)
   row.rmWrap.style.display = multi ? '' : 'none';
@@ -3090,12 +3131,16 @@ function statusRows(d, np) {
     ['状態', stateJa(d.state) + (np ? ` (手順: ${np})` : '')],
     ['ファーム', `${d.fw} (${d.partition})`],
     ['方式', d.mode],
-    ['読み取り間隔', `${d.binterval} ms`,
+    ['読み取り間隔', `${d.binterval}ms`,
      'Switch 本体が入力を読みに来る間隔として、この装置が USB で宣言している値'
      + '(bInterval)。実測はこれより長いことがあります'],
     // 「USB」= マイコンと Switch 本体がケーブルで繋がって認識されているか。
     // ここが未接続だと、手順を実行してもゲームには何も届かない
-    ['Switch との接続', d.usb_mounted ? '接続(USB)' : '未接続(USB)']];
+    ['Switch との接続',
+     d.usb_mounted ? 'つながっています' : 'つながっていません',
+     'この装置と Switch 本体を結ぶ USB の状態。ここがつながっていないと、'
+     + '手順を実行してもゲームには何も届きません(レーンの「未接続」は'
+     + 'PC とこの装置の間の話で、別のつながりです)']];
   // ジャイロが効かないときの切り分けの要: Switch 本体が IMU(ジャイロ・
   // 加速度)を有効化する指示を送ってきたか。無効のままなら、送る値以前に
   // 本体が読んでいない(古いファームは報告しないので、その場合は出さない)
@@ -3687,8 +3732,10 @@ function updateLane(lane, d) {
     const sec = (d.frames_elapsed / 60).toFixed(1);
     const lap = d.loop_n === 0 ? `${d.session_loop} 周目(止めるまで)`
                                : `${d.session_loop} / ${d.loop_n ?? '?'} 周`;
-    lane.tlprog.textContent =
-      `${lap}　${d.frames_elapsed} フレーム(${sec} 秒)`;
+    lane.tlprog.textContent = '';
+    lane.tlprog.append(el('span', 'stat', lap),
+                       el('span', 'stat',
+                          `${d.frames_elapsed} フレーム(${sec} 秒)`));
   } else {
     lane.tlprog.textContent = '';
   }
@@ -3702,7 +3749,9 @@ function updateLane(lane, d) {
     lane.badge.textContent = '⧉ 連結して開始した組';
     lane.badge.title = '連結して開始した組。相方の異常時は両方止まります。'
       + '手で止めた場合は連動しません';
-  } else if (running || awaiting) {
+  } else if ((running || awaiting) && (state.devices || []).length >= 2) {
+    // 「単独」は連結との対比なので、相方がいるときにだけ名乗る。1台構成では
+    // 連結の概念そのものが無く(上部バーも出ない)、対比する相手がいない
     lane.badge.style.display = '';
     lane.badge.className = 'chip runchip';
     lane.badge.textContent = '単独で実行中';
@@ -4301,7 +4350,20 @@ function renderCoupling() {
     b.disabled = someBusy;
     b.title = someBusy ? 'いま実行中なので押せません' : base;
   }
-  document.getElementById('cstopg').disabled = !someBusy;
+  // 予約中は、レーンの停止ボタンと同じ姿になる(原則 §5: 同じ意味は同じ形)。
+  // 走っている装置がすべて予約済みのときだけ「予約中」と名乗る——片方だけ
+  // 予約された状態でバーが予約中を名乗ると、押せば両方取り消せると読める
+  const gstop = document.getElementById('cstopg');
+  const running2 = devs.slice(0, 2).filter(d => !d.error
+                                                && (d.running || d.awaiting));
+  const allArmed = running2.length > 0 && running2.every(d => d.stop_graceful);
+  gstop.disabled = !someBusy;
+  gstop.classList.toggle('armed', allArmed);
+  const glabel = allArmed ? '↩ 両方の予約を取り消す' : '◼ 両方を今の周で止める';
+  if (gstop.textContent !== glabel) gstop.textContent = glabel;
+  gstop.title = allArmed
+    ? 'どちらも今の周が終わったら止まります。もう一度押すと予約を取り消します'
+    : 'どちらも、今の周を最後までやってから止まります';
   document.getElementById('cstopi').disabled = !someBusy;
   // 合流の設定
   const auto = document.getElementById('cauto');
@@ -4319,7 +4381,7 @@ function renderCoupling() {
   const oneshot = document.getElementById('coneshot');
   oneshot.classList.toggle('armed', !!c.oneshot_manual);
   oneshot.textContent = c.oneshot_manual
-    ? '↩ 次の合流の保留を取り消す' : '✋ 次の合流は自分で選ぶ(1回だけ)';
+    ? '↩ 次の合流の保留を取り消す' : '次の合流は自分で選ぶ(1回だけ)';
   // 選択肢を両方へ同時に送る(両方が選択待ちのときだけ押せる。ボタンは消さない)
   const both = document.getElementById('cbotharms');
   const ready = devs.slice(0, 2).every(d => !d.error && d.awaiting);
@@ -4367,7 +4429,7 @@ function renderCoupling() {
     const row = el('div', 'row');
     row.style.marginTop = '7px';
     const remainTxt = Object.entries(ls.remain || {})
-      .filter(([, v]) => v > 0).map(([k, v]) => `${k} 残り${v}周`).join('・');
+      .filter(([, v]) => v > 0).map(([k, v]) => `${k} 残り${v} 周`).join('・');
     // 再開の成功も押したそばで数秒だけ(選択肢の同時送出と同じ作法)
     const ok = el('span', 'okflash');
     const rs = el('button', 'small',
@@ -4389,7 +4451,7 @@ function renderCoupling() {
       const rem = (ls.remain || {})[d.name] | 0;
       if (d.error || d.name === ls.cause || rem <= 0) continue;
       const planp = (run.plan || []).find(p => p.dev === d.name) || {};
-      const b = el('button', 'small', `${d.name} だけ続ける(残り${rem}周)`);
+      const b = el('button', 'small', `${d.name} だけ続ける(残り${rem} 周)`);
       b.title = `「${planp.name || '?'}」の残り周回を、この装置だけソロで実行します`;
       b.onclick = async () => {
         const r = await api('/api/run', 'POST',
@@ -4430,7 +4492,8 @@ function renderCoupling() {
   // (値の位置に別の話が地続きで並ぶ形そのものが読みにくい。2026-08-08 指摘)
   const bits = [];
   if (run.skew_ms != null) {
-    const who = (run.members || []).length ? ` (${run.members.join('→')})` : '';
+    const who = (run.members || []).length
+      ? ` (${run.members.join(' から ')}へ)` : '';
     bits.push(['開始ズレ', `${run.skew_ms}ms${who}`]);
   }
   statLine(document.getElementById('chint'), bits);
@@ -4447,7 +4510,10 @@ document.getElementById('cunlink').onclick = async () => {
 document.getElementById('crun1').onclick = () => coupleRun(true);
 document.getElementById('crun').onclick = () => coupleRun(false);
 document.getElementById('cstopg').onclick = async () => {
-  const r = await api('/api/stop_both', 'POST', {mode: 'graceful'});
+  // 予約中に押したら取り消す(レーンの停止ボタンと同じ作法)
+  const cancel = document.getElementById('cstopg').classList.contains('armed');
+  const r = await api('/api/stop_both', 'POST',
+                      {mode: cancel ? 'cancel' : 'graceful'});
   // 受理の成功文は出さない(両レーンの停止ボタンが予約中表示に変わる)
   show('cactmsg', r.error ? 'err' : '', r.error || '');
   refresh();
@@ -4526,15 +4592,15 @@ function stickText(x, y) {
 function dur(f) {
   // フレーム数に秒を添える(長さの見当がつくように)
   const sec = f / 60;
-  return sec >= 1 ? `${f}F(${sec.toFixed(1)}秒)` : `${f}F`;
+  return sec >= 1 ? `${f}F(${sec.toFixed(1)} 秒)` : `${f}F`;
 }
 function describe(n) {
   switch (n.type) {
     case 'label': return ['ラベル', n.text];
     case 'press': return ['押して離す',
-      `${(n.buttons||[]).join('+')} を ${dur(n.frames)}`];
-    case 'hold': return ['押したまま', (n.buttons||[]).join('+')];
-    case 'release': return ['離す', (n.buttons||[]).join('+')];
+      `${(n.buttons||[]).map(btnJa).join('+')} を ${dur(n.frames)}`];
+    case 'hold': return ['押したまま', (n.buttons||[]).map(btnJa).join('+')];
+    case 'release': return ['離す', (n.buttons||[]).map(btnJa).join('+')];
     case 'wait': return ['待つ', dur(n.frames)];
     case 'stick': {
       const d = n.frames > 0 ? ` を ${dur(n.frames)}` : '(次に変えるまで)';
@@ -4947,7 +5013,8 @@ function renderProps() {
         cb.checked ? set.add(b) : set.delete(b);
         n.buttons = BUTTONS.filter(x => set.has(x));
       });
-      lab.append(cb, document.createTextNode(b));
+      lab.append(cb, document.createTextNode(btnJa(b)));
+      if (BTN_LABEL[b]) lab.title = b;   // 内部名も引けるように
       wrap.append(lab);
     }
     return field('ボタン', wrap);
@@ -4999,7 +5066,21 @@ function renderProps() {
         + 'ゆらぎは、長く回し続けると Switch 側が回転を止めてしまうのを'
         + '防ぎます(入れたままで大丈夫です)'));
       break;
-    case 'part': box.append(pick('部品', 'ref', flowParts)); break;
+    case 'part': {
+      box.append(pick('部品', 'ref', flowParts));
+      // 中身が別の場所にある行なので、その場所への導線を添える
+      // (原則 §5「よく使う操作を開閉の奥に置かない」の系)
+      const go = el('button', 'small', 'この部品を編集…');
+      go.title = '「部品を編集」タブへ移り、この部品を開きます';
+      go.onclick = () => {
+        const want = n.ref;
+        gotoView('part');
+        // タブが切り替わったら(未保存の確認を通れたら)その部品を開く
+        if (view === 'part' && want) loadPart(want);
+      };
+      box.append(go);
+      break;
+    }
     case 'call': box.append(pick('手順', 'ref',
       (state ? state.procedures.map(p => p.name) : []).filter(x => x !== flowName)));
       break;
@@ -5145,6 +5226,15 @@ window.addEventListener('keydown', e => {
       && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     e.preventDefault();
     moveBlock(e.key === 'ArrowUp' ? -1 : 1);
+  }
+  // ブロックの選択を外す。選ぶと右の欄が「この手順の設定」(手順名・
+  // 前提条件)から切り替わるので、外せないとそこへ戻れなかった
+  if (view === 'flow' && e.key === 'Escape' && flowSel
+      && !(document.activeElement && document.activeElement.matches(
+             'input, select, textarea'))) {
+    e.preventDefault();
+    flowSel = null;
+    renderFlow();
   }
 });
 function renderFlow(dirty, keepProps) {
@@ -5713,8 +5803,10 @@ function renderPart() {
   head.append(el('th', 'fn', 'フレーム'));
   cols.forEach(c => {
     const kind = BUTTONS.includes(c) ? 'b' : 'ax';
-    const th = el('th', kind + (GROUP_HEAD[c] !== undefined ? ' grp' : ''), c);
-    th.title = COLHINT[c] || '';
+    const th = el('th', kind + (GROUP_HEAD[c] !== undefined ? ' grp' : ''),
+                  btnJa(c));
+    th.title = (BTN_LABEL[c] ? `${c}(${btnJa(c)}) — ` : '')
+      + (COLHINT[c] || '');
     head.append(th);
   });
   head.append(el('th', 'ops', ''));
