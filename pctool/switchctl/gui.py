@@ -828,13 +828,28 @@ PAGE = r"""<!doctype html>
 <title>padctl</title>
 <style>
 /* ===== 配色 =====
-   3系統 × ライト/ダーク。色数を増やすこと自体が目的ではなく、それぞれ
-   使う場面が違う:
-   - 藍  : 既定。手順の色分け(ボタン/軸/くり返し/部品)を最も見分けやすい
-   - 墨  : 無彩色に寄せ、色は状態(異常・警告・実行中)にだけ使う。長時間
-           画面を見続けても色に疲れないことを狙う(明るい所での実務向け)
-   - 琥珀: 暖色・低コントラスト寄り。暗い部屋で周回を見張るとき、青白い光
-           を減らして目に刺さらないようにする
+   3系統 × ライト/ダーク。色を5つの役目に分ける(原則 §5):
+
+     中立 7段  地・面・沈んだ面・線・強い線・弱い文字・本文
+     強調 3    文字と線・塗り・淡い地
+     意味 7    異常/注意/良好 の文字と、それぞれの淡い地
+     分類 2    部品・くり返し(手順ブロックの帯と枠)
+     塗りの上 1  塗った面に載せる文字
+
+   **意味の色は6配色すべて同じ値**にする。系統が変えてよいのは中立・強調・
+   分類だけ。以前は6配色それぞれに意味の色を手書きしていたため、琥珀ライトで
+   「注意」と「強調」が色差 1.6 まで接近していた(10 未満は並べても判別が
+   難しい水準)。中立7段の明るさも3系統で共通なので、系統を切り替えても面の
+   段差と文字の読みやすさは変わらない。
+
+   系統の違い:
+   - 藍  : 既定。中立をわずかに青へ倒し、強調の青と地をつなげる
+   - 墨  : 彩度をほぼ落とす(中立 0.18・強調 0.28・分類 0.45 倍)。0 に
+           しないのは、手順の色分けが見分けられなくなるため
+   - 琥珀: 地と線だけを暖色へ倒す(3.4 倍)。文字は倒さない(読む対象に色を
+           持たせない)。取り柄は暗い部屋で画面全体の明るさが下がることで、
+           「青白い光が目に刺さる」ためではない——ブルーライトを減らしても
+           短期の眼精疲労は軽減しないという結論が出ている(17研究のメタ分析)
    純黒(OLED 向け)は、文字が主体の本ツールでは境界が滲んで読みにくいので
    採用しない。切り替えは右上のボタン、選択はこのブラウザに保存される */
 /* チェックボックス・ラジオ・スライダー・選択欄・スクロールバーを配色に乗せる。
@@ -843,59 +858,71 @@ PAGE = r"""<!doctype html>
 :root { accent-color:var(--accent); }
 :root, [data-theme="ai-light"] {
   color-scheme:light;
-  --bg:#f6f6f3; --surface:#fff; --ink:#22252b; --muted:#5d6572; --line:#d5d7d2;
-  --accent:#4756c4; --accent-soft:#eaecfa; --ok:#2e6b40; --warn:#7a5a18;
-  --warn-bg:#fbf3e0; --err:#a8342b; --err-bg:#fbeceb; --ok-bg:#e7f3ea;
-  --c-btn:#a8481f; --c-axis:#3a6ea5; --c-loop:#3e7d5b; --c-part:#7a5ea6;
-  /* 塗りつぶした面(primary/danger ボタン・ON セル)に載せる文字色。
-     明るい面には濃い文字、濃い面には明るい文字を置く */
-  --on-fill:#fff;
+  --bg:#edf0f5; --surface:#fbfdff; --surface-2:#eaeef5;
+  --line:#c8ccd3; --line-strong:#8d9198; --muted:#636973; --ink:#22272e;
+  --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
+  --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
+  --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
+  --cat-part:#914b88; --cat-loop:#627127;
+  /* 塗りつぶした面(primary ボタン・ON セル)に載せる文字。6配色で共通 */
+  --on-fill:#f8fafd;
 }
 [data-theme="ai-dark"] {
   color-scheme:dark;
-  --bg:#16181d; --surface:#1e2128; --ink:#e6e8ec; --muted:#a2abb8;
-  --line:#3d434e; --accent:#93a0f0; --accent-soft:#272c45; --ok:#8cc9a0;
-  --warn:#e3c57c; --warn-bg:#33290f; --err:#f0928a; --err-bg:#3a1f1d;
-  --ok-bg:#16301f;
-  --c-btn:#e0805a; --c-axis:#6c9bd2; --c-loop:#64b389; --c-part:#a98fd8;
-  /* ダークでは強調色を明るくしているので、塗りの上は濃い文字にする */
-  --on-fill:#15171c;
+  --bg:#161a20; --surface:#202328; --surface-2:#2c2f34;
+  --line:#41454b; --line-strong:#70757b; --muted:#989fa9; --ink:#d7dde6;
+  --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
+  --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
+  --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
+  --cat-part:#c387ba; --cat-loop:#9fb168;
+  --on-fill:#f8fafd;
 }
 [data-theme="sumi-light"] {
   color-scheme:light;
-  --bg:#f4f4f5; --surface:#fff; --ink:#1f2124; --muted:#5e6268; --line:#d6d7da;
-  --accent:#43484f; --accent-soft:#e8e9eb; --ok:#3d6b4a; --warn:#7b5c1c;
-  --warn-bg:#f4efe4; --err:#9e3a30; --err-bg:#f6eae9; --ok-bg:#e8efea;
-  /* 無彩色基調でも、手順の色分けは見分けが付く程度に差を残す */
-  --c-btn:#5c6067; --c-axis:#7a7f86; --c-loop:#4b6673; --c-part:#6f6779;
-  --on-fill:#fff;
+  --bg:#eff0f1; --surface:#fdfdfe; --surface-2:#edeeef;
+  --line:#cbcccd; --line-strong:#909192; --muted:#68696b; --ink:#262728;
+  /* 彩度 0.28 倍だと、帯として隣り合う muted との色差が 9.9 しかない
+     (10 未満は並べて判別が難しい)。系統の性格を保てる範囲で 1.4 倍だけ
+     戻し、12.7 にしてある(D-3 で入力の帯が muted になったため) */
+  --accent:#4a6380; --accent-fill:#436081; --accent-soft:#e8ebef;
+  --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
+  --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
+  /* 無彩色基調でも、手順の色分けは見分けが付く程度に差を残す(彩度 0.45 倍) */
+  --cat-part:#7c5d77; --cat-loop:#656d50;
+  --on-fill:#f8fafd;
 }
 [data-theme="sumi-dark"] {
   color-scheme:dark;
-  --bg:#141517; --surface:#1c1d20; --ink:#e4e5e7; --muted:#a3a7ae;
-  --line:#3a3d44; --accent:#c3c7cf; --accent-soft:#2a2c31; --ok:#8fc2a0;
-  --warn:#ddc487; --warn-bg:#2f2a18; --err:#e9948c; --err-bg:#33211f;
-  --ok-bg:#1a2a20;
-  --c-btn:#9aa0a8; --c-axis:#7f8790; --c-loop:#6f9aa8; --c-part:#9b90a8;
-  --on-fill:#141517;
+  --bg:#191a1b; --surface:#222324; --surface-2:#2e2f30;
+  --line:#444546; --line-strong:#747476; --muted:#9d9ea0; --ink:#dcddde;
+  /* 明るい墨と同じ理由で 1.4 倍(色差 10.0 → 12.9) */
+  --accent:#8da7c8; --accent-fill:#557194; --accent-soft:#2d333c;
+  --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
+  --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
+  --cat-part:#b095ab; --cat-loop:#a3ac8d;
+  --on-fill:#f8fafd;
 }
 [data-theme="kohaku-light"] {
   color-scheme:light;
-  --bg:#faf5ea; --surface:#fffdf8; --ink:#3a3126; --muted:#6a5e50; --line:#ded2bc;
-  /* 淡い地(accent-soft)の上でも 4.5:1 を満たすまで濃くする */
-  --accent:#8a5713; --accent-soft:#f6ecd9; --ok:#4f6b31; --warn:#8a5a12;
-  --warn-bg:#f7ecd6; --err:#a6412b; --err-bg:#f8e9e3; --ok-bg:#eef0df;
-  --c-btn:#a75a22; --c-axis:#6f6529; --c-loop:#4f6a3e; --c-part:#7d5b3d;
-  --on-fill:#fff;
+  --bg:#fceede; --surface:#fffbee; --surface-2:#feead5;
+  --line:#dcc9b4; --line-strong:#a18d78; --muted:#71675d; --ink:#2c251d;
+  /* 強調は暖色にしない。暖色にすると注意(色相 78)と同じ色相帯に入り、
+     いまの琥珀ライトのように「注意」と「強調」が並べて判別できなくなる */
+  --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
+  --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
+  --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
+  --cat-part:#914b88; --cat-loop:#627127;
+  --on-fill:#f8fafd;
 }
 [data-theme="kohaku-dark"] {
   color-scheme:dark;
-  --bg:#1a1611; --surface:#221d16; --ink:#ece3d4; --muted:#b0a08e;
-  --line:#453b2d; --accent:#e0b070; --accent-soft:#2f2718; --ok:#a8c188;
-  --warn:#e6c583; --warn-bg:#352b16; --err:#e8988a; --err-bg:#36231d;
-  --ok-bg:#232c1b;
-  --c-btn:#d99a63; --c-axis:#bfae74; --c-loop:#93b782; --c-part:#c2a07e;
-  --on-fill:#1a1611;
+  --bg:#271501; --surface:#2d2010; --surface-2:#3a2c1c;
+  --line:#52412e; --line-strong:#83715d; --muted:#a79d91; --ink:#e4dbd1;
+  --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
+  --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
+  --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
+  --cat-part:#c387ba; --cat-loop:#9fb168;
+  --on-fill:#f8fafd;
 }
 * { box-sizing:border-box; }
 /* ヘッダーは固定し、スクロールは main(本文領域)が持つ。ページ全体で
@@ -1025,6 +1052,14 @@ header { position:relative; }
 .lane h2 { display:flex; align-items:center; gap:7px; font-size:13px;
   color:var(--ink); letter-spacing:normal; }
 .lane h2 .tlprog { margin-left:auto; }
+/* 人の操作を待っている・異常で止まっているレーンは、外周のリングで名乗る。
+   画面をぼかして面と明るさだけ残すと(横目で見たときの代わり)、赤い面は
+   見えるのに操作待ちは正常時とほぼ同じに見えていた。box-shadow は寸法を
+   持たないので、出ても消えても位置は動かない(border だと行が動く)。
+   実行中には出さない——数時間ずっと光ることになり、平常時に色を使い切ると
+   異常が浮かばなくなる(ISA-101 の「平常はグレー基調」) */
+.lane.needs { box-shadow:0 0 0 3px var(--warn); }
+.lane.faulted { box-shadow:0 0 0 3px var(--err); }
 /* レーン内の小見出し(1台時のカード見出しに相当) */
 .subh { font-size:11.5px; letter-spacing:.1em; color:var(--muted);
   font-weight:700; margin:12px 0 7px; padding-top:10px;
@@ -1168,7 +1203,7 @@ main > .card { min-width:0; }
 button { font:inherit; border:1px solid var(--line); background:var(--surface);
   color:var(--ink); border-radius:7px; padding:4px 12px; cursor:pointer; }
 button:hover:not(:disabled) { border-color:var(--accent); }
-button.primary { background:var(--accent); color:var(--on-fill);
+button.primary { background:var(--accent-fill); color:var(--on-fill);
   border-color:transparent;
   font-weight:700; }
 /* primary/danger は独自の枠色を持つため、素のホバー(枠を藍に)が効かず
@@ -1178,13 +1213,19 @@ button.primary:hover:not(:disabled) {
 button.danger:hover:not(:disabled) { background:var(--err-bg); }
 button.small { padding:2px 8px; font-size:12px; }
 button:disabled { opacity:.45; cursor:not-allowed; }
-/* 塗りのボタン(実行・停止)は、薄めるのではなく中立色へ置き換える。
+/* 塗りのボタン(実行)は、薄めるのではなく中立色の塗りへ置き換える。
    薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
    塗り=ボタンの形は残るので「押せるボタンが減った」と読み違えない。
-   枠線のボタンは薄めるままでよい(地が元から無く、文字だけが薄くなる) */
-button.primary:disabled, button.danger:disabled {
-  opacity:1; background:var(--bg); color:var(--muted);
-  border-color:var(--line);
+   枠線のボタン(停止など)は薄めるまま——地が元から無いので、ここに塗りを
+   当てると「無効のときだけ塗られる」という逆の形になってしまう */
+/* 待機分岐の選択肢。人の操作を待っている唯一のボタンなので、強調ではなく
+   注意の色で塗る。載せる文字は地の色にする——注意色は明るい配色では濃く、
+   暗い配色では明るいので、地を載せるとどちらでも反転して読める */
+button.primary.waiting { background:var(--warn); color:var(--bg);
+  border-color:transparent; }
+button.primary:disabled {
+  opacity:1; background:var(--surface-2); color:var(--muted);
+  border-color:var(--line-strong);
 }
 button.danger { border-color:var(--err); color:var(--err); }
 /* キーボード操作でも今どこにいるか分かるようにする */
@@ -1192,7 +1233,8 @@ button:focus-visible, input:focus-visible, select:focus-visible,
 .tab:focus-visible, .proc:focus-visible, .blk:focus-visible {
   outline:2px solid var(--accent); outline-offset:2px;
 }
-input, select { font:inherit; padding:3px 7px; border:1px solid var(--line);
+input, select { font:inherit; padding:3px 7px;
+  border:1px solid var(--line-strong);
   border-radius:6px; background:var(--bg); color:var(--ink); }
 input[type=number] { width:88px; }
 label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
@@ -1254,7 +1296,7 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
 .tlrow .nm { color:var(--muted); text-align:right; padding-right:10px;
   font-size:11.5px; font-weight:600; }
 .track { position:relative; height:18px; border-radius:4px;
-  background:color-mix(in srgb, var(--line) 32%, transparent); }
+  background:var(--surface-2); }
 .span { position:absolute; top:3px; height:12px; border-radius:2px; min-width:2px; }
 /* 再生位置。線1本だと速いときに見失うので、通り過ぎた範囲を暗くして
    「どこまで進んだか」も同時に示す(進捗バーの役目を兼ねる)。
@@ -1279,7 +1321,7 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
   margin-bottom:5px; color:var(--muted); cursor:pointer; font-size:12.5px; }
 .pal:hover { border-color:var(--accent); color:var(--accent); }
 .blocks { display:flex; flex-direction:column; gap:4px; }
-.blk { border:1px solid var(--line); border-left:4px solid var(--c-axis);
+.blk { border:1px solid var(--line); border-left:4px solid var(--muted);
   border-radius:7px; padding:4px 9px; cursor:pointer; font-size:12.5px; }
 .blk:hover { border-color:var(--accent); }
 .blk.sel { outline:2px solid var(--accent); outline-offset:1px; }
@@ -1315,7 +1357,7 @@ button.armed::after { content:' ⏳'; }
 /* 手動操作のコントローラー図。押している間だけ色が付く */
 #padfig .fs { fill:var(--accent-soft); stroke:var(--line); cursor:pointer; }
 #padfig .figc:hover .fs { stroke:var(--accent); }
-#padfig .figc.on .fs { fill:var(--c-btn); }
+#padfig .figc.on .fs { fill:var(--accent-fill); }
 /* 押している間はキートップの文字も反転させる(地が濃色になるため、
    そのままだと押した瞬間に文字が読めなくなる。部品表の ON セルと同じ扱い) */
 #padfig .figc.on .ft { fill:var(--on-fill); }
@@ -1337,21 +1379,28 @@ table.grid tr:hover td.ops input[type=checkbox] { opacity:1; }
 /* 覚え書き。手順の中身ではないので控えめに、でも読めるように */
 .note { color:var(--muted); font-size:11.5px; margin-left:10px;
   font-weight:400; }
+/* 手順ブロックの帯。色を持つのは「そこへ飛べる」「中身が別にある」
+   「中に含む」もので、入力そのものは灰色(どの入力かは行の文字が
+   言っているので、色では分けない)。「待つ」だけ帯を出さない——
+   帯が切れることが、上から読んだときの区切りになる(幅は残すので
+   位置は動かない) */
+.blk.k-wait { border-left-color:transparent; }
 .blk.k-label { border-left-color:var(--accent); }
-.blk.k-part { border-left-color:var(--c-part); }
-.blk.k-loop, .blk.k-counter_branch { border-left-color:var(--c-loop); }
+.blk.k-part, .blk.k-call { border-left-color:var(--cat-part); }
+.blk.k-loop, .blk.k-counter_branch, .blk.k-wait_branch {
+  border-left-color:var(--cat-loop); }
 /* 下の余白は、くり返し・分岐の「中」ではなく「後ろ」へ落とすための帯でも
    ある(中の並びはこの余白の上で終わる)。狙えない細さだと、入れ子が最後に
    あるフローで末尾へ挿せなくなるため、少し広くとる */
-.nest { border:1px solid var(--c-loop); border-radius:8px; padding:5px 7px 12px;
+.nest { border:1px solid var(--cat-loop); border-radius:8px; padding:5px 7px 12px;
   margin:2px 0; }
-.nest > .head { color:var(--c-loop); font-weight:700; font-size:12px;
+.nest > .head { color:var(--cat-loop); font-weight:700; font-size:12px;
   margin-bottom:5px; cursor:pointer; border-radius:4px; padding:1px 3px; }
 .nest > .head:hover { background:var(--accent-soft); }
 /* 選択中は下線ではなく枠で示す(ブロックの選択表示と同じ見え方に揃える) */
 .nest.sel { outline:2px solid var(--accent); outline-offset:1px; }
 .nest .blocks { margin-left:9px; }
-.arm { border-left:2px dashed var(--c-loop); padding-left:7px; margin:4px 0; }
+.arm { border-left:2px dashed var(--cat-loop); padding-left:7px; margin:4px 0; }
 .arm > .t { color:var(--muted); font-size:11px; margin-bottom:3px; }
 table.grid { border-collapse:collapse; font-size:12px;
   font-variant-numeric:tabular-nums; }
@@ -1380,7 +1429,7 @@ table.grid td.b .tg { display:block; width:100%; height:23px; border:0;
   border-radius:0; background:transparent; padding:0; font-size:10px;
   letter-spacing:.04em; color:var(--muted); cursor:pointer; }
 table.grid td.b .tg:hover { background:var(--accent-soft); }
-table.grid td.b .tg.on { background:var(--c-btn); color:var(--on-fill);
+table.grid td.b .tg.on { background:var(--accent-fill); color:var(--on-fill);
   font-weight:700; }
 table.grid th.grp, table.grid td.grp { border-left:2px solid var(--muted); }
 /* 列を縮めて潰すより、はみ出させて横に送る方が読める。
@@ -1402,7 +1451,7 @@ table.grid th.fn, table.grid td.fn:first-child {
    ではなくテーマ変数から縞色を作る(OS=ライトのままダーク系テーマを選ぶと
    左端列の縞だけ明るく浮いていた) */
 table.grid tr.alt td.fn:first-child {
-  background:color-mix(in srgb, var(--line) 33%, var(--surface)); }
+  background:var(--surface-2); }
 table.grid th.gh { background:var(--surface); color:var(--muted); font-weight:400;
   font-size:10.5px; letter-spacing:.06em; padding:1px 4px; text-align:left;
   /* 2段ヘッダの上段。下段(top:18px)と貼り付き位置を分ける(同じ top:0 だと
@@ -1419,14 +1468,14 @@ table.grid tr:hover td, table.grid tr:focus-within td {
 table.grid tr:hover td.fn:first-child,
 table.grid tr:focus-within td.fn:first-child {
   background:color-mix(in srgb, var(--accent) 12%, var(--surface)); }
-table.grid td.ax input { color:var(--c-axis); font-variant-numeric:tabular-nums; }
+table.grid td.ax input { color:var(--ink); font-variant-numeric:tabular-nums; }
 /* ヘッダはデータセルより上に描く。フレーム番号列のデータセル(z-index:3)より
    低いと、縦スクロール時に番号がヘッダへ透けて写る */
 table.grid th { position:sticky; top:18px; z-index:4; }
 table.grid th.fn { z-index:5; }   /* 角セル(縦横両方の固定が交差する) */
 table.grid td.ax input { text-align:right; }
 table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
-  background:color-mix(in srgb, var(--line) 22%, transparent); }
+  background:var(--surface-2); }
 .hint { color:var(--muted); font-size:11.5px; margin-top:8px; line-height:1.7; }
 /* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレ)は、間を詰めてひとまとまりに */
 .hint + .hint { margin-top:2px; }
@@ -1441,10 +1490,19 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 .tlprog { float:right; color:var(--accent); font-weight:700;
   letter-spacing:0; font-variant-numeric:tabular-nums; }
 /* ログ。件数が増えるので高さを決めて中でスクロールさせる */
-.logs { height:230px; overflow-y:auto; background:var(--bg);
+.logs { height:230px; overflow-y:auto; background:var(--surface-2);
   border:1px solid var(--line); border-radius:8px; padding:6px 8px;
   font-size:11.5px; line-height:1.65;
   font-family:"Consolas","Courier New",monospace; }
+/* 新しい行に追従している間、上端で行が半端に切れる。切れ目には「上に続きが
+   ある」という手がかりの価値があるが、読む対象ではない場所に読めない字が
+   残るという害もある。上端だけ薄くすると、手がかりを残して半端な字が消える
+   (高さは変えないので位置は動かない)。地色を重ねる手は採らない——枠の地と
+   同じ色を持ち回ることになり、配色を切り替えたときに合わなくなる。
+   いちばん古い行まで戻ったときは外す(ログは異常の原因を読む場所なので、
+   先頭の1行が常に霞んでいては困る) */
+.logs.scrolled { mask-image:linear-gradient(to bottom, transparent 0, #000 16px);
+  -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 16px); }
 .logline .ldev { color:var(--accent); flex:none; min-width:2em; }
 .logline { display:flex; gap:10px; padding:1px 2px; border-radius:4px;
   white-space:pre-wrap; }
@@ -1936,12 +1994,17 @@ function el(tag, cls, text) {
 function show(msgId, cls, text) {
   showIn(document.getElementById(msgId), cls, text);
 }
-// レーン(要素参照で持つ)と固定 ID の両方から使う実体
-function showIn(box, cls, text) {
+// レーン(要素参照で持つ)と固定 ID の両方から使う実体。
+// closable=false は「直ればひとりでに消える知らせ」用(未接続の理由など)。
+// そういう知らせは毎秒作り直されるので、× を付けても押した1秒後に戻る
+// ——押せるのに消えないボタンは、原則 §5「知らせは必ず消せる」の見かけだけを
+// 満たして中身を裏切る。消える条件が別にあるものには最初から付けない
+function showIn(box, cls, text, closable = true) {
   box.textContent = '';
   if (!text) return;
   const m = el('div', 'msg ' + cls);
   m.append(el('span', 'msgtext', text));
+  if (!closable) { box.append(m); return; }
   const x = el('button', 'msgclose', '×');
   x.type = 'button';
   x.title = 'この知らせを閉じる';
@@ -2566,6 +2629,13 @@ function logRow(e) {
 // (次の取得を待つと、選んでから1秒近く画面が変わらない)
 let lastLogs = [];
 
+// 上へ戻れる状態のときだけログの上端をぼかす(先頭にいるときは外す)。
+// 描き直しと、人が手でスクロールしたときの両方で呼ぶ
+function markLogScrolled(box) {
+  box.classList.toggle('scrolled', box.scrollTop > 0);
+}
+document.getElementById('logs').addEventListener(
+  'scroll', e => markLogScrolled(e.target), {passive: true});
 function renderLogs(entries) {
   lastLogs = entries;
   const box = document.getElementById('logs');
@@ -2592,6 +2662,7 @@ function renderLogs(entries) {
     box.append(line);
   }
   if (follow && atEnd) box.scrollTop = box.scrollHeight;
+  markLogScrolled(box);
 }
 document.getElementById('logdev').onchange = () => renderLogs(lastLogs);
 
@@ -2599,7 +2670,10 @@ document.getElementById('logdev').onchange = () => renderLogs(lastLogs);
 // 丸印の色分け: 黄=選択待ち(人の操作が要る)だけ、赤=異常・未接続だけ。
 // 実行中・待機中はどちらも「正常」なので緑(色を警告の意味に取っておく)
 function devDot(d) {
-  if (d.error || d.state === 'ERROR') return 'err';
+  // つながっていないだけ = 灰(2台目を外して1台で回すのは正常な使い方で、
+  // 異常ではない)。赤は、この装置が異常を報告しているときだけ
+  if (d.error) return '';
+  if (d.state === 'ERROR') return 'err';
   if (d.state === 'AWAITING') return 'warn';
   return 'ok';
 }
@@ -2626,6 +2700,9 @@ const devAutoKey = new Map();  // 装置名 → 直近に自動で開いた異�
 
 // 未接続・異常(state=ERROR や⚠登録未完了)の署名。空文字は「異常なし」
 function devFlagKey(d) {
+  // 未接続もここに含める(対処の場所を自ら名乗るため行は自動で開く)。
+  // ただし赤い縁取りは異常のときだけ——色は「人が何かする必要がある」
+  // ことに取っておく(C-2)
   if (d.error) return 'off:' + d.error;
   if (d.state === 'ERROR') return 'err';
   if ('pair_step' in d && (d.pair_step === 1 || d.pair_step === 2)) return 'pair';
@@ -2693,6 +2770,11 @@ function buildDevRow(d) {
   row.meta = el('div', 'meta');
   card.append(row.meta);
   row.detail = el('div', 'devdetail');
+  // 0) つながっていない理由。直したい相手(接続先・探す・接続)のすぐ上に
+  //    置く(結論はレーン、原因と対処は装置カード。原則 §1)。× は付けない
+  //    ——直ればひとりでに消えるものに、消すボタンは要らない
+  row.whymsg = el('div', 'devwhy');
+  row.detail.append(row.whymsg);
   // 1) 接続行
   const connRow = el('div', 'row');
   connRow.append(el('span', 'lbl', '接続先'));
@@ -2804,7 +2886,10 @@ function updateDevRow(row, d, multi) {
   // 未接続・異常のとき、対処の場所であることを自ら名乗る(赤い縁取り+自動で
   // 開く)。手動で閉じたら、同じ異常が続く間は再度開かない
   const flagKey = devFlagKey(d);
-  row.card.classList.toggle('flagged', !!flagKey);
+  row.card.classList.toggle('flagged', !!flagKey && !d.error);
+  // つながらない理由は、直したい相手(接続先・探す)のすぐ上に出す。
+  // レーンには結論(灰色の「未接続」)だけを残す(原則 §1)
+  showIn(row.whymsg, d.error ? 'err' : '', d.error || '', false);
   if (flagKey) {
     if (devAutoKey.get(row.name) !== flagKey) {
       devAutoKey.set(row.name, flagKey);
@@ -3136,7 +3221,9 @@ function armRow(d, dev, errBox) {
   const row = el('div', 'row');
   for (let i = 0; i < (d.await_arms || names.length); i++) {
     const label = (names[i] || `選択肢${i + 1}`) + (dev ? `(${dev} へ)` : '');
-    const b = el('button', 'primary', label);
+    // 押せるボタンが画面に他にもある中で、「いま人を待っているのはこれ」
+    // と分かるようにする(C-1)。塗りは注意色、文字はその配色の地の色
+    const b = el('button', 'primary waiting', label);
     b.onclick = async () => {
       const r = await api('/api/select', 'POST', {arm: i, dev});
       if (r.error) {
@@ -3175,7 +3262,7 @@ function renderTimelineInto(box, tl) {
       const bar = el('div', 'span');
       bar.style.left = (100 * s[0] / total) + '%';
       bar.style.width = Math.max(0.4, 100 * (s[1] - s[0]) / total) + '%';
-      bar.style.background = t.kind === 'button' ? 'var(--c-btn)' : 'var(--c-axis)';
+      bar.style.background = 'var(--accent)';
       if (s.length > 2) bar.title = `${t.name} = ${s[2]}`;
       track.append(bar);
     }
@@ -3504,12 +3591,18 @@ function updateLane(lane, d) {
   const running = !!d.running;
   const awaiting = !!d.awaiting;
   const runName = (running || awaiting) ? (d.proc || '') : '';
+  // 外周のリング。人の操作を待っている(黄)・装置が異常を報告している(赤)
+  // ときだけ出す。つながっていないだけでは出さない(C-2 と同じ理由)
+  lane.card.classList.toggle('needs', !d.error && !!d.awaiting);
+  lane.card.classList.toggle('faulted', !d.error && d.state === 'ERROR');
   if (d.error) {
-    // つながっていない。原因と対処(接続先)は装置パネル側にあるので、
-    // ここでは結論と導線だけ(原則 §1)
-    lane.chip.className = 'chip err';
+    // つながっていない。これは異常ではない(2台目を外して1台で回すのは
+    // 正常な使い方)ので、色は使わず形で示す——チップは中立、丸印は灰、
+    // ボタンは押せない。原因と対処は装置カードの行に出る(原則 §1 の導線。
+    // チップを押せばその行が開く)
+    lane.chip.className = 'chip';
     lane.chip.textContent = '未接続';
-    showIn(lane.msg, 'err', d.error);
+    showIn(lane.msg, '', '');
     lane.tlprog.textContent = '';
     for (const b of [lane.run1, lane.run, lane.stopg, lane.stopi]) {
       b.disabled = true;

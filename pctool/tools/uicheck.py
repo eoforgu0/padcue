@@ -455,11 +455,16 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         row.locator(".devhost").fill("10.255.255.1")
         row.locator("button", has_text="接続").click()
         wait_state(page, "未接続", timeout_ms=12000)
-        msg0 = text(page, "#lanes .lane .lmsg")
-        assert msg0, "未接続の理由が消えている"
-        assert "装置パネルで" not in msg0, \
-            f"削ったはずの導線文が残っている(結論はチップ、対処は装置行が" \
-            f"自動で開いて赤くなる導線に統一済み): {msg0!r}"
+        # 結論はレーン(中立色のチップ)、理由は装置カードの行(C-2)。
+        # つながっていないだけなら赤くしない——2台目を外して1台で回すのは
+        # 正常な使い方で、異常ではない
+        assert not text(page, "#lanes .lane .lmsg"), \
+            "未接続の理由がレーンに残っている(装置カードへ移したはず)"
+        why = text(page, "#devlist .devrow .devwhy")
+        assert why, "未接続の理由が装置カードに出ていない"
+        assert "×" not in why, "直れば自動で消える知らせに × が付いている"
+        assert "flagged" not in (row.get_attribute("class") or ""), \
+            "つながっていないだけで装置カードが赤くなっている"
         before = row.locator(".devhost").input_value()
         row.locator("button", has_text="探す").click()
         for _ in range(30):
@@ -2443,16 +2448,19 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     print("[未接続]", flush=True)
 
     def t_disconnected():
-        """未接続にすると装置行が自動で開いて赤くなり、レーンのチップは
-        「未接続」になる。チップをクリックすると装置行へ飛ぶ(結論→対処。
-        原則 §1。新設)。
+        """未接続にすると装置行が自動で開き、レーンのチップは「未接続」になる。
+
+        ただし**赤くはしない**(2026-08-12 の原則改定)。つながっていないだけ
+        なら中立色で、使えないことは形(押せないボタン)が示す。赤は実行して
+        届かなかったときだけ。理由の文は装置カードの行に出す(結論はレーン、
+        原因と対処は装置カード。原則 §1)。
         """
         dev.stop()
         page.click("[data-view=home]")
         wait_state(page, "未接続", timeout_ms=8000)
         row = dev_row(page)
-        assert "flagged" in (row.get_attribute("class") or ""), \
-            "未接続なのに装置行が赤くならない"
+        assert "flagged" not in (row.get_attribute("class") or ""), \
+            "つながっていないだけで装置行が赤くなっている(異常ではない)"
         assert "open" in (row.get_attribute("class") or ""), \
             "未接続なのに装置行が自動で開かない"
         l = lane(page)
@@ -2460,7 +2468,9 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "未接続でも実行が押せる"
         assert l.locator("button", has_text="今すぐ止める").is_disabled(), \
             "未接続でも停止が押せる"
-        msg = text(page, "#lanes .lane .lmsg")
+        assert not text(page, "#lanes .lane .lmsg"), \
+            "未接続の理由がレーンに残っている(装置カードへ移したはず)"
+        msg = text(page, "#devlist .devrow .devwhy")
         assert "127.0.0.1" in msg, f"どこに繋げなかったのか分からない: {msg!r}"
         assert not any(w in msg for w in ("Errno", "failed", "refused")), \
             f"生のエラーが出ている: {msg!r}"
