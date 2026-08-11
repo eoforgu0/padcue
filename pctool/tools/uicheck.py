@@ -2383,6 +2383,53 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert rows() == n0, rows()
         page.click("#savepart")
         page.wait_for_timeout(700)
+    def t_keyboard_insert_delete():
+        """Alt+Insert で上に1行挿し、Alt+Delete でその行を削れること(新設)。
+
+        末尾への追加は下端の Enter/Tab が持っていたが、途中を足す・削るは
+        マウスでしかできなかった(行末の ＋/× はタブ順から外してあるため)。
+        Excel と同じ Ctrl+Minus は、ブラウザの表示縮小と衝突するので使わない。
+        """
+        lx = page.evaluate("() => PART_COLS.indexOf('LX')")
+
+        def rows():
+            return page.evaluate("() => partData.rows.length")
+
+        def val(ri):
+            return page.evaluate(
+                "([ri, ci]) => partData.rows[ri][ci]", [ri, lx])
+
+        n0 = rows()
+        # 2行目の LX に印を付けてから、その行の上に挿す
+        cell = page.locator(f'#parttable tr:nth-child(4) '
+                            f'td[data-ci="{lx}"] input')
+        cell.click()
+        cell.fill("777")
+        page.keyboard.press("Alt+Insert")
+        page.wait_for_timeout(400)
+        assert rows() == n0 + 1, f"Alt+Insert で行が増えない: {rows()}"
+        assert val(1) == "", f"挿した行が空でない: {val(1)!r}"
+        assert val(2) == "777", f"元の行が下へずれていない: {val(2)!r}"
+        # 押しっぱなしでは増殖しない
+        page.evaluate(
+            "() => document.activeElement.dispatchEvent(new KeyboardEvent("
+            "'keydown', {key:'Insert', altKey:true, repeat:true,"
+            " bubbles:true, cancelable:true}))")
+        assert rows() == n0 + 1, "押しっぱなしのリピートで行が増えた"
+        # 挿した空行を削ると元に戻る
+        page.keyboard.press("Alt+Delete")
+        page.wait_for_timeout(400)
+        assert rows() == n0, f"Alt+Delete で行が減らない: {rows()}"
+        assert val(1) == "777", f"消す行を取り違えている: {val(1)!r}"
+        # 後始末(印を消して保存)
+        page.locator(f'#parttable tr:nth-child(4) '
+                     f'td[data-ci="{lx}"] input').fill("")
+        page.keyboard.press("Escape")
+        page.click("#savepart")
+        page.wait_for_timeout(700)
+    c.check("Alt+Insert / Alt+Delete で途中に行を挿せる・削れる(新設)",
+            t_keyboard_insert_delete)
+
     c.check("Enter/Tab でセル移動、下端は自動で1フレーム追加",
             t_keyboard_nav)
 

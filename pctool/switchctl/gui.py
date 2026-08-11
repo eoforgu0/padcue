@@ -904,8 +904,11 @@ PAGE = r"""<!doctype html>
 }
 [data-theme="kohaku-light"] {
   color-scheme:light;
-  --bg:#fceede; --surface:#fffbee; --surface-2:#feead5;
-  --line:#dcc9b4; --line-strong:#a18d78; --muted:#71675d; --ink:#2c251d;
+  /* 中立の彩度は、生成規則の 3.4 倍そのままだと地が 9.7(他系統は
+     0.6〜4.8)まで上がり、寒色の強調が浮いて系統としてまとまらない。
+     灰へ 0.6 だけ寄せて 5.9 にしてある(2026-08-12 の自己点検) */
+  --bg:#f7efe5; --surface:#fdfbf3; --surface-2:#f7ebde;
+  --line:#d5cabd; --line-strong:#9a8e81; --muted:#6e6862; --ink:#2a2521;
   /* 強調は暖色にしない。暖色にすると注意(色相 78)と同じ色相帯に入り、
      いまの琥珀ライトのように「注意」と「強調」が並べて判別できなくなる */
   --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
@@ -916,8 +919,9 @@ PAGE = r"""<!doctype html>
 }
 [data-theme="kohaku-dark"] {
   color-scheme:dark;
-  --bg:#271501; --surface:#2d2010; --surface-2:#3a2c1c;
-  --line:#52412e; --line-strong:#83715d; --muted:#a79d91; --ink:#e4dbd1;
+  /* 明るい琥珀と同じ理由で灰へ 0.6 寄せる(地の彩度 14.5 → 9.2) */
+  --bg:#21160a; --surface:#282117; --surface-2:#352d23;
+  --line:#4c4236; --line-strong:#7d7266; --muted:#a49e96; --ink:#e1dbd5;
   --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
   --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
   --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
@@ -1857,7 +1861,9 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div id="partmsg"></div>
     </div>
     <div class="hint">
-      1 行が 1 フレーム。ボタンは<b>クリックで切り替え</b>(ドラッグでまとめて塗れます)
+      1 行が 1 フレーム。ボタンは<b>クリックで切り替え</b>(ドラッグでまとめて塗れます)<br>
+      キーボード: Enter / Tab でセル移動(下端で1行増える)、
+      <b>Alt+Insert</b> で上に1行挿入、<b>Alt+Delete</b> でその行を削除
     </div>
     <div class="tl-wrap"><table class="grid" id="parttable"></table></div>
   </div>
@@ -5847,6 +5853,26 @@ function renderPart() {
           }
           if (e.key === 'Tab' && e.shiftKey && ri === 0 && c === cols[0]) {
             e.preventDefault();                 // 左上角: これ以上戻る先は無い
+            return;
+          }
+          // 途中への挿入と行の削除。末尾への追加は下端の Enter/Tab が持って
+          // いるが、途中を足す・削るはマウスでしかできなかった(行末の ＋/×
+          // はタブ順から外してあるため)。Excel と同じ Ctrl+Minus は使わない
+          // ——ブラウザの表示縮小と衝突し、この画面は 150% 表示で使う前提。
+          // Alt はこの表で既に使っている修飾キー(Alt+ドラッグ・Alt+↑/↓)
+          if (e.altKey && (e.key === 'Insert' || e.key === 'Delete')) {
+            e.preventDefault();
+            if (e.repeat) return;               // 押しっぱなしで増殖させない
+            i.blur();                           // 丸め・範囲クランプを通す
+            if (e.key === 'Insert') {
+              partData.rows.splice(ri, 0, PART_COLS.map(() => ''));
+              markPartDirty(true); renderPart();
+              focusPartCell(ri, ci);            // 挿した行(その場)へ
+            } else if (partData.rows.length > 1) {
+              partData.rows.splice(ri, 1);
+              markPartDirty(true); renderPart();
+              focusPartCell(Math.min(ri, partData.rows.length - 1), ci);
+            }
             return;
           }
           if (e.key === 'Escape') i.blur();
