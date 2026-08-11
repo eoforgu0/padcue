@@ -151,7 +151,9 @@ def walk(page, proj, dev, prompt):
     # runbook 2 の確認表(接続・診断は装置パネルの行の開閉式詳細に集約)
     row = open_dev_row(page)
     kv = row.locator(".kv").inner_text()
-    for want in ("ファーム", "方式", "USB"):
+    # 「USB」は語をやめた——「未接続」が PC↔装置 と 装置↔Switch の2つの
+    # 別概念に当たっていたので、後者は相手を明示した言い方にした(2026-08-12)
+    for want in ("ファーム", "方式", "Switch との接続"):
         if want not in kv:
             note(f"runbook 2 の確認表にある「{want}」が装置行の詳細に出ていない")
     ok("状態表示の項目がそろっている")
