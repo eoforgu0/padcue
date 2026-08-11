@@ -837,7 +837,12 @@ PAGE = r"""<!doctype html>
            を減らして目に刺さらないようにする
    純黒(OLED 向け)は、文字が主体の本ツールでは境界が滲んで読みにくいので
    採用しない。切り替えは右上のボタン、選択はこのブラウザに保存される */
+/* チェックボックス・ラジオ・スライダー・選択欄・スクロールバーを配色に乗せる。
+   どちらも指定が無いと、6配色すべてで OS 既定の青が出て、暗い配色でも
+   選択欄だけが白く残っていた。属性は html に付くので、ここに書けば継承される */
+:root { accent-color:var(--accent); }
 :root, [data-theme="ai-light"] {
+  color-scheme:light;
   --bg:#f6f6f3; --surface:#fff; --ink:#22252b; --muted:#5d6572; --line:#d5d7d2;
   --accent:#4756c4; --accent-soft:#eaecfa; --ok:#2e6b40; --warn:#7a5a18;
   --warn-bg:#fbf3e0; --err:#a8342b; --err-bg:#fbeceb; --ok-bg:#e7f3ea;
@@ -847,6 +852,7 @@ PAGE = r"""<!doctype html>
   --on-fill:#fff;
 }
 [data-theme="ai-dark"] {
+  color-scheme:dark;
   --bg:#16181d; --surface:#1e2128; --ink:#e6e8ec; --muted:#a2abb8;
   --line:#3d434e; --accent:#93a0f0; --accent-soft:#272c45; --ok:#8cc9a0;
   --warn:#e3c57c; --warn-bg:#33290f; --err:#f0928a; --err-bg:#3a1f1d;
@@ -856,6 +862,7 @@ PAGE = r"""<!doctype html>
   --on-fill:#15171c;
 }
 [data-theme="sumi-light"] {
+  color-scheme:light;
   --bg:#f4f4f5; --surface:#fff; --ink:#1f2124; --muted:#5e6268; --line:#d6d7da;
   --accent:#43484f; --accent-soft:#e8e9eb; --ok:#3d6b4a; --warn:#7b5c1c;
   --warn-bg:#f4efe4; --err:#9e3a30; --err-bg:#f6eae9; --ok-bg:#e8efea;
@@ -864,6 +871,7 @@ PAGE = r"""<!doctype html>
   --on-fill:#fff;
 }
 [data-theme="sumi-dark"] {
+  color-scheme:dark;
   --bg:#141517; --surface:#1c1d20; --ink:#e4e5e7; --muted:#a3a7ae;
   --line:#3a3d44; --accent:#c3c7cf; --accent-soft:#2a2c31; --ok:#8fc2a0;
   --warn:#ddc487; --warn-bg:#2f2a18; --err:#e9948c; --err-bg:#33211f;
@@ -872,6 +880,7 @@ PAGE = r"""<!doctype html>
   --on-fill:#141517;
 }
 [data-theme="kohaku-light"] {
+  color-scheme:light;
   --bg:#faf5ea; --surface:#fffdf8; --ink:#3a3126; --muted:#6a5e50; --line:#ded2bc;
   /* 淡い地(accent-soft)の上でも 4.5:1 を満たすまで濃くする */
   --accent:#8a5713; --accent-soft:#f6ecd9; --ok:#4f6b31; --warn:#8a5a12;
@@ -880,6 +889,7 @@ PAGE = r"""<!doctype html>
   --on-fill:#fff;
 }
 [data-theme="kohaku-dark"] {
+  color-scheme:dark;
   --bg:#1a1611; --surface:#221d16; --ink:#ece3d4; --muted:#b0a08e;
   --line:#453b2d; --accent:#e0b070; --accent-soft:#2f2718; --ok:#a8c188;
   --warn:#e6c583; --warn-bg:#352b16; --err:#e8988a; --err-bg:#36231d;
@@ -900,12 +910,15 @@ header { display:flex; align-items:center; gap:10px; padding:9px 18px;
   flex:none; }
 header h1 { font-size:15px; margin:0; letter-spacing:.02em; }
 header .spacer { margin-left:auto; }
-/* デバイス(マイコン)の状態と接続先は同じことなので1つの枠にまとめる。
+/* 装置の状態と接続先は同じことなので1つの枠にまとめる。
    状態だけ左端に離れていると、何の状態なのか・どこで直すのかが分からない */
 header { position:relative; }
 /* ⚙ = この画面そのものの設定(通知・配色)。運転席にも格納庫にも属さない
    ものはヘッダに置く(設計原則 §1)。設定の入口は1つに保つ */
 .setmenu { margin-left:auto; position:relative; }
+/* ヘッダの手動操作中の印。チップの形だが押せる(その場で終えられる) */
+#manualbadge { margin-left:14px; cursor:pointer; font-weight:700;
+  border-color:var(--ok); }
 .iconbtn { border:1px solid var(--line); background:var(--surface);
   color:var(--ink); border-radius:8px; width:30px; height:28px;
   cursor:pointer; font-size:15px; line-height:1; padding:0;
@@ -1083,6 +1096,8 @@ main > .card { min-width:0; }
 .pname b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pname .fr { margin-left:auto; color:var(--muted); font-size:11px;
   font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer; }
+/* 所要フレーム数の席に出る「変換できない」の印。同じ席なので行は動かない */
+.pname .fr.err { color:var(--err); font-weight:700; }
 /* 行の名前に付く ID。名前のすぐ右に薄く小さく置く(下段へ落とすと、装置の
    ID なのか Switch 本体の ID なのかが読み取れない。2026-08-08 ユーザー指摘) */
 .rowid { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
@@ -1139,6 +1154,11 @@ main > .card { min-width:0; }
 .chip.warn { color:var(--warn); border-color:var(--warn); }
 .chip.err { color:var(--err); border-color:var(--err); font-weight:700; }
 .row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+/* 意味のまとまり(実行の2つ・停止の2つ)。行が折り返すとき、まとまりの中では
+   割れずに境目で折り返す。幅が足りていれば1行のまま変わらない——以前は
+   溢れたぶんだけが次の行へ落ちるので、停止の2つが上下に分かれることがあった
+   (1280px=FHD の 150% 表示・2台のとき。急いで止めたい場面で押す先が散る) */
+.btngrp { display:flex; gap:7px; align-items:center; }
 /* レーンは行(手順・開始位置・実行ボタン…)を縦に積むので、行間に周囲と
    同じリズムの余白を入れる(無いと実行ボタン行が上の行に密着する) */
 .lane .row + .row { margin-top:9px; }
@@ -1158,6 +1178,14 @@ button.primary:hover:not(:disabled) {
 button.danger:hover:not(:disabled) { background:var(--err-bg); }
 button.small { padding:2px 8px; font-size:12px; }
 button:disabled { opacity:.45; cursor:not-allowed; }
+/* 塗りのボタン(実行・停止)は、薄めるのではなく中立色へ置き換える。
+   薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
+   塗り=ボタンの形は残るので「押せるボタンが減った」と読み違えない。
+   枠線のボタンは薄めるままでよい(地が元から無く、文字だけが薄くなる) */
+button.primary:disabled, button.danger:disabled {
+  opacity:1; background:var(--bg); color:var(--muted);
+  border-color:var(--line);
+}
 button.danger { border-color:var(--err); color:var(--err); }
 /* キーボード操作でも今どこにいるか分かるようにする */
 button:focus-visible, input:focus-visible, select:focus-visible,
@@ -1185,6 +1213,11 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:11.5px;
 .prenote { font-size:12.5px; color:var(--ink); background:var(--accent-soft);
            border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
            padding:6px 10px; margin-bottom:9px; }
+/* 実行が始まったら沈める。押す前に読むものなので、実行中は役目を終えている
+   (6文字の案内が画面でいちばん大きい色面のまま残っていた)。高さは変えない
+   ので位置は動かない。opacity は使わない——地と文字が両方薄くなるため */
+.prenote.dim { background:transparent; border-left-color:var(--line);
+               color:var(--muted); }
 .prenote b { color:var(--accent); font-weight:700; margin-right:6px; }
 .msg { border-radius:7px; padding:6px 10px; font-size:12.5px; margin-top:8px;
        display:flex; align-items:flex-start; gap:8px; }
@@ -1450,6 +1483,13 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
     <button class="tab" data-view="flow">手順を編集</button>
     <button class="tab" data-view="part">部品を編集</button>
   </div>
+  <!-- 手動操作中の印。手動操作のカードは「実行・監視」にしか無いが、
+       入力は別のタブへ移っても送られ続ける(手順書 5-7b の定めどおり)。
+       終い忘れを防ぐための印がタブを移ると消えていたので、どの画面にいても
+       見えるここに出す。押せばその場で終えられる -->
+  <button id="manualbadge" class="chip ok" style="display:none"
+          title="手動操作が続いています(この画面の入力が装置へ送られます)。押すと終了します">
+    ● 手動操作中</button>
   <!-- 設定の入口は1つ。◐(配色だけ)と ⚙ を並べると、配色を探す人が
        ⚙ の中を開けることになる(同じ意味は同じ形。原則 §5) -->
   <div class="setmenu">
@@ -1467,7 +1507,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       </div>
       <!-- どのキーが何をするかは、入切を決めるこの場所でしか読まれない -->
       <div class="sethint">
-        F9 = 両方を今すぐ止める ／ F10 = まとめて開始<br>
+        F9 = 両方を今すぐ止める ／ F10 = まとめて周回実行<br>
         連結しているときだけ効きます(受け付けはビープ音)
       </div>
       <div class="setsec line">配色</div>
@@ -1495,15 +1535,16 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
       <div id="devlist"></div>
       <div class="row" style="margin-top:8px">
         <button class="small" id="devadd"
-                title="LAN からマイコンを探して、まだ登録していない実機を登録します">
+                title="LAN から装置を探して、まだ登録していないものを登録します">
           ＋ 装置を追加</button>
       </div>
       <div id="devaddbox" style="display:none"></div>
       <!-- devmsg = このカードの操作(追加/接続先の確認/名前変更/登録解除)の
            結果。次の操作まで残す -->
       <div id="devmsg"></div>
-      <div class="hint" id="devhint"
-           style="display:none">2台目のマイコンを用意したら、「＋ 装置を追加」で登録します</div>
+      <!-- 台数で言うことが変わる。0台のときに「2台目を用意したら」と出ていた
+           (1台も無いのに次の話をしていた)。文面は renderDevices が入れる -->
+      <div class="hint" id="devhint" style="display:none"></div>
     </div>
     <!-- Switch 本体の一覧。マイコンを挿すと本体が名乗る識別子を記録するので、
          ここで名前を付けられる(名前は識別子に付く=マイコンを挿し替えても
@@ -1533,10 +1574,15 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
          編集する場所のそばで保存する) -->
     <div class="card" id="coupler" style="display:none">
       <div class="row">
-        <!-- 連結の入口。連結すると同じ位置に「⧉ 連結」の名乗りが入れ替わる -->
+        <!-- 連結の入口と出口は同じ左端に置く。以前は「外す」が停止ボタンの
+             右隣にあり、急いで止めたい場面で押し間違えると、押したかった
+             停止ボタンごと画面から消えていた(連結の語彙がまとめて消えるため) -->
         <button id="clink"
                 title="まとめて開始・自動合流・連動停止・選択肢を両方へ同時に送る、は連結したときにだけ現れます">⧉ 連結する</button>
         <span class="lbl linkonly">⧉ 連結</span>
+        <button class="small linkonly" id="cunlink"
+                title="連結を外しても、いま走っている組の連動は変わりません(連動は開始のされ方で決まります)。次の開始から独立になります">連結を外す</button>
+        <span class="sep-v linkonly"></span>
         <span class="chip" id="cformation" style="display:none"
               title="呼び出したプリセットの名前"></span>
         <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
@@ -1548,18 +1594,20 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
                 title="いまの割り当てを、別の名前の新しいプリセットとして保存します">
           別名で保存…</button>
         <span class="sep-v linkonly"></span>
-        <button class="primary linkonly" id="crun1"
-                title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
-        <button class="primary linkonly" id="crun"
-                title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
+        <!-- レーンと同じく、実行の2つ・停止の2つをそれぞれ囲う -->
+        <span class="btngrp linkonly">
+          <button class="primary" id="crun1"
+                  title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
+          <button class="primary" id="crun"
+                  title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
+        </span>
         <span class="sep-v linkonly"></span>
-        <button class="linkonly" id="cstopg"
-                title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
-        <button class="danger linkonly" id="cstopi"
-                title="どちらも、その場で全ボタンを離して止まります">⏹ 両方を今すぐ止める</button>
-        <span class="sep-v linkonly"></span>
-        <button class="small linkonly" id="cunlink"
-                title="連結を外しても、いま走っている組の連動は変わりません(連動は開始のされ方で決まります)。次の開始から独立になります">連結を外す</button>
+        <span class="btngrp linkonly">
+          <button id="cstopg"
+                  title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
+          <button class="danger" id="cstopi"
+                  title="どちらも、その場で全ボタンを離して止まります">⏹ 両方を今すぐ止める</button>
+        </span>
       </div>
       <div class="row linkonly" style="margin-top:7px">
         <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0"
@@ -2438,7 +2486,7 @@ function loopsJa(c) {
 // 実機のログ。種別は firmware/main/app_log.h の app_log_kind_t と対応する。
 // 生の英字と a=/b= のままだと読めないので、意味と数値の意味づけを与える
 const LOG_JA = {
-  BOOT:          () => 'マイコンが起動しました',
+  BOOT:          () => '装置が起動しました',
   RUN_START:     (a, b, c, e) => {
     if (c == null) return '実行を開始';     // 旧形式(詳細の記録なし)
     // 手順名はハッシュ(b/c)からサーバ側で復元して e.name に入る。
@@ -2773,12 +2821,22 @@ function renderDevices() {
   const multi = devs.length >= 2;
   document.getElementById('logdevwrap').style.display =
     multi ? 'inline-flex' : 'none';
-  document.getElementById('devhint').style.display = multi ? 'none' : '';
+  // 次にすることを1つだけ置く。0台のときは「探す」より前の段が無いので、
+  // 押す前に確かめることは書かない(探すのは「＋ 装置を追加」の仕事)。
+  // 見つからなかったときにだけ要る手がかり=画面を見ずに確かめられる LED を添える
+  const dh = document.getElementById('devhint');
+  const hint = devs.length === 0
+    ? '装置がまだ1台もありません。「＋ 装置を追加」を押すと LAN を探します。'
+      + '見つからないときは、装置の LED が水色(シアン)か確かめてください'
+      + '——青のままなら WiFi に入れていません(手順書 §2)'
+    : (multi ? '' : '2台目を用意したら、「＋ 装置を追加」で登録します');
+  dh.style.display = hint ? '' : 'none';
+  if (dh.textContent !== hint) dh.textContent = hint;
   // 登録は2台まで(未検証のため)。上限に達したら追加ボタンを封じる
   const devaddBtn = document.getElementById('devadd');
   devaddBtn.disabled = multi;
   devaddBtn.title = multi ? 'いまは2台までです(3台以上は未検証)'
-    : 'LAN からマイコンを探して、まだ登録していない実機を登録します';
+    : 'LAN から装置を探して、まだ登録していないものを登録します';
   // ログの絞り込みの選択肢は、台帳の顔ぶれが変わったときだけ作り直す
   // (毎秒作り直すと、開いているドロップダウンが閉じる)
   const key = JSON.stringify(devs.map(d => [d.name, d.id]));
@@ -3180,11 +3238,21 @@ function mkPlayAt(d) {
   };
 }
 
+// 状態が取れているか。取れていない間は画面全体を薄くし(.stale)、
+// 再生位置の補間も止める——古い値から先を描き続けると、止まっているものが
+// 動いて見える(この画面は監視のためにあるので、それが最も困る)
+let staleNow = false;
+function setStale(on) {
+  if (staleNow === on) return;
+  staleNow = on;
+  document.body.classList.toggle('stale', on);
+}
+
 // 画面の更新周期でなめらかに引き直す(タブが裏なら呼ばれないので無駄がない)。
 // レーンの図は常に「その装置の手順」なので、実行中の手順と図が一致して
 // いるときだけ再生位置を重ねる
 (function tickPlayhead() {
-  if (view === 'home') {
+  if (view === 'home' && !staleNow) {
     for (const [nm, lane] of laneMap) {
       if (!lane.play) continue;
       const d = (state && state.devices || []).find(x => x.name === nm);
@@ -3260,7 +3328,12 @@ function buildLane(d) {
   lane.run = el('button', 'primary', '⟳ 周回実行');
   lane.stopg = el('button', null, '◼ 今の周で止める');
   lane.stopi = el('button', 'danger', '⏹ 今すぐ止める');
-  row2.append(lane.run1, lane.run, el('span', 'sep-v'), lane.stopg, lane.stopi);
+  // 実行の2つ・停止の2つをそれぞれ囲う(折り返しはこの境目で起きる)
+  const runGrp = el('span', 'btngrp');
+  runGrp.append(lane.run1, lane.run);
+  const stopGrp = el('span', 'btngrp');
+  stopGrp.append(lane.stopg, lane.stopi);
+  row2.append(runGrp, el('span', 'sep-v'), stopGrp);
   card.append(row2);
   // 開始時刻と終了予定(単独で実行しているときだけ。連結した組は上部バーが
   // 組全体で出すので、同じことを2か所に置かない)
@@ -3531,6 +3604,8 @@ function updateLane(lane, d) {
   } else {
     lane.badge.style.display = 'none';
   }
+  // 前提条件は「押す前に読むもの」なので、走り出したら沈める(原則 §2)
+  lane.prenote.classList.toggle('dim', running || awaiting);
   // 開始・終了予定は、連結して開始した組では上部バーが組全体で出す
   etaLine(lane.eta, (!inRun && (running || awaiting)) ? d.run_started_at : 0,
           [runEndAt(d)]);
@@ -4660,18 +4735,9 @@ function renderProps() {
   // 「選択中のブロック」のままだと見出しと中身が食い違う)
   document.getElementById('propshead').textContent =
     flowSel ? '選択中のブロック' : 'この手順の設定';
-  if (!flowSel) {
-    // 手順そのものの設定
-    const nm = el('input'); nm.value = flowDoc.name; nm.disabled = true;
-    const pre = el('input'); pre.value = flowDoc.pre || '';
-    pre.oninput = () => { flowDoc.pre = pre.value; };
-    box.append(field('手順名', nm), field('前提条件(実行前に表示)', pre));
-    return;
-  }
-  const n = nodeAt(flowSel);
-  if (!n) return;
   // 入力中は props を作り直さない(作り直すと1文字ごとに入力欄から焦点が外れる)。
-  // また「打ち始め」を1回だけ履歴へ積むので Ctrl+Z が編集単位で戻せる
+  // また「打ち始め」を1回だけ履歴へ積むので Ctrl+Z が編集単位で戻せる。
+  // 手順そのものの設定(前提条件)からも使うので、選択の有無より前に置く
   const bindInput = (i, apply) => {
     let fresh = true;
     i.oninput = () => {
@@ -4682,6 +4748,19 @@ function renderProps() {
     i.onblur = () => { fresh = true; };
     return i;
   };
+  if (!flowSel) {
+    // 手順そのものの設定
+    const nm = el('input'); nm.value = flowDoc.name; nm.disabled = true;
+    const pre = el('input'); pre.value = flowDoc.pre || '';
+    // ブロックの欄と同じ扱いにする(未保存の印が立ち、Ctrl+Z で戻せる)。
+    // 以前はここだけ直接代入していたため、書き換えても「保存済み」のまま
+    // 別の手順へ移れてしまい、書いた内容が黙って消えていた
+    bindInput(pre, () => { flowDoc.pre = pre.value; });
+    box.append(field('手順名', nm), field('前提条件(実行前に表示)', pre));
+    return;
+  }
+  const n = nodeAt(flowSel);
+  if (!n) return;
   const bindChange = (i, apply) => {
     i.onchange = () => { snapshot(); apply(); renderFlow(true, true); };
     return i;
@@ -4821,7 +4900,7 @@ function renderProps() {
     case 'loop':
       box.append(num('回数', 'count', 1, 1000000),
         allowFlag('状態が戻るのは意図的(警告を出さない)', 'loop-reset',
-          'くり返しの2周目以降は、くり返しの先頭の状態に戻ります'));
+          'くり返しの2回目以降は、くり返しの先頭の状態に戻ります'));
       break;
     case 'wait_branch': {
       const t = el('input');
@@ -5019,6 +5098,13 @@ function renderProcRow(p) {
     const fr = el('span', 'fr', `${p.frames}F`);
     fr.title = `${p.frames} フレーム(${(p.seconds || 0).toFixed(1)} 秒)`;
     nm.append(fr);
+  } else if (p.error) {
+    // 変換できない手順。所要フレーム数が出ないだけでは、健全なものと
+    // 見分けが付かない(レーンの手順プルダウンは「(エラー)」と名乗るのに、
+    // 編集画面の一覧だけが黙っていた)
+    const bad = el('span', 'fr err', 'エラー');
+    bad.title = p.error;
+    nm.append(bad);
   }
   d.append(nm);
   const ops = el('span', 'rowops');
@@ -6039,6 +6125,12 @@ function paintManual() {
   // たびにパネルが開閉して画面が跳ねる(2026-08-08 ユーザー要望)
   fig.classList.toggle('busy', manualSwitching);
   document.getElementById('manualcard').classList.toggle('on', manualOn);
+  // ヘッダの印はどのタブでも見える(入力はタブを移っても送られ続けるので、
+  // 印だけが消えると終い忘れに気づけない)
+  const badge = document.getElementById('manualbadge');
+  badge.style.display = manualOn ? '' : 'none';
+  badge.textContent = manualSwitching ? '● 手動操作 切り替え中…'
+    : `● 手動操作中${manualDev ? `(${manualDev})` : ''}`;
 }
 
 async function setManual(on) {
@@ -6053,6 +6145,9 @@ async function setManual(on) {
   return !r.error;
 }
 document.getElementById('manual').onclick = () => setManual(!manualOn);
+// ヘッダの印からもその場で終えられる(気づいた場所で終えられないと、
+// 終い忘れに気づいてもタブを戻す一手間が挟まる)
+document.getElementById('manualbadge').onclick = () => setManual(false);
 
 // 手動操作を続けたまま対象を替える。内部では「前の装置の手動操作を終える →
 // 次の装置で始める」だが、使う側からは対象を選び直すだけに見せる。
@@ -6238,7 +6333,18 @@ document.getElementById('recsave').onclick = async () => {
 
 // ============ 更新ループ ============
 async function refresh() {
-  state = await api('/api/state');
+  let got;
+  try {
+    got = await api('/api/state');
+  } catch (e) {
+    // 画面サーバに届かない(落ちた・ネットワークが切れた)。前の値が
+    // 残ったままだと、止まっているのに再生位置が動き続けて「動いている」
+    // ように見える。古いことを画面全体で名乗り、補間も止める
+    setStale(true);
+    return;
+  }
+  setStale(false);
+  state = got;
   // 「手順を編集」を開くときの初期候補が消えた・非表示になっていたら
   // 選び直す(実行対象そのものの選択は各レーンの手順プルダウンが持つ)
   const names = visibleProcs().map(p => p.name);
