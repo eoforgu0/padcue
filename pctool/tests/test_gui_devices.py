@@ -177,7 +177,12 @@ def test_logs_clear_per_device(env):
 def test_host_info_shown_and_console_named(env):
     """本体識別子(HOST_INFO)が装置に紐づいて表示され、本体に名前を
     付けられること。識別子は保存ログから拾い直すので、GUI を立ち上げ
-    直しても失われない(実測 2026-08-06: 本体ごとに固有・安定)。"""
+    直しても失われない(実測 2026-08-06: 本体ごとに固有・安定)。
+
+    識別子は**ペアリング引数の [1..6] = 本体 MAC の6バイト**を使う。
+    a=0x0100005e b=0x0053013c から取れるのは 00005e005301 で、先頭の
+    フェーズ番号 01 と末尾の 3c は入らない(2026-08-12)。
+    """
     proj, d1, base = env
     proj.append_logs([{"kind": "HOST_INFO",
                        "a": 16777310, "b": 5439804}],
@@ -190,13 +195,43 @@ def test_host_info_shown_and_console_named(env):
                              and s["devices"][0].get("host_info")
                              else None)(get(base, "/api/state")))
     assert st, get(base, "/api/state")
-    assert st["devices"][0]["host_info"] == "0100005e0053013c"
+    assert st["devices"][0]["host_info"] == "00005e005301"
     # 本体に名前を付ける → state の consoles に載る。空で外れる
     assert post(base, "/api/console_name",
-                {"host_info": "0100005e0053013c",
+                {"host_info": "00005e005301",
                  "name": "リビングのSwitch2"}).get("ok")
     st = get(base, "/api/state")
-    assert st["consoles"]["0100005e0053013c"] == "リビングのSwitch2"
+    assert st["consoles"]["00005e005301"] == "リビングのSwitch2"
     assert post(base, "/api/console_name",
-                {"host_info": "0100005e0053013c", "name": ""}).get("ok")
-    assert "0100005e0053013c" not in get(base, "/api/state")["consoles"]
+                {"host_info": "00005e005301", "name": ""}).get("ok")
+    assert "00005e005301" not in get(base, "/api/state")["consoles"]
+
+
+def test_console_key_ignores_pairing_phase():
+    """同じ本体なら、登録の前(フェーズ 01)と後(04)で同じキーになること。
+
+    ペアリング引数は [0]=フェーズ [1..6]=本体 BT MAC [7..]=フェーズ依存
+    (procon-protocol.md §7)。8バイトまるごとをキーにしていたため、同じ
+    本体でも登録の前後で別物として扱われ、付けた名前が引き継がれなかった。
+    """
+    from switchctl.devicepool import host_mac
+    # 01 形と 04 形で、フェーズと末尾のバイトだけが違う同じ本体
+    a01, b01 = 0x0100005e, 0x0053013c
+    a04, b04 = 0x0400005e, 0x00530100
+    assert host_mac(a01, b01) == host_mac(a04, b04) == "00005e005301"
+    # 別の本体は別のキーになる
+    assert host_mac(0x0100005e, 0x00530200) == "00005e005302"
+
+
+def test_console_names_migrate_to_mac_key(tmp_path):
+    """旧キー(8バイト)で付けた名前が、MAC キーへ移って残ること。"""
+    from switchctl.project import Project
+    p = Project(tmp_path)
+    cfg = p.load_config()
+    cfg["consoles"] = {"0100005e0053013c": "Switch2",
+                       "0100005e00530200": "Switch1"}
+    p.save_config(cfg)
+    got = Project(tmp_path).load_config()["consoles"]
+    assert got == {"00005e005301": "Switch2", "00005e005302": "Switch1"}
+    # 二度目は何も変えない(冪等)
+    assert Project(tmp_path).load_config()["consoles"] == got

@@ -2832,11 +2832,13 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         page.wait_for_function(
             "() => document.getElementById('consolecard').style.display"
             " !== 'none'", timeout=10000)
-        assert "ID 4C3C" in text(page, "#consolelist"), \
+        # 識別子はペアリング引数の [1..6] = 本体 MAC の6バイト。頭の
+        # フェーズ番号(01)と末尾のフェーズ依存バイト(3c)は入らない
+        assert "ID 5301" in text(page, "#consolelist"), \
             text(page, "#consolelist")
         # ID は名前の右(装置の行と同じ作法)。フル識別子は title に
         idspan = page.locator("#consolelist .rowid").first
-        assert idspan.get_attribute("title") == "0100005e0053013c", \
+        assert idspan.get_attribute("title") == "00005e005301", \
             "フル識別子が title に無い"
         assert "ID " not in page.locator("#consolelist .meta").first \
             .inner_text(), "下段にも ID が出ている"
@@ -2870,7 +2872,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             "() => document.querySelectorAll('#consolelist .devrow').length"
             " === 2", timeout=10000)
         row1 = page.locator("#consolelist .devrow", has_text="リビングのSwitch2")
-        row2 = page.locator("#consolelist .devrow", has_text="ID BBBB")
+        row2 = page.locator("#consolelist .devrow", has_text="ID 22BB")
         prompt_value[0] = "1台目本体"
         row1.locator(".rowops button").click()
         # 相方の✎を、間を置かずに続けて押す(壊れていれば取れない/反映されない)

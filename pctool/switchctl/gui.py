@@ -2600,6 +2600,14 @@ function loopsJa(c) {
   return `${done}/${total} 周完了、`;
 }
 
+// HOST_INFO の a/b(ペアリング引数の先頭8バイト)から本体の MAC を取る。
+// 構造は [0]=フェーズ [1..6]=本体 BT MAC(LE) [7..]=フェーズ依存で、
+// 本体固有なのは [1..6] だけ(procon-protocol.md §7)。8バイトのまま
+// キーにすると、同じ本体でも登録の前後で別物になり名前が引き継がれない
+function hostMac(a, b) {
+  const hex = v => (v >>> 0).toString(16).padStart(8, '0');
+  return (hex(a) + hex(b)).slice(2, 14);
+}
 // 実機のログ。種別は firmware/main/app_log.h の app_log_kind_t と対応する。
 // 生の英字と a=/b= のままだと読めないので、意味と数値の意味づけを与える
 const LOG_JA = {
@@ -2633,10 +2641,11 @@ const LOG_JA = {
   STATE:         (a, b) => `状態: ${STATE_NAMES[a] || a} → ${STATE_NAMES[b] || b}`,
   OTA:           (a, b) => `ファームウェアを更新しました(${b} バイト)`,
   HOST_INFO:     (a, b) => {
-    const hex = v => (v >>> 0).toString(16).padStart(8, '0');
-    const hi = hex(a) + hex(b);
-    const nm = (state && state.consoles || {})[hi];
-    return `本体情報: ${hex(a)} ${hex(b)}`
+    // ペアリング引数の先頭8バイト。本体固有なのは [1..6] の MAC だけで、
+    // 先頭のフェーズ番号と末尾のバイトはフェーズで変わる(→ hostMac)
+    const mac = hostMac(a, b);
+    const nm = (state && state.consoles || {})[mac];
+    return `本体 ${mac}`
       + (nm ? `(=「${nm}」)` : '(「Switch 本体」の ✎ で名前を付けられます)');
   },
   AWAIT_TIMEOUT: (a, b) => b

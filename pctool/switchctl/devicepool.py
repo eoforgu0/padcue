@@ -20,6 +20,20 @@ import time
 from .client import DeviceClient, DeviceError, connect_verified
 
 
+def host_mac(a, b) -> str:
+    """HOST_INFO の a/b(ペアリング引数の先頭8バイト)から本体の MAC を取る。
+
+    引数の構造は `[0]=フェーズ [1..6]=本体 BT MAC(LE) [7..]=フェーズ依存`
+    (docs/design/procon-protocol.md §7)。**本体固有なのは [1..6] だけ**で、
+    先頭のフェーズ番号(01=新規ペアリング / 04=登録済みの記録手渡し)と
+    末尾のバイトはフェーズによって変わる。8バイトまるごとをキーにすると、
+    同じ本体でも登録の前後で別物として扱われ、付けた名前が引き継がれない
+    (2026-08-12 に判明)。
+    """
+    raw = f"{int(a):08x}{int(b):08x}"
+    return raw[2:14]        # [1..6] の6バイト = 12桁hex
+
+
 class DeviceLink:
     """1装置ぶんの接続・キャッシュ・収集スレッド。"""
 
@@ -37,7 +51,7 @@ class DeviceLink:
         self.listing: dict = {}          # 手順名 -> ハッシュ(直近の LIST)
         self.error: str = ""             # 直近の収集エラー(空 = 健康)
         self.error_exc: Exception | None = None   # 同・例外そのもの(表示整形用)
-        self.host_info: str = ""         # つながっている本体の識別子(16進16桁)
+        self.host_info: str = ""         # つながっている本体の識別子(MAC 12桁hex)
         self.at: float = 0.0             # キャッシュ時刻(UNIX 秒)
         self.run_started_at: float = 0.0  # 実行中ならその開始時刻(0 = 実行なし)
         self._wt_at: float = 0.0         # 書き戻し(write-through)の時刻(単調時計)
@@ -150,8 +164,7 @@ class DeviceLink:
         try:
             for e in self.project.read_logs(2000):
                 if e.get("dev") == dev_id and e.get("kind") == "HOST_INFO":
-                    self.host_info = (f"{int(e.get('a', 0)):08x}"
-                                      f"{int(e.get('b', 0)):08x}")
+                    self.host_info = host_mac(e.get("a", 0), e.get("b", 0))
         except Exception:   # noqa: BLE001  記録が読めなくても収集は始める
             pass
 
@@ -208,11 +221,9 @@ class DeviceLink:
                 if h in names:
                     e["name"] = names[h]
             elif e.get("kind") == "HOST_INFO":
-                # 本体識別子(USB ペアリング引数。実測で本体ごとに固有・
-                # 安定を確認 2026-08-06)。「どの Switch につながっているか」
-                # の表示に使う
-                self.host_info = (f"{int(e.get('a', 0)):08x}"
-                                  f"{int(e.get('b', 0)):08x}")
+                # 本体識別子。「どの Switch につながっているか」の表示と、
+                # 本体への命名(consoles)のキーに使う
+                self.host_info = host_mac(e.get("a", 0), e.get("b", 0))
         dev_id = self.cfg.get("id") or getattr(self.client, "device_id", "")
         self.project.append_logs(entries, dev=dev_id)
 
