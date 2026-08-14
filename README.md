@@ -126,15 +126,17 @@ firmware/       マイコン側(ESP-IDF)
 pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デバイス)
 ```
 
-### 読む順(設計を追う場合)
+文書の一覧と選び方は [docs/README.md](docs/README.md) にあります。設計を頭から
+追う場合の順:
 
 0. [glossary.md](docs/glossary.md) — 固有用語
 1. [hardware-design.md](docs/hardware-design.md) — 何を作るのか、なぜこの構成か(第一原理は「入力精度」)
 2. [specs/procedure-format.md](docs/specs/procedure-format.md) — 手順データの形式と実行モデル
 3. [specs/flow-format.md](docs/specs/flow-format.md) — 手順の書き方(正本形式)
-4. [specs/comm-protocol.md](docs/specs/comm-protocol.md) — PC ⇔ マイコンの通信
+4. [specs/comm-protocol.md](docs/specs/comm-protocol.md) — PC とマイコンの通信
 5. [design/firmware-architecture.md](docs/design/firmware-architecture.md) — マイコン内部の設計
 6. [design/procon-protocol.md](docs/design/procon-protocol.md) — コントローラーとして名乗るためのプロトコル(実測値つき)
+7. [design/gui-principles.md](docs/design/gui-principles.md) — 画面の見た目・文言・配置を説明できる状態に保つための原則
 
 ---
 
