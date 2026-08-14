@@ -29,11 +29,13 @@ class _Proc:
 
 
 def _first_await(events, start_index: int, start_base: int,
-                 skip: int) -> tuple[int | None, int]:
-    """最初に到達する待機分岐の(再開点基準の)フレームと腕数を返す。
+                 skip: int) -> tuple[int | None, int, int, int]:
+    """最初に到達する待機分岐について
+    (フレーム, 腕の数, 待つ上限フレーム, 時間切れの行き先)を返す。
 
-    実行系(engine.run)と同じ順で歩く: Djnz が base を進め、ジャンプに従う。
-    待機分岐が無ければ (None, 0)。
+    フレームは再開点を基準にした値。実行系(engine.run)と同じ順で歩く:
+    Djnz が base を進め、ジャンプに従う。待機分岐が無ければ
+    (None, 0, 0, 0)。
     """
     counters: dict[int, int] = {}
     base = start_base

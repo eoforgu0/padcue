@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import json
+
 from .client import DeviceClient, DeviceError
 
 
@@ -58,8 +60,7 @@ def rename_device(project, old: str, new: str) -> tuple[bool, str]:
     # 改名すると監視(連動停止・自動合流)が対象を見失うため、どの入口
     # (GUI/CLI)からでもここで断る
     try:
-        import json as _json
-        run = _json.loads((project.root / "runstate.json")
+        run = json.loads((project.root / "runstate.json")
                           .read_text(encoding="utf-8")).get("run")
         if run and run.get("active") and old in run.get("members", []):
             return False, f"{old} は連結実行中です。止めてから改名してください"

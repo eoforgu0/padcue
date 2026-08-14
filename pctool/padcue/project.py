@@ -479,8 +479,7 @@ class Project:
         )
 
     def _friendly(self, name: str, e: Exception) -> str:
-        import json as _json
-        if isinstance(e, _json.JSONDecodeError):
+        if isinstance(e, json.JSONDecodeError):
             return (f"手順「{name}」のファイルが壊れています"
                     f"({e.lineno}行目{e.colno}文字目から読めません)")
         if isinstance(e, UnicodeDecodeError):
