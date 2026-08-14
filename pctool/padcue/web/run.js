@@ -386,9 +386,6 @@ function updateLane(lane, d) {
   const late = awaiting && autoJoinLive && c.run.late
     && c.run.late.dev === lane.name
     && c.run.late.at * 1000 >= (lane.parkedAt || 0) - 2000;
-  const showGreen = !awaiting && inRun && c.run.last_join
-    && !c.run.last_join.solo
-    && Date.now() / 1000 - c.run.last_join.at < 3;
   if (awaiting && autoJoinLive) {
     lane.chip.className = 'chip wait';
     lane.chip.textContent = '相方待ち';
@@ -396,7 +393,7 @@ function updateLane(lane, d) {
   // 作り直すのは形が変わったときだけ。毎秒作り直すと、開いた「だけ進める…」
   // が1秒で畳まれ、経過秒のためだけにボタンの DOM が捨てられる
   const aKey = JSON.stringify([
-    !!awaiting, d.await_gen || 0, autoJoinLive, inRun, !!late, showGreen,
+    !!awaiting, d.await_gen || 0, autoJoinLive, inRun, !!late,
     d.arm_names || [], c ? c.arm : 0]);
   if (lane.awaitKey !== aKey) {
     lane.awaitKey = aKey;
@@ -430,9 +427,6 @@ function updateLane(lane, d) {
                    armRow(d, lane.name, lane.awaitbox));
         lane.awaitbox.append(det);
       }
-    } else if (showGreen) {
-      lane.awaitbox.append(el('div', 'msg ok',
-        `そろって進みました(ズレ ${c.run.last_join.skew_ms ?? '?'}ms)`));
     }
   }
   // 「実行中のまま戻らない」の自動復旧(1台時と同じ規則を装置ごとに)
@@ -557,6 +551,12 @@ function manualTarget() {
 
 let loadedFormation = '';    // 呼び出したプリセットの名前('' = 未使用)
 let cplStopSeen = 0;         // 連動停止の知らせを × で閉じた時刻(at)
+let cplJoinSeen = 0;         // ズレの大きい合流を知らせた時刻(at)
+
+// この ms を超えた合流のズレだけ知らせる。ふだんは数十ms、WiFi 次第で
+// 百ms強(design/multi-device-plan.md §0)なので、その倍を超えたら想定外。
+// 通常のズレをいちいち出すと、読み切れないうちに消える文が毎回増える
+const JOIN_SKEW_WARN_MS = 300;
 
 function cpl() { return state.coupling || null; }
 
@@ -947,6 +947,18 @@ function renderCoupling() {
   }
   const run = c.run || {};
   const active = !!run.active;
+  // そろって進んだこと自体は知らせない(チップが「実行中」へ戻るので状態で
+  // 分かる。原則 §5)。**看過できないズレのときだけ**、閉じるまで残る警告に
+  // する。数字そのものはログに残っている
+  const lj = run.last_join;
+  if (lj && !lj.solo && lj.at !== cplJoinSeen
+      && Math.abs(lj.skew_ms || 0) >= JOIN_SKEW_WARN_MS) {
+    cplJoinSeen = lj.at;
+    show('cactmsg', 'warn',
+         `合流のズレが ${lj.skew_ms}ms ありました(ふだんは数十ms)。`
+         + 'ゲーム側の操作が噛み合わないようなら、手順の側で吸収して'
+         + 'ください(待つ長さを足すなど)');
+  }
   // 実行系ボタン
   const someBusy = devs.slice(0, 2).some(d => !d.error
     && (d.running || d.awaiting));
@@ -1000,7 +1012,11 @@ function renderCoupling() {
     both.dataset.key = bKey;
     both.textContent = '';
     (arms.length ? arms : ['選択肢1', '選択肢2']).forEach((a, i) => {
-      const b = el('button', 'small', `${a}(両方へ)`);
+      // レーンの選択肢と同じ姿にする(原則 §5: 同じ意味は同じ形)。
+      // 両方が選択待ち=人を待っている唯一のボタンなので注意色で塗り、
+      // それ以外は押せない姿で置いたままにする。名前に「(両方へ)」は
+      // 付けない —— すぐ左の見出しが「選択肢を両方へ同時に送る」なので
+      const b = el('button', ready ? 'primary waiting' : 'primary', a);
       b.disabled = !ready;
       b.title = ready ? '両方へ同時に SELECT を送ります'
                       : '両方が選択待ちのときに押せます';
@@ -1009,8 +1025,7 @@ function renderCoupling() {
         // 押した本人が見ている軽い操作なので、成功はそばで数秒だけ。
         // 何を送ったかはボタンの名前で分かるので繰り返さない
         if (r.error) show('cactmsg', 'err', r.error);
-        else flashOk(document.getElementById('cokmsg'),
-                     `送りました(ズレ ${r.skew_ms}ms)`);
+        else flashOk(document.getElementById('cokmsg'), '送りました');
         refresh();
       };
       both.append(b);

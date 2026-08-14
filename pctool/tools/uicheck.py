@@ -3245,18 +3245,22 @@ def run_coupling(c: Checker, page, proj: Project,
             "正常な相方待ちに黄色が使われている"
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
         assert "だけ進める" in lane_at(page, 0).locator(".soloadv").inner_text()
-        # そろったら緑「そろって進みました」
+        # そろって進んだことは知らせない。チップが「実行中」へ戻るので状態で
+        # 分かる(2026-08-15 指摘: 一瞬で消える文は読み切れず、細かい数字が
+        # 要るならログを見ればよい)。ズレが大きいときだけ #cactmsg に残る
         page.wait_for_function(
             "() => {"
-            "  const ls = document.querySelectorAll('#lanes .lane');"
-            "  return [...ls].some(ln => {"
-            "    const m = ln.querySelector('.lawait .msg.ok');"
-            "    return m && m.textContent.includes('そろって進みました');"
-            "  }); }", timeout=15000)
+            "  const l1 = document.querySelectorAll('#lanes .lane')[0];"
+            "  const ch = l1 && l1.querySelector('.chip:not(.runchip)');"
+            "  return ch && ch.textContent !== '相方待ち'; }",
+            timeout=15000)
+        assert page.locator("#lanes .lane .lawait .msg.ok").count() == 0, \
+            "そろっただけで知らせが出ている(状態で伝わるので要らない)"
         wait_lanes_idle(page)
         set_lane_proc(page, 1, "選んで進む")
         page.wait_for_timeout(300)
-    c.check("相方待ちは青、そろった直後は緑(黄は使わない)", t_wait_colors)
+    c.check("相方待ちは青。そろったら知らせを出さない(黄は使わない)",
+        t_wait_colors)
 
     def t_oneshot_manual():
         page.click("#coneshot")
@@ -3272,7 +3276,15 @@ def run_coupling(c: Checker, page, proj: Project,
             "(state.devices || []).slice(0, 2).every(d => d.awaiting)"), \
             "ワンショット中なのに自動で選ばれた"
         assert "両方そろいました" in page.locator("#cmsg").inner_text()
-        page.locator("#cbotharms button", has_text="出た(両方へ)").click()
+        # 人を待っている唯一のボタンなので、レーンの選択肢と同じ姿
+        # (注意色で塗る・同じ大きさ)。名前に「(両方へ)」は付けない
+        # ——すぐ左の見出しが「選択肢を両方へ同時に送る」(2026-08-15 指摘)
+        arm = page.locator("#cbotharms button", has_text="出た").first
+        cls = arm.get_attribute("class") or ""
+        assert "waiting" in cls and "primary" in cls, cls
+        assert "small" not in cls, "他のボタンと大きさが違う"
+        assert arm.inner_text().strip() == "出た", arm.inner_text()
+        arm.click()
         # 正常・軽量・自分で押した操作の成功は、ボタンのそばに数秒だけ出て
         # 自ら消える(毎回メッセージの席が増えて下の行がずれない。2026-08-08)
         page.wait_for_function(
