@@ -13,6 +13,7 @@ import pytest
 
 from padcue import gui
 from padcue.project import Project
+from tests.helpers import drop_handler_state
 
 
 @pytest.fixture
@@ -25,11 +26,15 @@ def proj(tmp_path):
 @pytest.fixture
 def server(proj):
     gui._Handler.project = proj
+    drop_handler_state()          # 前の検査のプール・見張りを持ち込まない
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_port}"
-    srv.shutdown()
-    srv.server_close()
+    try:
+        yield f"http://127.0.0.1:{srv.server_port}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        drop_handler_state()
 
 
 def get(url):

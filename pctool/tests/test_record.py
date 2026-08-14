@@ -12,6 +12,7 @@ from padcue.binfmt import BUTTONS
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 from padcue.record import Recorder
+from tests.helpers import drop_handler_state
 
 FRAME = 16666667 / 1e9   # 1 フレームの秒数
 
@@ -89,12 +90,16 @@ def server(tmp_path):
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
+    drop_handler_state()          # 前の検査のプール・見張りを持ち込まない
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_port}", proj
-    srv.shutdown()
-    srv.server_close()
-    dev.stop()
+    try:
+        yield f"http://127.0.0.1:{srv.server_port}", proj
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        drop_handler_state()
+        dev.stop()
 
 
 def post(url, obj):

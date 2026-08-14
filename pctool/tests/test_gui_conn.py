@@ -17,6 +17,7 @@ import pytest
 from padcue import gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
+from tests.helpers import drop_handler_state
 
 
 @pytest.fixture
@@ -30,9 +31,7 @@ def env(tmp_path):
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    if gui._Handler.pool is not None:
-        gui._Handler.pool.close()
-        gui._Handler.pool = None
+    drop_handler_state()
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
@@ -42,9 +41,7 @@ def env(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
-        if gui._Handler.pool is not None:
-            gui._Handler.pool.close()
-            gui._Handler.pool = None
+        drop_handler_state()
         dev.stop()
 
 

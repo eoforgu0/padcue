@@ -164,3 +164,24 @@ def run_handshake(device: Device) -> None:
     for exp in handshake_sequence(MAC):
         reply = device.send_output(exp.out)
         verify_reply(exp, reply)
+
+
+# ---- 操作画面(gui._Handler)の後片づけ ----
+
+def drop_handler_state():
+    """見張り・連結・装置プールを畳んで、クラス属性を空に戻す。
+
+    畳まずに残すと、繋がらない接続先を掴んだ収集スレッドが次の検査まで
+    生き残る。しかも DevicePool.close() は閉鎖の印を持たないので、生きて
+    いる見張り(Coupler / RunWatcher)が links() を呼んだ拍子に**閉じた
+    はずのプールへ新しい接続と収集スレッドが生える**。誰も止められない。
+
+    プールだけ畳んで見張りを残すのが一番危ない組み合わせなので、3つを
+    まとめて畳む入口をここに置く(検査ごとに書き写さない)。
+    """
+    from padcue import gui
+    for attr in ("watcher", "coupler", "pool"):
+        cur = getattr(gui._Handler, attr, None)
+        if cur is not None:
+            cur.close()
+            setattr(gui._Handler, attr, None)

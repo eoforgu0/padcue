@@ -11,6 +11,7 @@ import pytest
 from padcue import cli, gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
+from tests.helpers import drop_handler_state
 
 
 @pytest.fixture
@@ -101,12 +102,16 @@ def guiserver(proj, device):
     cfg["port"] = device.port
     proj.save_config(cfg)
     gui._Handler.project = proj
+    drop_handler_state()          # 前の検査のプール・見張りを持ち込まない
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
-    yield f"http://127.0.0.1:{srv.server_port}"
-    srv.shutdown()
-    srv.server_close()
+    try:
+        yield f"http://127.0.0.1:{srv.server_port}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        drop_handler_state()
 
 
 def http_get(url):

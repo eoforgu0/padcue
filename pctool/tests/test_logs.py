@@ -161,8 +161,11 @@ def test_logs_are_trimmed_and_clearable(tmp_path):
     p.append_logs([{"t_ms": i, "kind": "BOOT", "a": i, "b": 0}
                    for i in range(p.LOG_KEEP * 2 + 10)])
     kept = p.read_logs(limit=10**6)
-    assert len(kept) <= p.LOG_KEEP, len(kept)
+    # 「上限以下」では、削りすぎる回帰(周回の記録が黙って消える)を
+    # 通してしまう。残す量まで決める
+    assert len(kept) == p.LOG_KEEP, len(kept)
     assert kept[-1]["a"] == p.LOG_KEEP * 2 + 9, "新しい側が捨てられている"
+    assert kept[0]["a"] == p.LOG_KEEP + 10, "古い側の切り口がずれている"
     p.clear_logs()
     assert p.read_logs() == []
 

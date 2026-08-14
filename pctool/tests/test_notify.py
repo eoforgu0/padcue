@@ -18,6 +18,7 @@ import pytest
 from padcue import gui
 from padcue.notify import RunWatcher
 from padcue.project import Project
+from tests.helpers import drop_handler_state
 
 
 class FakeLink:
@@ -221,20 +222,6 @@ def test_台帳から消えた装置の控えを残さない():
 
 # ---- 配信(/api/events) ----
 
-def _drop_handler_state():
-    """見張り・連結・装置プールを畳む。
-
-    畳まずに残すと、繋がらない接続先(既定の pademu.local)を掴んだ収集
-    スレッドが次のテストまで生き残り、次に別のプロジェクトで作り直すときの
-    片付けが名前解決の待ちに引っかかって数秒止まる(後続のテストが timeout)。
-    """
-    for attr in ("watcher", "coupler", "pool"):
-        cur = getattr(gui._Handler, attr)
-        if cur is not None:
-            cur.close()
-            setattr(gui._Handler, attr, None)
-
-
 @pytest.fixture
 def server(tmp_path):
     proj = Project(tmp_path)
@@ -246,13 +233,13 @@ def server(tmp_path):
     cfg["host"] = ""
     proj.save_config(cfg)
     gui._Handler.project = proj
-    _drop_handler_state()
+    drop_handler_state()
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         yield f"http://127.0.0.1:{srv.server_port}"
     finally:
-        _drop_handler_state()
+        drop_handler_state()
         srv.shutdown()
         srv.server_close()
 

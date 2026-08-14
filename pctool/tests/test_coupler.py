@@ -20,6 +20,7 @@ from padcue import gui
 from padcue.coupler import Coupler
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
+from tests.helpers import drop_handler_state
 
 # 待機分岐込みの短い手順(speed=2000 でほぼ即座に駐機まで進む)
 JOIN_FLOW = {
@@ -57,12 +58,7 @@ def env(tmp_path):
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    if gui._Handler.coupler is not None:
-        gui._Handler.coupler.close()
-        gui._Handler.coupler = None
-    if gui._Handler.pool is not None:
-        gui._Handler.pool.close()
-        gui._Handler.pool = None
+    drop_handler_state()
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -70,12 +66,7 @@ def env(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
-        if gui._Handler.coupler is not None:
-            gui._Handler.coupler.close()
-            gui._Handler.coupler = None
-        if gui._Handler.pool is not None:
-            gui._Handler.pool.close()
-            gui._Handler.pool = None
+        drop_handler_state()
         d1.stop()
         d2.stop()
 
@@ -258,11 +249,15 @@ def test_transient_error_does_not_end_run(env):
     assert post(base, "/api/couple_run", {"plan": plan(loops=0)}).get("ok")
     wait_until(lambda: all(d.get("running") or d.get("awaiting")
                            for d in devs(base)))
-    # 2P の収集を一瞬だけ失敗させる(リンクの error を直接立てる。収集係が
-    # 次のサイクルで健康に戻す)
+    # 2P の収集を一瞬だけ失敗させる。収集係(約1秒周期)が次の成功で
+    # 消してしまうので、**見張り(0.5秒周期)が1回は必ず見る**ように、
+    # 消される側を止めてから立てる。以前は立てて 1.2 秒眠るだけで、
+    # 窓に入らないと猶予の分岐を一度も通らないまま緑になっていた
     link2 = gui._Handler.pool.get("2P")
+    link2.stop()                      # 収集係だけ止める(接続は保つ)
     link2.error = "一過性の模擬エラー"
     time.sleep(1.2)
+    assert link2.error, "エラーが消えている(見張りが見る前に上書きされた)"
     end = time.monotonic() + 4.0
     while time.monotonic() < end:
         snap = get(base, "/api/state")["coupling"]

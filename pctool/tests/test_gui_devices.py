@@ -15,9 +15,11 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from padcue import discover as discover_mod
 from padcue import gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
+from tests.helpers import drop_handler_state
 
 
 @pytest.fixture
@@ -32,9 +34,7 @@ def env(tmp_path):
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    if gui._Handler.pool is not None:
-        gui._Handler.pool.close()
-        gui._Handler.pool = None
+    drop_handler_state()
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -42,9 +42,7 @@ def env(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
-        if gui._Handler.pool is not None:
-            gui._Handler.pool.close()
-            gui._Handler.pool = None
+        drop_handler_state()
         d1.stop()
 
 
@@ -71,20 +69,35 @@ def wait_until(fn, timeout=8.0):
     return fn()
 
 
-def test_scan_hides_mocks_and_registered(env):
-    """候補 = 台帳にいない実機だけ。mock と登録済みは何台いても出ない。"""
+def test_scan_hides_mocks_and_registered(env, monkeypatch):
+    """候補 = 台帳にいない実機だけ。mock と登録済みは何台いても出ない。
+
+    探索の返事は差し替えて渡す。模擬デバイスを実際に UDP へ応答させると、
+    2台目以降が同じ番号(5557)を待ち受けられず、候補が1件も返らない状態でも
+    assert が通ってしまう —— 2026-08-15 のレビューまで、この検査は空の列に
+    対する恒真だった。UDP そのものは test_discover.py が見ている。ここで
+    見たいのは絞り込みの規則。
+    """
     _proj, _d1, base = env
-    d2 = MockDevice(speed=2000.0)          # id は既定の mock00000000
-    d2.start()
-    try:
-        r = post(base, "/api/device_scan", {})
-        assert r.get("ok")
-        ids = [f["id"] for f in r["found"]]
-        assert "aaaa00000001" not in ids, "登録済みの個体が候補に出た"
-        assert not any(i.startswith("mock") for i in ids), \
-            "mock が自動経路の候補に出た(偽成功の入り口)"
-    finally:
-        d2.stop()
+    found = [
+        discover_mod.Found(host="192.0.2.10", port=5555,
+                           device_id="aaaa00000001", fw="1", how="探索"),
+        discover_mod.Found(host="192.0.2.11", port=5555,
+                           device_id="mock00000000", fw="1", how="探索"),
+        discover_mod.Found(host="192.0.2.12", port=5555,
+                           device_id="bbbb00000002", fw="1", how="探索"),
+        discover_mod.Found(host="192.0.2.13", port=5555,
+                           device_id="", fw="1", how="名前"),
+    ]
+    monkeypatch.setattr(gui, "discover", lambda *a, **k: list(found))
+    r = post(base, "/api/device_scan", {})
+    assert r.get("ok")
+    ids = [f["id"] for f in r["found"]]
+    assert "aaaa00000001" not in ids, "登録済みの個体が候補に出た"
+    assert not any(i.startswith("mock") for i in ids), \
+        "mock が自動経路の候補に出た(偽成功の入り口)"
+    assert "" not in ids, "個体を名乗らない返事が候補に出た"
+    assert ids == ["bbbb00000002"], ids
 
 
 def test_add_rename_remove_roundtrip(env):
