@@ -211,6 +211,13 @@ python -m padcue ota
 編集・取り消し・未保存警告・未接続時の抑止などを「こうしたらこうなるはず」で
 照合します(失敗した項目はスクリーンショットを残します)。
 
+上記はすべて [CI](.github/workflows/ci.yml) でも回します(PC 側の検査と lint、
+Windows でのブラウザ検査、ファームウェアのビルドと割り込み経路の配置確認)。
+
+- 版ごとの変更は [CHANGELOG.md](CHANGELOG.md)
+- 手を入れるときの作法は [CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全上の前提と脆弱性の報告先は [SECURITY.md](SECURITY.md)
+
 ---
 
 ## ライセンス

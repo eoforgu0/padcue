@@ -1,7 +1,9 @@
 name: CI
 
-# 1日に数回の push で回す想定。マトリクス(OS x Python 版)は組まない
-# — 実行時の依存がゼロで OS 依存のコードも無く、組んでも同じ結果しか出ない。
+# 対象は Windows。バッチ(padcue.bat)から起動する道具なので、画面まわりの
+# 検査はその Windows で回す。パッケージ本体は標準ライブラリだけで書かれていて
+# OS に依存しないため、こちらは速い ubuntu で回す(Python 版のマトリクスは
+# 組まない。宣言している最小版で通れば、それ以降の版でも同じ結果になる)。
 on:
   push:
   pull_request:
@@ -31,6 +33,46 @@ jobs:
         env:
           PADCUE_REQUIRE_GCC: "1"
         run: python -m pytest -q
+
+  ui:
+    name: 画面(ブラウザで実操作)
+    # 利用者が実際に動かすのは Windows。画面の資産は 5,800 行あり、pytest 側は
+    # 定数表の突き合わせしか見ていない。ここが唯一「押したらどうなるか」を
+    # 見る場所なので、対象の OS でそのまま回す。
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # ブラウザは playwright が取ってくる(Windows なので OS 側の追加は不要)
+      - name: 画面検査の依存を入れる
+        run: |
+          pip install playwright
+          playwright install chromium
+
+      # 実機に触れないよう、道具の側で探索先を模擬デバイスに固定している
+      # (tools/_localonly.py)。CI には実機がいないので二重に安全。
+      - name: 操作画面の検査(134 項目)
+        run: python pctool/tools/uicheck.py uicheck-out
+
+      - name: 手順書どおりの通し確認
+        run: python pctool/tools/runbook_walk.py runbook-walk-out
+
+      # 失敗した項目はスクリーンショットが残る。CI のログだけでは
+      # 「何がどう違ったか」が分からないので持ち帰れるようにする
+      - name: 失敗時の画面を残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uicheck-screenshots
+          path: |
+            uicheck-out/*.png
+            runbook-walk-out/*.png
+          if-no-files-found: ignore
 
   firmware:
     name: ファームウェア(ビルド)

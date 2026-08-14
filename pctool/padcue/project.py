@@ -26,6 +26,10 @@ from .proto import DEFAULT_PORT
 # プロジェクトの外を読み書き・削除できてしまうので必ずここで弾く。
 # 長さの上限 32 バイトは実機の保存名の制約(APP_STORE_MAX_NAME)に合わせる
 _NAME_NG = set('/\\:*?"<>|')
+# Windows が装置名として予約している綴り(拡張子を付けても作れない)。
+# 通らない名前を保存できてしまうと、作った直後に読み書きが失敗する
+_NAME_RESERVED = {'CON', 'PRN', 'AUX', 'NUL'} | {
+    f'{p}{i}' for p in ('COM', 'LPT') for i in range(1, 10)}
 
 
 def validate_name(name: str) -> str:
@@ -41,6 +45,8 @@ def validate_name(name: str) -> str:
                          '(/ \\ : * ? " < > | .. は不可)')
     if n.startswith("."):
         raise ValueError("名前を「.」で始めることはできません")
+    if n.upper() in _NAME_RESERVED:
+        raise ValueError(f"「{n}」は Windows が予約している名前なので使えません")
     return n
 
 
@@ -482,7 +488,8 @@ class Project:
             wait_branch_arms=c.wait_branch_arms,
         )
 
-    def _friendly(self, name: str, e: Exception) -> str:
+    def error_message(self, name: str, e: Exception) -> str:
+        """読み込みの失敗を、利用者に見せる文にする(GUI も使う)。"""
         if isinstance(e, json.JSONDecodeError):
             return (f"手順「{name}」のファイルが壊れています"
                     f"({e.lineno}行目{e.colno}文字目から読めません)")
@@ -495,7 +502,7 @@ class Project:
         try:
             return self.build(name), ""
         except (FlowError, ValueError, UnicodeDecodeError, OSError) as e:
-            return None, self._friendly(name, e)
+            return None, self.error_message(name, e)
 
     # ---- 編集(GUI から使う読み書き)----
 

@@ -312,7 +312,7 @@ class _Handler(BaseHTTPRequestHandler):
                               "(文字コードが UTF-8 ではないか、壊れています)"}, 200)
             except Exception as e:   # noqa: BLE001
                 return self._json(
-                    {"error": self.project._friendly(name, e)}, 200)
+                    {"error": self.project.error_message(name, e)}, 200)
         if u.path == "/api/part":
             name = parse_qs(u.query).get("name", [""])[0]
             try:
