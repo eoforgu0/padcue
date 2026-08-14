@@ -34,14 +34,16 @@ function orderedProcs() {
 // (計画 A「目のトグルで実行・監視の一覧から除外」)
 function visibleProcs() { return orderedProcs().filter(p => !p.hidden); }
 
-const BUTTONS = ['A','B','X','Y','L','R','ZL','ZR','DU','DD','DL','DR',
-                 'PLUS','MINUS','HOME','CAPTURE','LS','RS'];
-const AXIS_COLS = ['LX','LY','RX','RY','GP','GY','GR','AX','AY','AZ'];
-// 部品の列。**常に全部を保存する**(書かない列があると「直前のまま」という
-// 見えない状態が混ざるため)。表示だけは、いま使えないジャイロ/加速度を既定で畳む
+// ボタンの一覧は、画面に並べる組(BTN_GROUPS)を正本にして、そこから作る。
+// 一覧と組を別々に書くと、ボタンを足したときに片方だけ直して食い違う
+// (対応は tests/test_manage.py が binfmt.BUTTONS と突き合わせて検査)
 const BTN_GROUPS = [['A','B','X','Y'], ['L','R','ZL','ZR'],
                     ['DU','DD','DL','DR'],
                     ['PLUS','MINUS','HOME','CAPTURE','LS','RS']];
+const BUTTONS = [].concat(...BTN_GROUPS);
+const AXIS_COLS = ['LX','LY','RX','RY','GP','GY','GR','AX','AY','AZ'];
+// 部品の列。**常に全部を保存する**(書かない列があると「直前のまま」という
+// 見えない状態が混ざるため)。表示だけは、いま使えないジャイロ/加速度を既定で畳む
 const STICK_COLS = ['LX','LY','RX','RY'];
 const MOTION_COLS = ['GP','GY','GR','AX','AY','AZ'];
 // off は「その行を飛ばす」印。画面では右端のチェックで切り替える(列としては出さない)
@@ -108,10 +110,7 @@ const COLHINT = {
      + '同じ状態になり、ジャイロが効かなくなることがあります',
   rep:'この行を何フレーム分くり返すか',
   F:'行番号(確認用)'};
-for (const b of ['A','B','X','Y','L','R','ZL','ZR','DU','DD','DL','DR',
-                 'PLUS','MINUS','HOME','CAPTURE','LS','RS']) {
-  COLHINT[b] = '1 = 押す / 空欄 = 離す';
-}
+for (const b of BUTTONS) COLHINT[b] = '1 = 押す / 空欄 = 離す';
 const PALETTE = [
   ['press','押して離す'], ['hold','押したまま'], ['release','離す'],
   ['wait','待つ'], ['stick','スティック'], ['gyro','ジャイロ'],
