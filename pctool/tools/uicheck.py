@@ -160,6 +160,11 @@ def drag(page, box, tx, ty, steps: int = 8):
     page.wait_for_timeout(300)
 
 
+def chip_text(page) -> str:
+    """1台構成のレーンの状態チップ(待機中・実行中など)。"""
+    return text(page, "#lanes .lane .chip:not(.runchip)")
+
+
 def lane(page):
     """1台系(run_all)で使う、唯一のレーン(新構造: 台数に関わらず常にレーン)。"""
     return page.locator("#lanes .lane").first
@@ -285,15 +290,27 @@ def main() -> int:
 
 def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             prompt_value: list, dialogs: list):
+    """1台での検査を、画面の区画ごとに順に流す。
+
+    区画は画面の見出しと同じ切り方。前の区画の後始末に依存しないよう、
+    どの区画も自分で必要な状態を作ってから確かめる。
+    """
+    run_home(c, page)
+    run_devices(c, page, dev)
+    run_procedures(c, page, proj, dev, prompt_value)
+    run_flow_editor(c, page, proj, prompt_value)
+    run_part_editor(c, page, proj, prompt_value, dialogs)
+    run_disconnected(c, page, dev)
+
+
+def run_home(c: Checker, page):
+    """実行・監視の画面(1台のときのレーン)。"""
     # ================= 実行・監視 =================
     # 常時レーン化(D構造改修)後の1台系検査。装置台数に関わらず常にレーン
     # (原則 §1 系「1台と2台は同型」)なので、ここは #lanes .lane が1本だけの
     # 状態を前提に、run_multi/run_coupling と同じ流儀(lane()・has_text)で
     # レーンを操作する。接続・診断は装置カードの開閉式詳細(dev_row)側。
     print("[実行・監視]", flush=True)
-
-    def chip_text() -> str:
-        return text(page, "#lanes .lane .chip:not(.runchip)")
 
     def t_lane_smoke():
         """1台構成でもレーンが1本出て、実行・停止・開始ラベルが従来どおり働く。
@@ -305,7 +322,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert page.locator("#lanes .lane").count() == 1, "レーンが1本出ていない"
         ln = lane(page)
         assert "1P" in ln.locator("h2").inner_text(), "レーンの見出しに装置名が無い"
-        assert chip_text() == "待機中", chip_text()
+        assert chip_text(page) == "待機中", chip_text(page)
         names = ln.locator(".lproc option").all_inner_texts()
         assert names == ["周回で変える", "素材周回", "選んで進む"], names
         assert ln.locator(".lloops").input_value() == "0", \
@@ -325,6 +342,10 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             t_lane_smoke)
 
     # ---- 装置(格納庫)。接続・診断はここに集約されている(原則 §1) ----
+
+
+def run_devices(c: Checker, page, dev: MockDevice):
+    """装置カード(接続先・診断・詳細の開閉)。"""
     print("[装置]", flush=True)
 
     def t_dev_row_kv():
@@ -450,7 +471,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert "入力" in msg, f"空欄が受け付けられてしまう: {msg!r}"
         assert "探す" in msg, f"どうすればよいか書かれていない: {msg!r}"
         page.wait_for_timeout(1500)
-        assert chip_text() == "待機中", f"空欄の保存で接続が壊れた: {chip_text()}"
+        assert chip_text(page) == "待機中", \
+            f"空欄の保存で接続が壊れた: {chip_text(page)}"
         row.locator(".devhost").fill("127.0.0.1")
     c.check("接続先を空で保存しようとすると断られる", t_dev_empty_host_refused)
 
@@ -511,6 +533,11 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             t_dev_bad_host_recovers)
 
     # ---- 手順の実行 ----
+
+
+def run_procedures(c: Checker, page, proj: Project, dev: MockDevice,
+                   prompt_value: list):
+    """手順の転送・実行・停止・部分実行・待機分岐。"""
     print("[手順の実行]", flush=True)
 
     def t_select_switches_timeline():
@@ -568,7 +595,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert ln.locator("button", has_text="今すぐ止める").is_enabled(), \
             "実行中に即時停止が押せない"
         page.wait_for_timeout(1200)
-        assert "実行中" in chip_text(), chip_text()
+        assert "実行中" in chip_text(page), chip_text(page)
         # 進み具合はレーンの見出しに出る
         tp = ln.locator(".tlprog").inner_text()
         assert "周" in tp and "フレーム" in tp, f"進み具合が出ていない: {tp!r}"
@@ -779,7 +806,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         # 見る(2台での実効は連結の検査群が持つ)
         page.keyboard.press("F9")
         page.wait_for_timeout(400)
-        assert chip_text() == "待機中", f"F9 で状態が動いた: {chip_text()}"
+        assert chip_text(page) == "待機中", f"F9 で状態が動いた: {chip_text(page)}"
         page.click("#setbtn")
         page.wait_for_timeout(200)
         page.locator("#hotkeys").check()
@@ -900,8 +927,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(1400)
         assert ln.locator("button", has_text="今の周で止める").count() == 1, \
             "取り消したのに予約中のまま"
-        assert chip_text() == "実行中", \
-            f"取り消しただけなのに実行が止まった: {chip_text()}"
+        assert chip_text(page) == "実行中", \
+            f"取り消しただけなのに実行が止まった: {chip_text(page)}"
         ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         ln.locator(".lloops").fill("1")
@@ -1187,7 +1214,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert btns == ["出た(1P へ)", "出ない(1P へ)"], btns
         ln.locator(".lawait button").first.click()
         page.wait_for_timeout(900)
-        assert "選択待ち" not in chip_text(), chip_text()
+        assert "選択待ち" not in chip_text(page), chip_text(page)
     c.check("待機分岐: 選択待ち → 選択肢を選んで続行", t_wait_branch)
 
     def t_error_state():
@@ -1246,6 +1273,10 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("別の手順を呼ぶブロックが使える", t_call_block)
 
     # ================= 手順を編集 =================
+
+
+def run_flow_editor(c: Checker, page, proj: Project, prompt_value: list):
+    """フロー編集(ブロックの追加・並べ替え・取り消し・保存)。"""
     print("[手順を編集]", flush=True)
 
     def t_open_editor():
@@ -1930,6 +1961,11 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             t_proc_drag_keeps_open_flow)
 
     # ================= 部品を編集 =================
+
+
+def run_part_editor(c: Checker, page, proj: Project, prompt_value: list,
+                    dialogs: list):
+    """部品編集(表の入力・複製・行の操作・保存)。"""
     print("[部品を編集]", flush=True)
 
     def t_open_part():
@@ -2520,6 +2556,10 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("フォルダを跨ぐ名前は弾かれる", t_bad_part_name)
 
     # ================= 未接続 =================
+
+
+def run_disconnected(c: Checker, page, dev: MockDevice):
+    """装置が落ちているときの見え方(赤いレーンと案内)。"""
     print("[未接続]", flush=True)
 
     def t_disconnected():
@@ -2564,6 +2604,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "チップをクリックしても装置行が開かない"
     c.check("未接続: 装置行が自動で開いて赤くなり、チップから装置行へ飛べる(新設)",
             t_disconnected)
+
+
 
 
 
