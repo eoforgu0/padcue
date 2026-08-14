@@ -12,11 +12,11 @@ import time
 
 import pytest
 
-from switchctl.mockdevice import MockDevice
-from switchctl.client import DeviceClient
-from switchctl.project import Project
-from switchctl import binfmt
-from switchctl.dsl import compile_source
+from padcue.mockdevice import MockDevice
+from padcue.client import DeviceClient
+from padcue.project import Project
+from padcue import binfmt
+from padcue.dsl import compile_source
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ def test_log_kinds_are_known_to_the_gui():
     載っていない種別は生の英字のまま出てしまう(読めない)。
     """
     import re
-    from switchctl.gui import PAGE
+    from padcue.gui import PAGE
     m = re.search(r"const LOG_JA = \{(.*?)\n\};", PAGE, re.S)
     assert m, "LOG_JA が見つかりません"
     ja = set(re.findall(r"^\s{2}([A-Z_]+):", m.group(1), re.M))

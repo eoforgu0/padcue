@@ -15,9 +15,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from switchctl import gui
-from switchctl.notify import RunWatcher
-from switchctl.project import Project
+from padcue import gui
+from padcue.notify import RunWatcher
+from padcue.project import Project
 
 
 class FakeLink:
@@ -224,7 +224,7 @@ def test_台帳から消えた装置の控えを残さない():
 def _drop_handler_state():
     """見張り・連結・装置プールを畳む。
 
-    畳まずに残すと、繋がらない接続先(既定の padctl.local)を掴んだ収集
+    畳まずに残すと、繋がらない接続先(既定の pademu.local)を掴んだ収集
     スレッドが次のテストまで生き残り、次に別のプロジェクトで作り直すときの
     片付けが名前解決の待ちに引っかかって数秒止まる(後続のテストが timeout)。
     """
@@ -239,7 +239,7 @@ def _drop_handler_state():
 def server(tmp_path):
     proj = Project(tmp_path)
     proj.init_sample()
-    # 装置は登録しない(配信そのものを見るテスト)。既定の padctl.local を
+    # 装置は登録しない(配信そのものを見るテスト)。既定の pademu.local を
     # 掴ませると、繋がらない相手への収集で毎回数秒待つことになる
     cfg = proj.load_config()
     cfg["devices"] = []

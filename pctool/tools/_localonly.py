@@ -1,7 +1,7 @@
 """検査道具が本物のマイコンに触れないようにするための歯止め。
 
 uicheck.py / runbook_walk.py は「探す」を押し、見つかった相手に手順を転送して
-実行する。本物のマイコンが同じ LAN にいると `padctl.local` がそちらへ解決する
+実行する。本物のマイコンが同じ LAN にいると `pademu.local` がそちらへ解決する
 ため、素通しにすると **実機が繋がっている Switch 2 を実際に操作してしまう**
 (2026-07-31 に発生)。
 
@@ -15,8 +15,8 @@ uicheck.py / runbook_walk.py は「探す」を押し、見つかった相手に
 """
 import sys
 
-from switchctl import gui
-from switchctl.discover import Found
+from padcue import gui
+from padcue.discover import Found
 
 _LOCAL = ("127.0.0.1", "localhost", "::1")
 

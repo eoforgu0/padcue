@@ -16,9 +16,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from switchctl import gui
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import gui
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 # 待機分岐込みの短い手順(speed=2000 でほぼ即座に駐機まで進む)
 JOIN_FLOW = {

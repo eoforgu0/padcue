@@ -7,10 +7,10 @@ import time
 
 import pytest
 
-from switchctl.mockdevice import MockDevice
-from switchctl.client import DeviceClient
-from switchctl import binfmt
-from switchctl.dsl import compile_source
+from padcue.mockdevice import MockDevice
+from padcue.client import DeviceClient
+from padcue import binfmt
+from padcue.dsl import compile_source
 
 
 @pytest.fixture

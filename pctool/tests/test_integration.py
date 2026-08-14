@@ -14,11 +14,11 @@ import subprocess
 
 import pytest
 
-from switchctl import binfmt
-from switchctl.client import DeviceClient, proc_hash
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
-from switchctl.switchsim import parse_input_report
+from padcue import binfmt
+from padcue.client import DeviceClient, proc_hash
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
+from padcue.switchsim import parse_input_report
 from tests.test_procon import MAC, Device, procon_exe, run_handshake  # noqa: F401
 from tests.test_hostc import host_exe, run_c  # noqa: F401
 

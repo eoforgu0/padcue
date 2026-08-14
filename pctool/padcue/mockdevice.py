@@ -133,9 +133,9 @@ class MockDevice:
                     data, addr = s.recvfrom(512)
                 except OSError:
                     return
-                if not data.startswith(b"PADCTL?"):
+                if not data.startswith(b"PADEMU?"):
                     continue
-                reply = json.dumps({"magic": "padctl", "id": self.device_id,
+                reply = json.dumps({"magic": "pademu", "id": self.device_id,
                                     "fw": FW_VERSION, "port": self.port}).encode()
                 try:
                     s.sendto(reply, addr)
@@ -336,7 +336,7 @@ class MockDevice:
         o = msg.obj
         if t == proto.T_HELLO:
             return Message(proto.T_HELLO | proto.T_RESP, {
-                "magic": "padctl", "id": self.device_id, "fw": FW_VERSION,
+                "magic": "pademu", "id": self.device_id, "fw": FW_VERSION,
                 "schema": binfmt.SCHEMA_VERSION,
                 "mode": self.mode, "binterval": self.binterval,
                 "partition": "ota_0", "reset_reason": "POWERON",

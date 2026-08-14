@@ -15,9 +15,9 @@ import time
 
 import pytest
 
-from switchctl.client import DeviceClient
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue.client import DeviceClient
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 def make_flow(tmp_path, timeout_frames, on_timeout):

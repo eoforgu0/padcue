@@ -11,9 +11,9 @@
 """
 import pytest
 
-from switchctl.client import DeviceError
-from switchctl.devicepool import DeviceLink
-from switchctl.project import Project
+from padcue.client import DeviceError
+from padcue.devicepool import DeviceLink
+from padcue.project import Project
 
 
 class _FakeClient:
@@ -31,7 +31,7 @@ class _FakeClient:
         pass
 
     def hello(self):
-        from switchctl.client import DeviceInfo
+        from padcue.client import DeviceInfo
         return DeviceInfo(fw_version="fake", schema_version=1,
                           transport_mode="procon", binterval=1,
                           partition="ota_0", reset_reason="",

@@ -3,9 +3,9 @@ import json
 
 import pytest
 
-from switchctl import binfmt, engine
-from switchctl.flowfmt import FlowError, compile_flow
-from switchctl.matrix import PartError, load_part
+from padcue import binfmt, engine
+from padcue.flowfmt import FlowError, compile_flow
+from padcue.matrix import PartError, load_part
 
 A = 1 << binfmt.BUTTONS["A"]
 B = 1 << binfmt.BUTTONS["B"]

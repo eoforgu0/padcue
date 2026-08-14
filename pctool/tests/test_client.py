@@ -7,10 +7,10 @@ import time
 
 import pytest
 
-from switchctl import binfmt
-from switchctl.client import DeviceClient, DeviceError, proc_hash
-from switchctl.dsl import compile_source
-from switchctl.mockdevice import MockDevice
+from padcue import binfmt
+from padcue.client import DeviceClient, DeviceError, proc_hash
+from padcue.dsl import compile_source
+from padcue.mockdevice import MockDevice
 
 SRC = """
 proc 周回テスト

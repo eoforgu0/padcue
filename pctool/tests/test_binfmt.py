@@ -2,8 +2,8 @@ import struct
 
 import pytest
 
-from switchctl import binfmt
-from switchctl.binfmt import Djnz, End, Jmp, SetCnt, State
+from padcue import binfmt
+from padcue.binfmt import Djnz, End, Jmp, SetCnt, State
 
 
 ALL_EVENTS = [

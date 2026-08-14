@@ -1,17 +1,17 @@
-"""switchctl コマンドライン。GUI が扱わない操作と、GUI の起動を担う。
+"""padcue コマンドライン。GUI が扱わない操作と、GUI の起動を担う。
 
-    switchctl init                    プロジェクトの雛形を作る
-    switchctl build <名前>            フローをコンパイル(警告も表示)
-    switchctl push <名前>             コンパイル → 転送 → 保存
-    switchctl run <名前> [-n 回数]    実行(転送済みの手順)
-    switchctl stop [--graceful]       停止
-    switchctl status                  状態表示
-    switchctl logs                    ログ回収
-    switchctl list                    デバイス内の手順一覧
-    switchctl device <IP>|auto        接続先を設定(auto で自動検出)
-    switchctl discover                LAN 内のマイコンを探す
-    switchctl mock                    模擬デバイスを起動(実機なしの動作確認)
-    switchctl gui                     操作画面を開く
+    padcue init                    プロジェクトの雛形を作る
+    padcue build <名前>            フローをコンパイル(警告も表示)
+    padcue push <名前>             コンパイル → 転送 → 保存
+    padcue run <名前> [-n 回数]    実行(転送済みの手順)
+    padcue stop [--graceful]       停止
+    padcue status                  状態表示
+    padcue logs                    ログ回収
+    padcue list                    デバイス内の手順一覧
+    padcue device <IP>|auto        接続先を設定(auto で自動検出)
+    padcue discover                LAN 内のマイコンを探す
+    padcue mock                    模擬デバイスを起動(実機なしの動作確認)
+    padcue gui                     操作画面を開く
 """
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ def _refuse_while_gui(p: Project, what: str) -> bool:
     """装置を専有する操作(OTA・設定・方式切替)は画面と両立しない。"""
     if _gui_base(p) is None:
         return False
-    print(f"padctl.bat(操作画面)が開いています。{what}は装置をまるごと"
+    print(f"padcue.bat(操作画面)が開いています。{what}は装置をまるごと"
           "預かる操作のため、画面を閉じてからやり直してください")
     return True
 
@@ -93,7 +93,7 @@ def _pick_device(args, cfg: dict) -> dict:
     """--device 名前(省略時は1台目)から装置台帳のエントリを選ぶ。"""
     devs = cfg.get("devices", [])
     if not devs:
-        raise SystemExit("装置が登録されていません(switchctl device add <IP> <名前>)")
+        raise SystemExit("装置が登録されていません(padcue device add <IP> <名前>)")
     want = getattr(args, "device", None)
     if not want:
         return devs[0]
@@ -150,8 +150,8 @@ def _client(args) -> DeviceClient:
     if want_id_early and not any(f.device_id == want_id_early for f in found):
         # UDP 探索で本人が見えない。個体名(mDNS)でも追跡を試す
         # (ブロードキャストが通らないネットワークの保険。実機は
-        # padctl-<MAC下4桁>.local を名乗る)
-        name_host = f"padctl-{want_id_early[-4:]}.local"
+        # pademu-<MAC下4桁>.local を名乗る)
+        name_host = f"pademu-{want_id_early[-4:]}.local"
         try:
             c, info = connect_verified(dict(dev, host=name_host))
             p.update_device(cfg, cfg["devices"].index(dev), host=name_host)
@@ -163,7 +163,7 @@ def _client(args) -> DeviceClient:
     if not found:
         raise SystemExit(
             "マイコンが見つかりません。電源と WiFi を確認してください"
-            "(接続先を指定する場合: switchctl device <IPアドレス>)")
+            "(接続先を指定する場合: padcue device <IPアドレス>)")
     # 探索応答の中から「登録した個体(ID一致)」だけを追跡する。
     # ID 未学習(初回)の場合のみ、繋がる相手が1台だけなら採用して学習する
     # 追跡できるのは「登録した個体(ID一致)」だけ。mock は自動採用の対象外
@@ -202,17 +202,17 @@ def _client(args) -> DeviceClient:
         where = " / ".join(f"{t.host}(id={i.device_id or '不明'})"
                            for t, _c, i in connected)
         raise SystemExit(
-            f"padctl が複数見つかりました: {where}\n"
+            f"pademu が複数見つかりました: {where}\n"
             "  どれがこの装置か特定できません。IP を指定して一度接続し、"
-            "個体IDを学習させてください: switchctl device <IPアドレス>")
+            "個体IDを学習させてください: padcue device <IPアドレス>")
     where = " / ".join(f.host for f in found)
     raise SystemExit(
         f"{where} は見つかりましたが、登録した個体ではないか応答しません。" + "\n"
-        "  ・操作画面(padctl.bat)を開いていませんか? "
+        "  ・操作画面(padcue.bat)を開いていませんか? "
         "実機は同時に1つのプログラムしか受け付けません。"
         "閉じてからやり直してください" + "\n"
         "  ・別の個体しか居ない場合は乗り換えません(誤爆防止)。"
-        "新しい装置なら登録してください: switchctl device add <IPアドレス> <名前>")
+        "新しい装置なら登録してください: padcue device add <IPアドレス> <名前>")
 
 
 def _print_build(r) -> None:
@@ -236,7 +236,7 @@ def cmd_build(args) -> int:
     p = _project(args)
     names = [args.name] if args.name else p.procedure_names()
     if not names:
-        print("手順がありません(switchctl init で雛形を作れます)")
+        print("手順がありません(padcue init で雛形を作れます)")
         return 1
     failed = 0
     for name in names:
@@ -306,7 +306,7 @@ def cmd_run(args) -> int:
         target = args.name
         listing = {e["name"]: e for e in c.list()}
         if target not in listing:
-            print(f"デバイスに '{target}' がありません。switchctl push してください")
+            print(f"デバイスに '{target}' がありません。padcue push してください")
             return 1
         c.run(target, listing[target]["hash"], loop_n=args.loops)
         print(f"実行開始: {target} ×{args.loops}")
@@ -540,8 +540,8 @@ def cmd_ota(args) -> int:
         # 既定パスはリポジトリ直下から見た相対。runbook の手順どおり
         # pctool から実行しても見つかるよう、リポジトリ基準でも探す
         alt = (Path(__file__).resolve().parents[2]
-               / "firmware" / "build" / "padctl.bin")
-        if Path(args.image) == Path("firmware/build/padctl.bin") \
+               / "firmware" / "build" / "pademu.bin")
+        if Path(args.image) == Path("firmware/build/pademu.bin") \
                 and alt.is_file():
             path = alt
         else:
@@ -558,7 +558,7 @@ def cmd_ota(args) -> int:
 
         r = c.ota(image, progress=show)
         print(f"\n書き込み完了: {r['written']} バイト → {r['partition']}")
-        print("デバイスが再起動します。数秒後に switchctl status で確認してください")
+        print("デバイスが再起動します。数秒後に padcue status で確認してください")
         print("(起動に失敗した場合は自動で前のファームへ戻ります)")
     return 0
 
@@ -588,7 +588,7 @@ def cmd_device(args) -> int:
 
     if a == "add":
         if not args.extra:
-            print("使い方: switchctl device add <IP[:ポート]> [名前]")
+            print("使い方: padcue device add <IP[:ポート]> [名前]")
             return 1
         # 受け入れモード: 接続して個体IDを確認してから登録する。
         # IDを名乗らない旧ファームは登録できない(照合できない装置を台帳に
@@ -606,7 +606,7 @@ def cmd_device(args) -> int:
 
     if a == "rename":
         if len(args.extra) != 2:
-            print("使い方: switchctl device rename <名前> <新名前>")
+            print("使い方: padcue device rename <名前> <新名前>")
             return 1
         ok, msg = registry.rename_device(p, args.extra[0], args.extra[1])
         print(msg)
@@ -615,7 +615,7 @@ def cmd_device(args) -> int:
     if a == "forget":
         # 装置の交換(基板が変わり MAC も変わった)用: IDの控えだけを解除する
         if len(args.extra) != 1:
-            print("使い方: switchctl device forget <名前>")
+            print("使い方: padcue device forget <名前>")
             return 1
         ok, msg = registry.forget_device(p, args.extra[0])
         print(msg)
@@ -623,7 +623,7 @@ def cmd_device(args) -> int:
 
     if a == "remove":
         if len(args.extra) != 1:
-            print("使い方: switchctl device remove <名前>")
+            print("使い方: padcue device remove <名前>")
             return 1
         ok, msg = registry.remove_device(p, args.extra[0])
         print(msg)
@@ -723,7 +723,7 @@ def cmd_mock(args) -> int:
     else:
         print(f"  ※ 探索用のポート {DISCOVER_PORT} が使用中のため"
               "「探す」では見つかりません(接続先を手で 127.0.0.1 にしてください)")
-    print("  別の端末で: switchctl device 127.0.0.1 && switchctl status")
+    print("  別の端末で: padcue device 127.0.0.1 && padcue status")
     try:
         while True:
             time.sleep(1)
@@ -738,7 +738,7 @@ def cmd_gui(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="switchctl", description=__doc__,
+    ap = argparse.ArgumentParser(prog="padcue", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default=".", help="プロジェクトフォルダ")
     ap.add_argument("--host", default="", help="デバイスの IP(照合なしの直結。復旧用)")
@@ -786,7 +786,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("list", help="デバイス内の手順一覧").set_defaults(func=cmd_list)
 
     p = sub.add_parser("ota", help="ファームウェアを無線で更新")
-    p.add_argument("image", nargs="?", default="firmware/build/padctl.bin")
+    p.add_argument("image", nargs="?", default="firmware/build/pademu.bin")
     p.set_defaults(func=cmd_ota)
 
     p = sub.add_parser("device", help="装置の登録・一覧・接続先設定")

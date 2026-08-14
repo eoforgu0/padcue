@@ -17,7 +17,7 @@
 
 デバイスの IP は DHCP 固定割当(ルーター側設定)を前提とし、PC ツールは設定ファイルに保持する。
 
-**ペイロード形式**: `json_len u16 | JSON(UTF-8) | blob`。制御情報は JSON(タイミング経路外のため拡張性・可読性を優先。MCU 側は cJSON)、手順データ等の大きなバイト列は blob に載せる。応答の type は「要求 type | 0x80」、エラー応答は 0xFF(code, message)。参照実装: `pctool/switchctl/proto.py`
+**ペイロード形式**: `json_len u16 | JSON(UTF-8) | blob`。制御情報は JSON(タイミング経路外のため拡張性・可読性を優先。MCU 側は cJSON)、手順データ等の大きなバイト列は blob に載せる。応答の type は「要求 type | 0x80」、エラー応答は 0xFF(code, message)。参照実装: `pctool/padcue/proto.py`
 
 ## コマンド一覧
 

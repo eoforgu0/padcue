@@ -14,9 +14,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from switchctl import cli, gui
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import cli, gui
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 @pytest.fixture

@@ -6,9 +6,9 @@
 """
 import pytest
 
-from switchctl import binfmt, engine
-from switchctl.binfmt import BUTTONS, Djnz, End, SetCnt, State
-from switchctl.dsl import CompileError, compile_source
+from padcue import binfmt, engine
+from padcue.binfmt import BUTTONS, Djnz, End, SetCnt, State
+from padcue.dsl import CompileError, compile_source
 
 A = 1 << binfmt.BUTTONS["A"]
 B = 1 << binfmt.BUTTONS["B"]

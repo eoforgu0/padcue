@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from switchctl.project import Project, validate_name
+from padcue.project import Project, validate_name
 
 BAD = [
     "../外",          # 親フォルダへ抜ける

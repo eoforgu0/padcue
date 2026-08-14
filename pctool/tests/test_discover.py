@@ -3,9 +3,9 @@ import socket
 
 import pytest
 
-from switchctl import discover as disc
-from switchctl.client import DeviceClient, DeviceError
-from switchctl.mockdevice import MockDevice
+from padcue import discover as disc
+from padcue.client import DeviceClient, DeviceError
+from padcue.mockdevice import MockDevice
 
 
 def free_udp_port() -> int:
@@ -63,8 +63,8 @@ def test_discover_ignores_unrelated_devices():
 
 def test_hello_rejects_wrong_device():
     """別の機器を自分のマイコンと取り違えないこと(識別子の確認)。"""
-    from switchctl import proto
-    from switchctl.proto import Message
+    from padcue import proto
+    from padcue.proto import Message
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -77,21 +77,21 @@ def test_hello_rejects_wrong_device():
     def imposter():
         conn, _ = srv.accept()
         conn.recv(4096)
-        # 形式は正しいが padctl ではない機器のふり
+        # 形式は正しいが pademu ではない機器のふり
         conn.sendall(proto.pack(Message(proto.T_HELLO | proto.T_RESP,
                                         {"magic": "other", "fw": "x"})))
         conn.close()
 
     threading.Thread(target=imposter, daemon=True).start()
     try:
-        with pytest.raises(DeviceError, match="padctl ではありません"):
+        with pytest.raises(DeviceError, match="pademu ではありません"):
             DeviceClient("127.0.0.1", port).connect()
     finally:
         srv.close()
 
 
 def test_name_resolution_is_tried_first(monkeypatch):
-    """名前(padctl.local)で解決できるならそれを使うこと。"""
+    """名前(pademu.local)で解決できるならそれを使うこと。"""
     monkeypatch.setattr(disc, "resolve_by_name", lambda name=disc.HOSTNAME: "10.1.2.3")
     monkeypatch.setattr(disc, "_local_ipv4_addresses", lambda: [])
     found = disc.discover(timeout=0.1)
@@ -102,6 +102,6 @@ def test_name_resolution_is_tried_first(monkeypatch):
 def test_default_host_is_the_name():
     """初期状態の接続先が名前になっていること(IP を控えなくて済む)。"""
     import tempfile
-    from switchctl.project import Project
+    from padcue.project import Project
     p = Project(tempfile.mkdtemp())
-    assert p.load_config()["host"] == "padctl.local"
+    assert p.load_config()["host"] == "pademu.local"

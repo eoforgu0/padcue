@@ -1,6 +1,6 @@
 @echo off
 rem ---------------------------------------------------------------
-rem  padctl: double-click this file to open the control screen.
+rem  padcue: double-click this file to open the control screen.
 rem  Procedures are saved in procedures\ and parts in parts\
 rem  (next to this file).
 rem
@@ -23,7 +23,7 @@ chcp 65001 >nul
 where python >nul 2>nul
 if errorlevel 1 goto nopython
 
-python -m switchctl --project "%~dp0." gui
+python -m padcue --project "%~dp0." gui
 if errorlevel 1 pause
 endlocal
 exit /b 0

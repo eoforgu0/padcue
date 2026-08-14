@@ -48,8 +48,8 @@ def main() -> int:
     LOCAL.write_text(
         "# WiFi の接続情報(この PC の中だけ。git には入らない)\n"
         "# sdkconfig を作り直しても、ここから毎回読み込まれる\n"
-        f'CONFIG_PADCTL_WIFI_SSID="{ssid}"\n'
-        f'CONFIG_PADCTL_WIFI_PASS="{pw}"\n',
+        f'CONFIG_PADEMU_WIFI_SSID="{ssid}"\n'
+        f'CONFIG_PADEMU_WIFI_PASS="{pw}"\n',
         encoding="utf-8")
     print()
     print(f"保存しました: {LOCAL}")

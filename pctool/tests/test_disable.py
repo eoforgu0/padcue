@@ -7,10 +7,10 @@ import json
 
 import pytest
 
-from switchctl import binfmt
-from switchctl.flowfmt import FlowError, compile_flow
-from switchctl.matrix import PartError, load_part
-from switchctl.project import Project
+from padcue import binfmt
+from padcue.flowfmt import FlowError, compile_flow
+from padcue.matrix import PartError, load_part
+from padcue.project import Project
 
 A = 1 << binfmt.BUTTONS["A"]
 B = 1 << binfmt.BUTTONS["B"]

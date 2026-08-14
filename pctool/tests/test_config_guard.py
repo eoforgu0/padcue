@@ -5,8 +5,8 @@
 """
 import pytest
 
-from switchctl import cli
-from switchctl.project import Project
+from padcue import cli
+from padcue.project import Project
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def test_default_host_is_the_name(tmp_path):
     """設定ファイルが無いときは名前で呼ぶ(IP を調べる必要がない)。"""
     p = Project(tmp_path)
     assert not p.config_path.exists()
-    assert p.load_config()["host"] == "padctl.local"
+    assert p.load_config()["host"] == "pademu.local"
 
 
 def test_init_does_not_write_a_blank_host(root):
@@ -39,9 +39,9 @@ def test_empty_address_is_refused(root, capsys):
 
 def test_whitespace_address_is_refused(root):
     p = Project(root)
-    cli.main(["--project", root, "device", "padctl.local"])
+    cli.main(["--project", root, "device", "pademu.local"])
     assert cli.main(["--project", root, "device", "   "]) == 1
-    assert p.load_config()["host"] == "padctl.local"
+    assert p.load_config()["host"] == "pademu.local"
 
 
 def test_address_is_trimmed(root):

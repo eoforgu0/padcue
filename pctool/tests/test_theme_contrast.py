@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from switchctl.gui import PAGE
+from padcue.gui import PAGE
 
 
 def _lum(hexcol: str) -> float:

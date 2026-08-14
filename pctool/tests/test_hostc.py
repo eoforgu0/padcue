@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from switchctl import binfmt, engine
-from switchctl.dsl import compile_source
+from padcue import binfmt, engine
+from padcue.dsl import compile_source
 
 REPO = Path(__file__).resolve().parents[2]
 CORE = REPO / "firmware" / "components" / "pademu_core"

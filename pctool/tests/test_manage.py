@@ -4,10 +4,10 @@ import pathlib
 
 import pytest
 
-from switchctl import binfmt
-from switchctl.dsl import compile_source
-from switchctl.flowfmt import compile_flow
-from switchctl.project import Project
+from padcue import binfmt
+from padcue.dsl import compile_source
+from padcue.flowfmt import compile_flow
+from padcue.project import Project
 
 A = 1 << binfmt.BUTTONS["A"]
 
@@ -142,7 +142,7 @@ def test_gyro_block_sets_rate_until_changed(tmp_path):
 
 
 def test_gyro_range_is_checked(tmp_path):
-    from switchctl.flowfmt import FlowError
+    from padcue.flowfmt import FlowError
     p = make(tmp_path, {"p": [{"type": "gyro", "gy": 99999},
                               {"type": "wait", "frames": 5}]})
     with pytest.raises(FlowError, match="範囲外"):
@@ -298,8 +298,8 @@ def test_wait_branch_arm_does_not_leak_motion(tmp_path):
 
 def test_timeline_shows_gyro_and_hides_resting_accel():
     """回している区間だけ帯になり、静止の重力(AZ=4096)は帯にならないこと。"""
-    from switchctl.dsl import compile_source
-    from switchctl.gui import build_timeline
+    from padcue.dsl import compile_source
+    from padcue.gui import build_timeline
     c = compile_source("proc p\ngyro 0 2000 0 30\nwait 30\nend\n")
     tl = build_timeline(binfmt.encode("p", c.events, c.total_frames))
     names = [t["name"] for t in tl["tracks"]]
@@ -311,7 +311,7 @@ def test_timeline_shows_gyro_and_hides_resting_accel():
 
 def test_timeline_shows_freefall_as_activity():
     """加速度を明示的に 0(自由落下)へ変えた区間は帯として見えること。"""
-    from switchctl.gui import build_timeline
+    from padcue.gui import build_timeline
     ev = [binfmt.State(0, az=0), binfmt.State(10), binfmt.End()]
     tl = build_timeline(binfmt.encode("z", ev, 20))
     az = next(t for t in tl["tracks"] if t["name"] == "AZ")
@@ -326,7 +326,7 @@ def test_mock_first_await_is_absolute(tmp_path):
     Await.frame はセグメント相対なので、そのまま使うと開始直後に選択待ちが
     来てしまう(模擬デバイスにあったバグ)。
     """
-    from switchctl.mockdevice import _first_await
+    from padcue.mockdevice import _first_await
     p = make(tmp_path, {"p": [
         {"type": "loop", "count": 3, "body": [{"type": "wait", "frames": 30}]},
         {"type": "wait_branch", "arms": {
@@ -550,7 +550,7 @@ def test_gui_button_bits_match_binfmt():
     全ボタンが別ボタンとして送られる(2026-08-01 に実機で発生)。
     """
     import re
-    from switchctl.gui import PAGE
+    from padcue.gui import PAGE
     m = re.search(r"const BTN_BITS = \[(.*?)\];", PAGE, re.S)
     assert m, "BTN_BITS が見つかりません"
     names = re.findall(r"'([A-Z]+)'", m.group(1))

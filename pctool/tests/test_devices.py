@@ -11,11 +11,11 @@ import time
 
 import pytest
 
-from switchctl import binfmt
-from switchctl.client import DeviceClient, DeviceError, connect_verified, proc_hash
-from switchctl.dsl import compile_source
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import binfmt
+from padcue.client import DeviceClient, DeviceError, connect_verified, proc_hash
+from padcue.dsl import compile_source
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 # ---- 設定の移行 ----
@@ -30,7 +30,7 @@ def test_old_config_migrates_to_devices(tmp_path):
     # 旧キーは1台目の写しとして残る(移行期間中の旧ツールが読める)
     assert cfg["host"] == "10.0.0.9" and cfg["port"] == 5556
     # 元ファイルの控えが残る(事故時に手で戻せる)
-    assert (tmp_path / "switchctl.json.bak").is_file()
+    assert (tmp_path / "padcue.json.bak").is_file()
 
 
 def test_legacy_host_write_updates_first_device(tmp_path):
@@ -128,7 +128,7 @@ WAIT_FLOW = {
 
 
 def _push_wait_flow(tmp_path, c):
-    from switchctl.flowfmt import compile_flow
+    from padcue.flowfmt import compile_flow
     (tmp_path / "procedures").mkdir(exist_ok=True)
     (tmp_path / "parts").mkdir(exist_ok=True)
     (tmp_path / "procedures" / "分岐.flow.json").write_text(
@@ -209,7 +209,7 @@ def test_await_gen_is_monotonic_across_runs(tmp_path):
 # ---- CLI: 装置台帳の操作と乗り換え禁止 ----
 
 def _cli(tmp_path, *args):
-    from switchctl import cli
+    from padcue import cli
     return cli.main(["--project", str(tmp_path)] + list(args))
 
 
@@ -247,7 +247,7 @@ def test_add_device_rejects_third(tmp_path):
     新規 Project は移行後の既定で装置1台("1P"の仮枠)を既に持つため、
     2台目を登録した時点で上限に達する。
     """
-    from switchctl import registry
+    from padcue import registry
     with MockDevice(device_id="bbbb00000002") as d2, \
          MockDevice(device_id="cccc00000003") as d3:
         p = Project(tmp_path)
@@ -314,7 +314,7 @@ def test_mock_is_refused_while_real_id_is_registered(tmp_path):
 def test_device_command_switches_to_mock_by_clearing_id(tmp_path, capsys):
     """practice への明示切替(device 127.0.0.1)はIDの控えを解除して通すこと。
 
-    padctl-練習.bat がこのコマンドを使う。解除は明示操作のときだけで、
+    padcue-練習.bat がこのコマンドを使う。解除は明示操作のときだけで、
     探索が勝手に mock を採用してIDを消すことはない。
     """
     with MockDevice() as d:

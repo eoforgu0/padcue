@@ -8,9 +8,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from switchctl import cli, gui
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import cli, gui
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def test_cli_without_device_reports_clearly(proj, monkeypatch):
     見つかってしまう。テストは外の状況に依存させない。
     """
     monkeypatch.setattr(cli, "discover", lambda *a, **k: [])
-    # 既定の接続先は padctl.local。実機が同じ LAN にいると名前が引けてしまうので、
+    # 既定の接続先は pademu.local。実機が同じ LAN にいると名前が引けてしまうので、
     # 届かない住所を明示しておく
     cfg = proj.load_config()
     cfg["host"] = "10.255.255.1"
@@ -125,7 +125,7 @@ def http_post(url, obj):
 def test_gui_serves_page_and_state(guiserver):
     with urllib.request.urlopen(guiserver + "/", timeout=5) as r:
         html = r.read().decode("utf-8")
-    assert "padctl" in html and "タイムライン" in html
+    assert "pademu" in html and "タイムライン" in html
 
     st = http_get(guiserver + "/api/state")
     assert [p["name"] for p in st["procedures"]] == ["サンプル"]

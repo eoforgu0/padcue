@@ -27,7 +27,7 @@
 
 static const char *TAG = "ctrl";
 
-// 種別(pctool/switchctl/proto.py と一致させること)
+// 種別(pctool/padcue/proto.py と一致させること)
 #define T_HELLO 0x01
 #define T_PUT 0x02
 #define T_COMMIT 0x03

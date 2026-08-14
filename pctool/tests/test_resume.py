@@ -8,10 +8,10 @@ import subprocess
 
 import pytest
 
-from switchctl import binfmt, engine
-from switchctl.client import DeviceClient, proc_hash
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import binfmt, engine
+from padcue.client import DeviceClient, proc_hash
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 from tests.test_hostc import CORE, find_gcc, host_exe, run_c  # noqa: F401
 
 A = 1 << binfmt.BUTTONS["A"]
@@ -184,7 +184,7 @@ def test_invalid_resume_point_is_rejected(proj):
     with MockDevice() as dev, DeviceClient("127.0.0.1", dev.port) as cli:
         cli.put(r.name, r.blob)
         cli.commit(r.name)
-        from switchctl.client import DeviceError
+        from padcue.client import DeviceError
         with pytest.raises(DeviceError, match="再開点"):
             cli.run(r.name, proc_hash(r.blob), resume={"index": 9999, "base": 0})
         # END を指すのも不正(全状態スナップショットではないため)

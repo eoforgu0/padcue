@@ -7,11 +7,11 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from switchctl import gui
-from switchctl.binfmt import BUTTONS
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
-from switchctl.record import Recorder
+from padcue import gui
+from padcue.binfmt import BUTTONS
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
+from padcue.record import Recorder
 
 FRAME = 16666667 / 1e9   # 1 フレームの秒数
 

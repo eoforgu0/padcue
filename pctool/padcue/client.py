@@ -123,8 +123,8 @@ class DeviceClient:
         o = r.obj
         # 別の機器を自分のマイコンと取り違えないようにする
         # (DHCP で IP が変わり、古いアドレスを他の機器が取った場合の保険)
-        if o.get("magic") not in (None, "padctl"):
-            raise DeviceError("NOT_PADCTL", "この宛先は padctl ではありません")
+        if o.get("magic") not in (None, "pademu"):
+            raise DeviceError("NOT_PADEMU", "この宛先は pademu ではありません")
         self.device_id = o.get("id", "")
         return DeviceInfo(
             fw_version=o.get("fw", ""),
@@ -281,7 +281,7 @@ def connect_verified(dev: dict, timeout: float = 3.0,
                 "DEVICE_MISMATCH",
                 f"{dev.get('host')} にいるのは練習用の模擬デバイスです"
                 f"(登録 {name}={want})。練習に切り替えるなら"
-                " padctl-練習.bat か「switchctl device 127.0.0.1」"
+                " padcue-練習.bat か「padcue device 127.0.0.1」"
                 "(IDの控えを解除して向け替えます)を使ってください")
         if info.device_id:
             raise DeviceError(
@@ -289,7 +289,7 @@ def connect_verified(dev: dict, timeout: float = 3.0,
                 f"{dev.get('host')} にいるのは別の個体です"
                 f"(登録 {name}={want} / 実際 {info.device_id})。"
                 "IP が入れ替わったなら探索で追跡されます。装置を交換したなら"
-                f" switchctl device forget {name} で控えを解除してください")
+                f" padcue device forget {name} で控えを解除してください")
         raise DeviceError(
             "DEVICE_MISMATCH",
             f"{dev.get('host')} の相手は個体IDを名乗らない古いファームです。"

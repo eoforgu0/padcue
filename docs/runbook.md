@@ -51,9 +51,9 @@ python -m pytest -q
 
 つづけて、マイコンをつながずに操作画面を試します。
 
-**`padctl-練習.bat` をダブルクリック**してください。
+**`padcue-練習.bat` をダブルクリック**してください。
 模擬デバイスが立ち上がり、ブラウザで操作画面が開きます。
-(実機を使うときは `padctl.bat` の方です)
+(実機を使うときは `padcue.bat` の方です)
 
 **確認**: ブラウザが開き、レーンの**手順**プルダウンに一覧が出て「▶ 1回実行」が押せる。
 レーンの状態チップが「**待機中**」になります(模擬デバイスも実機と同じように、
@@ -102,7 +102,7 @@ SSID とパスワードを聞かれます(パスワードは画面に出ませ�
 - すでに `firmware/sdkconfig` がある状態で変えたときは、
   **`sdkconfig` を消してからビルド**してください(そうしないと古い値が残ります)
 - 実機がつながったら、**実機本体にも保存**しておくと万全です:
-  `switchctl config wifi_ssid <SSID>` と `switchctl config wifi_pass <パスワード>`
+  `padcue config wifi_ssid <SSID>` と `padcue config wifi_pass <パスワード>`
   (実機の保存領域が最優先で読まれるため、以後ビルド設定に関係なくつながります)
 
 > **なぜ2か所に置くのか**: 2026-08-02 に `sdkconfig` を作り直した際に WiFi 設定が
@@ -128,7 +128,7 @@ idf.py -p COM5 flash monitor
 **確認**: ログが次の順に出ます。
 
 ```
-padctl fw 0.1.0-dev 起動
+pademu fw 0.1.0-dev 起動
 ...
 IP取得: 192.168.x.x            <- この IP を控えておくと後で楽(必須ではない)
 USB を開始します(ここでシリアルのログは終わります)
@@ -147,8 +147,8 @@ USB を開始します(ここでシリアルのログは終わります)
 > monitor は消えた相手を待ち続けて `Waiting for the device to reconnect...` と
 > 点を並べますが、**戻ってくることはありません**。`Ctrl+]` で閉じてください。
 >
-> - 以後のログは**無線で**見ます: `python -m switchctl logs`
-> - 2回目以降の書き込みは**無線でできます**(`switchctl ota`)。ケーブル不要
+> - 以後のログは**無線で**見ます: `python -m padcue logs`
+> - 2回目以降の書き込みは**無線でできます**(`padcue ota`)。ケーブル不要
 > - どうしてもケーブルで書き込みたいときは**書き込みモード**に入れます:
 >   **側面のリセットボタンを約2秒長押し**し、緑 LED が点いたら離す → COM ポートが復活
 
@@ -169,10 +169,10 @@ USB を開始します(ここでシリアルのログは終わります)
 **IP を調べて覚えておく必要はありません。**
 画面の「**探す**」ボタンが LAN から見つけて設定し、以後は個体ID(MAC)で
 追跡します(IP が変わっても、探索が同じ個体を見つけ直します)。
-マイコンは `padctl-<個体ID下4桁>.local` という名前も名乗ります(名前は
+マイコンは `pademu-<個体ID下4桁>.local` という名前も名乗ります(名前は
 書き込み時のシリアルログに「名前で呼べます: …」と出ます)。
 
-**`padctl.bat` をダブルクリック**して操作画面を開きます。
+**`padcue.bat` をダブルクリック**して操作画面を開きます。
 
 画面**左の「装置」パネル**に、装置の行があります。行の **▸** を押すと詳細が開き、
 接続先・探す・接続がそこに集約されています。
@@ -223,8 +223,8 @@ USB を開始します(ここでシリアルのログは終わります)
 ```
 cd C:\path\to\padded
 set PYTHONPATH=pctool
-python -m switchctl device auto     # 探して接続先を覚える
-python -m switchctl status          # 状態を表示
+python -m padcue device auto     # 探して接続先を覚える
+python -m padcue status          # 状態を表示
 ```
 
 ### あわせて: PC 上で「コントローラーとして名乗れているか」を見る
@@ -258,7 +258,7 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 **確認**を上から順に:
 
 1. 本体 LED が**シアン**のまま(= 電源 OK)
-2. `python -m switchctl status` で `USB: 接続 / 到達段階 0x3xx`
+2. `python -m padcue status` で `USB: 接続 / 到達段階 0x3xx`
 3. Switch の **設定 → コントローラーと周辺機器 → コントローラーの動作チェック** で
    「Proコントローラー」が **1台** 見えている
 4. 動作チェック画面でボタンの反応を見る(まだ自動操作はしていないので反応はしません)
@@ -268,7 +268,7 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 | 到達段階 | 意味 | 次にすること |
 |---|---|---|
 | `0x000` | 何も届いていない | ケーブル・ポートを疑う。手順 2 の HID 確認へ戻る |
-| `0x001`〜`0x00f` | 途中で止まった | `switchctl logs` を保存して原因を追う |
+| `0x001`〜`0x00f` | 途中で止まった | `padcue logs` を保存して原因を追う |
 | `0x3ff` 付近 | 正常に初期化完了 | 次のステップへ |
 
 > ### うまくいかないとき(重要な分岐)
@@ -278,9 +278,9 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 > 2. Joy-Con を全部切ったか確認
 > 3. USB の問い合わせ間隔を実在のコントローラーと同じにして再試行します:
 >    ```
->    idf.py menuconfig      # padctl → bInterval を 8 にする
+>    idf.py menuconfig      # pademu → bInterval を 8 にする
 >    idf.py build
->    cd ..\pctool && python -m switchctl ota
+>    cd ..\pctool && python -m padcue ota
 >    ```
 >    これで動けば原因は「1ms 間隔が受理されない」ことです。精度は少し落ちますが動きます。
 >
@@ -292,9 +292,9 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 > **無線で切り替えられます。書き込み直しは不要です。**
 >
 > ```
-> python -m switchctl mode hidpad
+> python -m padcue mode hidpad
 > ```
-> 切り替えたら USB を一度抜き挿しします。戻すときは `python -m switchctl mode procon`。
+> 切り替えたら USB を一度抜き挿しします。戻すときは `python -m padcue mode procon`。
 >
 > | | プロコン方式 | 保険モード |
 > |---|---|---|
@@ -307,7 +307,7 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 
 ## 4. サンプルを1回動かす
 
-`padctl.bat`(実機)または `padctl-練習.bat`(模擬デバイス)の画面で:
+`padcue.bat`(実機)または `padcue-練習.bat`(模擬デバイス)の画面で:
 
 1. 実行・監視のレーンにある **手順** のプルダウンで **サンプル** を選ぶ
 2. **タイムライン**で「いつ何を入力するか」を目で確認する(ボタンだけでなく、スティック・ジャイロ・加速度も、動かしている区間が帯で出ます)
@@ -332,8 +332,8 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 > | 症状 | 対処 |
 > |---|---|
 > | 実行はされるがゲームが反応しない | 3-1 の 2(他コントローラー切断)を再確認 |
-> | 途中で止まる・LED が赤 | `switchctl logs` を見る。解除は `switchctl clear-error` |
-> | ボタンは効くがスティックが効かない | 保険モードになっていないか `switchctl status` で確認 |
+> | 途中で止まる・LED が赤 | `padcue logs` を見る。解除は `padcue clear-error` |
+> | ボタンは効くがスティックが効かない | 保険モードになっていないか `padcue status` で確認 |
 > | 「実行中」のまま戻らず、実行も停止もできない | まず「**⏹ 今すぐ止める**」。それでも戻らない場合(古いファーム)は**本体のリセット短押し**か USB 挿し直し → 待機中になったらファームを更新する |
 
 ---
@@ -651,7 +651,7 @@ Switch 側の**ゼロ点自動較正**に「センサーのずれ」として吸
 > そのまま終わります**(ツール自体は Ctrl+C の時点で終了済み)。
 > **周回実行の途中で終了・PC がスリープ・WiFi が切れても、実行は実機が
 > 自律で最後まで続けます**(そういう設計です)。止めたくなったら
-> padctl.bat をもう一度開いて「⏹ 今すぐ止める」、または本体ボタンを
+> padcue.bat をもう一度開いて「⏹ 今すぐ止める」、または本体ボタンを
 > 1.5秒長押し。※「待って選ぶ」を含む手順だけは、選ぶ人がいないので
 > 次の選択待ちで止まったまま待ちます(タイムアウト設定があればそれに従う)
 
@@ -742,14 +742,14 @@ idf.py build
 
 （別の端末で）
 cd C:\path\to\padded\pctool
-python -m switchctl ota
+python -m padcue ota
 ```
 
-**確認**: 転送 → 再起動 → 数秒後に `switchctl status` のファーム版が変わる。
+**確認**: 転送 → 再起動 → 数秒後に `padcue status` のファーム版が変わる。
 起動に失敗した場合は**自動で前のファームに戻ります**(`status` に「ロールバックされました」と出る)。
 
 **OTA の再起動後は、Switch が再認識しないことがあります**(2026-08-12 に初代
-Switch で発生)。`switchctl status` の到達段階が **0x400 のまま**(= 入力は
+Switch で発生)。`padcue status` の到達段階が **0x400 のまま**(= 入力は
 送っているが、本体から問い合わせが来ていない)なら、**USB を挿し直してください**。
 それで 0x7fb になります。
 
@@ -770,8 +770,8 @@ Switch で発生)。`switchctl status` の到達段階が **0x400 のまま**(= 
 数千フレームの手順を流して後半がずれるなら、切り替えて比べます。
 
 ```
-python -m switchctl config frame_period_ns 16683333    # 59.94Hz 相当にする
-python -m switchctl config frame_period_ns 16666667    # 60.00Hz に戻す
+python -m padcue config frame_period_ns 16683333    # 59.94Hz 相当にする
+python -m padcue config frame_period_ns 16666667    # 60.00Hz に戻す
 ```
 
 崩れない方を採用してください。設定は電源を切っても残ります。
@@ -794,22 +794,22 @@ python -m switchctl config frame_period_ns 16666667    # 60.00Hz に戻す
 > **前提**: 先に PC 側とファームを装置台帳対応版(2026-08-04 以降)にして
 > おくこと。この版の PC は登録した個体ID(MAC)でしか装置を追跡しないため、
 > 2台目が LAN に現れても勝手に繋ぎ替わることはありません。
-> コマンドはすべて **padctl.bat と同じ場所(リポジトリ直下)** で、付録と
-> 同じ形(`python -m switchctl …`。以下では省略して `switchctl …` と表記)で
+> コマンドはすべて **padcue.bat と同じ場所(リポジトリ直下)** で、付録と
+> 同じ形(`python -m padcue …`。以下では省略して `padcue …` と表記)で
 > 実行します。
 
 1. **有線で書き込む**(§1 と同じ。2台目は必ず有線から。書き込み時の
    シリアルログに「個体ID: xxxxxxxxxxxx」と IP アドレスが表示されるので控える)
-2. **WiFi を本体保存にする**(§1 の仕上げと同じ。`switchctl --host <IP> config
+2. **WiFi を本体保存にする**(§1 の仕上げと同じ。`padcue --host <IP> config
    wifi_ssid <SSID>` と `wifi_pass`。ビルド設定に頼らず NVS に入れる)
 3. **すぐ登録する**(どちらでも同じ):
    - 画面から: 左の**装置パネルの「＋ 装置を追加」**。LAN から未登録の
      実機を探して候補に出す(見つからないときは IP 直接指定の欄が出る)
-   - コマンドで: `switchctl device add <2台目のIP> 2P`
+   - コマンドで: `padcue device add <2台目のIP> 2P`
    - どちらも接続して個体IDを確認してから台帳に載せる。古いファームだと
-     断られる(先に `switchctl --host <IP> ota firmware/build/padctl.bin`)
-4. **確認する**: `switchctl device list` で 1P/2P と個体IDが並ぶこと。
-   `switchctl --device 2P status` が返ること。画面なら装置パネルに2行
+     断られる(先に `padcue --host <IP> ota firmware/build/pademu.bin`)
+4. **確認する**: `padcue device list` で 1P/2P と個体IDが並ぶこと。
+   `padcue --device 2P status` が返ること。画面なら装置パネルに2行
    並び、**実行・監視のレーンが装置ごとに2本**になる(1台と2台は同型で、
    レーンは常に出ている)
 5. どちらのマイコンがどの Switch 用かの対応づけ(自動):
@@ -822,15 +822,15 @@ python -m switchctl config frame_period_ns 16666667    # 60.00Hz に戻す
      または本体への物理記名
 
 **装置を交換したとき**(基板が変わると個体IDも変わる):
-`switchctl device forget <名前>` で控えを解除 → 新しい個体へ接続すると
+`padcue device forget <名前>` で控えを解除 → 新しい個体へ接続すると
 学習し直す。台帳から外すのは装置の欄の「登録を解除」ボタン
-(または `switchctl device remove <名前>`)。
+(または `padcue device remove <名前>`)。
 
-**練習(模擬デバイス)との行き来**: `switchctl device 127.0.0.1`(または
-padctl-練習.bat)は相手が模擬だと分かるとIDの控えを解除して向け替える。
-実機へ戻るときは画面の「探す」か `switchctl device auto`(学習し直す)。
+**練習(模擬デバイス)との行き来**: `padcue device 127.0.0.1`(または
+padcue-練習.bat)は相手が模擬だと分かるとIDの控えを解除して向け替える。
+実機へ戻るときは画面の「探す」か `padcue device auto`(学習し直す)。
 探索が**勝手に**模擬デバイスへ乗り換えることはない。
-> 実機を2台登録した状態で padctl-練習.bat を使うと、**1P だけ**が模擬に
+> 実機を2台登録した状態で padcue-練習.bat を使うと、**1P だけ**が模擬に
 > 向き、2P は実機のままになる。練習中に 2P を触らないよう注意するか、
 > 下の §9 の「練習用フォルダ」を使うこと。
 
@@ -882,14 +882,14 @@ PowerShell)で、フォルダはどこに作ってもよい:
 
 ```powershell
 mkdir 練習2台; cd 練習2台
-python -m switchctl --project . init
+python -m padcue --project . init
 # 別々の窓で:
-python -m switchctl mock --port 5555
-python -m switchctl mock --port 5556 --id mock2p000000
+python -m padcue mock --port 5555
+python -m padcue mock --port 5556 --id mock2p000000
 # 登録して画面を開く:
-python -m switchctl --project . device add 127.0.0.1:5555 1P
-python -m switchctl --project . device add 127.0.0.1:5556 2P
-python -m switchctl --project . gui
+python -m padcue --project . device add 127.0.0.1:5555 1P
+python -m padcue --project . device add 127.0.0.1:5556 2P
+python -m padcue --project . gui
 ```
 
 ## 困ったとき早見表
@@ -899,10 +899,10 @@ python -m switchctl --project . gui
 | COM ポートが無い | アプリが動いている状態です。書き込みモード(側面リセット2秒長押し)へ |
 | つながらない・未接続 | レーンの状態チップを押すと装置パネルの該当行が開く。そこの **探す** を押す。それでも駄目ならルーターの AP 分離を切る |
 | Switch が認識しない | **有線通信 ON** → Joy-Con 全切断 → bInterval 8 → `mode hidpad` |
-| 認識するが無反応 | まず `switchctl status` の**ペアリング行**を見る(下の「登録が未完のとき」)。次に 2P になっていないか(他のコントローラー) |
+| 認識するが無反応 | まず `padcue status` の**ペアリング行**を見る(下の「登録が未完のとき」)。次に 2P になっていないか(他のコントローラー) |
 | ペアリングが「⚠ 未完」 | 本体がコントローラー登録を完了できておらず、**その間は全ての入力が無視されます**(接続・ジャイロ表示は正常のまま)。下の「登録が未完のとき」の順に試す |
-| LED が赤 | `switchctl logs` で原因を見て `switchctl clear-error` |
-| 実行が途中で止まる | `switchctl logs` に `USB_UMOUNT` / `ENGINE_FAULT` が出ていないか |
+| LED が赤 | `padcue logs` で原因を見て `padcue clear-error` |
+| 実行が途中で止まる | `padcue logs` に `USB_UMOUNT` / `ENGINE_FAULT` が出ていないか |
 | たまに失敗する | 1 フレームの入力があれば 2 フレーム以上にする。または ▶ 1回実行 を繰り返して成功率を見る |
 | 手順が思ったとおりに動かない | 実機の前にタイムラインを見る。ラベルを置いて途中から試す |
 | 画面の表示が古いまま | 未接続になっていないか(状態の文字が薄くなります) |
@@ -910,18 +910,18 @@ python -m switchctl --project . gui
 ### 登録が未完のとき(ペアリング ⚠ 未完/操作だけ効かない)
 
 本体は、登録記録の無いコントローラーに「新規ペアリング」を送り続け、
-完了するまで入力を無視します。`switchctl status` のペアリング行が
+完了するまで入力を無視します。`padcue status` のペアリング行が
 「⚠ 未完」のとき(または接続もジャイロも正常なのに操作だけ効かないとき)、
 上から順に:
 
 1. **本体の「持ちかた/順番を変える」画面を開いたまま**、装置を挿し直す
-   (ペアリングは挿した直後に走ります。完了の合図は、`switchctl status` の
+   (ペアリングは挿した直後に走ります。完了の合図は、`padcue status` の
    ペアリング行が「受理済み」になる/操作画面では ⚠ のコントローラー登録
    行が**消える**/本体の画面に Pro コントローラーが現れる、の3つ)
 2. 駄目なら **実物の Pro コントローラーを同じ本体に有線で一度つなぎ、
    認識させてから**、装置に挿し替える(装置は実物と同じ識別子を名乗って
    いるため、実物の登録記録に相乗りできます。7 月に動いていたのはこの形)
-3. すぐ動かしたいときの逃げ道: `switchctl mode hidpad`(HORI パッド互換。
+3. すぐ動かしたいときの逃げ道: `padcue mode hidpad`(HORI パッド互換。
    ペアリング自体が無い方式。**ジャイロ不可・スティック 256 段階**)
 4. それでも駄目なら、フェーズ 0x01/0x02 への応答が本体の期待と合っていない
    可能性が高いので、Raspberry Pi のバイパス(`bypass_procon.py`)で
@@ -958,27 +958,27 @@ python -m switchctl --project . gui
 
 ### コマンド一覧
 
-ふだんは `padctl.bat` をダブルクリックするだけです。
-コマンドで使う場合は、`padctl.bat` と同じフォルダで
+ふだんは `padcue.bat` をダブルクリックするだけです。
+コマンドで使う場合は、`padcue.bat` と同じフォルダで
 `set PYTHONPATH=pctool` を一度実行してから次を使います。
 
 | コマンド | すること |
 |---|---|
-| `padctl.bat`(ダブルクリック) | **操作画面を開く(ふだんはこれだけ)** |
-| `padctl-練習.bat`(ダブルクリック) | 模擬デバイス付きで操作画面を開く(練習用) |
-| `python -m switchctl gui` | 操作画面を開く(コマンドから) |
-| `python -m switchctl status` | 状態・USB・到達段階・遅延・応答落ち |
-| `python -m switchctl logs` | 異常ログを回収 |
-| `python -m switchctl device auto` | マイコンを探して接続先を覚える(画面の「探す」と同じ) |
-| `python -m switchctl push <手順名>` | 転送だけ(実行しない) |
-| `python -m switchctl run <手順名> -n 10 -w` | 実行(10 周・進捗を表示し続ける) |
-| `python -m switchctl stop [--graceful]` | 停止(`--graceful` は今の周を終えてから) |
-| `python -m switchctl list` | マイコンに入っている手順 |
-| `python -m switchctl mode procon\|hidpad` | 転送方式の切り替え(無線で可) |
-| `python -m switchctl config <key> <値>` | 設定(`frame_period_ns` など) |
-| `python -m switchctl clear-error` | 異常状態(赤 LED)を解除 |
-| `python -m switchctl ota` | ファームを無線で更新 |
-| `python -m switchctl mock` | 模擬デバイス(実機なしで練習) |
+| `padcue.bat`(ダブルクリック) | **操作画面を開く(ふだんはこれだけ)** |
+| `padcue-練習.bat`(ダブルクリック) | 模擬デバイス付きで操作画面を開く(練習用) |
+| `python -m padcue gui` | 操作画面を開く(コマンドから) |
+| `python -m padcue status` | 状態・USB・到達段階・遅延・応答落ち |
+| `python -m padcue logs` | 異常ログを回収 |
+| `python -m padcue device auto` | マイコンを探して接続先を覚える(画面の「探す」と同じ) |
+| `python -m padcue push <手順名>` | 転送だけ(実行しない) |
+| `python -m padcue run <手順名> -n 10 -w` | 実行(10 周・進捗を表示し続ける) |
+| `python -m padcue stop [--graceful]` | 停止(`--graceful` は今の周を終えてから) |
+| `python -m padcue list` | マイコンに入っている手順 |
+| `python -m padcue mode procon\|hidpad` | 転送方式の切り替え(無線で可) |
+| `python -m padcue config <key> <値>` | 設定(`frame_period_ns` など) |
+| `python -m padcue clear-error` | 異常状態(赤 LED)を解除 |
+| `python -m padcue ota` | ファームを無線で更新 |
+| `python -m padcue mock` | 模擬デバイス(実機なしで練習) |
 
 ### 関連文書
 

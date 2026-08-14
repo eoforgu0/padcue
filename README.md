@@ -1,4 +1,4 @@
-# padctl — Nintendo Switch 2 自動操作システム
+# padcue — Nintendo Switch 2 自動操作システム
 
 PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコントローラーとして
 高い時間精度で実行します。長時間の周回作業の代行と、フレーム単位の精密な挙動検証が目的です。
@@ -14,8 +14,8 @@ PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコ�
 
 ## 使い方(3分)
 
-**`padctl.bat` をダブルクリック**すると操作画面が開きます。
-実機が無いうちは **`padctl-練習.bat`**(模擬デバイス付き)で全機能を試せます。
+**`padcue.bat` をダブルクリック**すると操作画面が開きます。
+実機が無いうちは **`padcue-練習.bat`**(模擬デバイス付き)で全機能を試せます。
 
 手順は `procedures/`、部品は `parts/` に保存されます(バッチと同じ場所)。
 
@@ -23,14 +23,14 @@ PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコ�
 
 ```bash
 set PYTHONPATH=pctool
-python -m switchctl gui          # 操作画面
-python -m switchctl mock         # 模擬デバイス(別の端末で)
+python -m padcue gui          # 操作画面
+python -m padcue mock         # 模擬デバイス(別の端末で)
 ```
 
 操作画面で手順を選び、タイムライン(いつ何のボタンを押すか)を確認して実行します。
 手順の作成・編集も同じ画面で行います(ファイルを直接いじる必要はありません)。
 
-**実機がある場合**は `switchctl device auto`(LAN 内を探して覚える)に変えるだけで、
+**実機がある場合**は `padcue device auto`(LAN 内を探して覚える)に変えるだけで、
 同じ操作が実機に対して行われます。はじめての一台は [docs/runbook.md](docs/runbook.md) を参照。
 
 ---
@@ -86,7 +86,7 @@ F,A,B,ZL,LX,GP
 ```
 docs/           設計文書(下記)
 firmware/       マイコン側(ESP-IDF)
-  components/padctl_core/   移植可能な純粋C(手順の解釈・実行・プロトコル)
+  components/pademu_core/   移植可能な純粋C(手順の解釈・実行・プロトコル)
   main/                     ESP32 固有(USB・タイマー・通信・保存・状態機械)
 pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デバイス)
 ```
@@ -122,7 +122,7 @@ cd pctool && python tools/shoot.py <出力先> [--dark]
 cd firmware && idf.py build
 
 # 実機への無線更新(2回目以降。ケーブル不要)
-python -m switchctl ota
+python -m padcue ota
 ```
 
 テストは実機なしで次を検証します:

@@ -1,5 +1,5 @@
 // ホスト検証ハーネス: バイナリ手順を実行し送出列を標準出力へ書く。
-// Python 参照実装(pctool/switchctl/engine.py)との完全一致検証に使う。
+// Python 参照実装(pctool/padcue/engine.py)との完全一致検証に使う。
 // 使い方: pademu_host <file.bin> <session_loops> <max_steps>
 #include <stdio.h>
 #include <stdlib.h>

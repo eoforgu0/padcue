@@ -9,11 +9,11 @@ import subprocess
 
 import pytest
 
-from switchctl import binfmt, engine
-from switchctl.client import DeviceClient, DeviceError, proc_hash
-from switchctl.flowfmt import FlowError
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import binfmt, engine
+from padcue.client import DeviceClient, DeviceError, proc_hash
+from padcue.flowfmt import FlowError
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 from tests.test_hostc import CORE, find_gcc, host_exe  # noqa: F401
 
 A = 1 << binfmt.BUTTONS["A"]

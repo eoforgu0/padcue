@@ -17,9 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from playwright.sync_api import sync_playwright
 
-from switchctl import gui
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import gui
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 from _localonly import lock_to_mock
 
@@ -72,7 +72,7 @@ def main():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
     proj = Project(OUT / "proj")
-    proj.init_sample()                       # runbook 0-2: switchctl init 相当
+    proj.init_sample()                       # runbook 0-2: padcue init 相当
 
     dev = MockDevice(speed=1.0, host="0.0.0.0")
     dev.start(discover_port=5557)

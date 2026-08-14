@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from switchctl import binfmt, switchsim
-from switchctl.switchsim import (
+from padcue import binfmt, switchsim
+from padcue.switchsim import (
     PAIRING_PAYLOAD, ProtocolViolation, handshake_sequence,
     parse_input_report, unpack_stick_calibration, verify_reply,
 )

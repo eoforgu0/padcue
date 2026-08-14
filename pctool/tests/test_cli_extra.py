@@ -4,9 +4,9 @@
 """
 import pytest
 
-from switchctl import cli
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import cli
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_clear_error(env, capsys):
     assert run(root, "status") == 0
     assert run(root, "clear-error") == 0
     assert "解除" in capsys.readouterr().out
-    with __import__("switchctl.client", fromlist=["DeviceClient"]).DeviceClient(
+    with __import__("padcue.client", fromlist=["DeviceClient"]).DeviceClient(
             "127.0.0.1", dev.port) as c:
         assert c.status()["state"] == "IDLE"
 

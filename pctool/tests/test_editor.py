@@ -11,8 +11,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from switchctl import gui
-from switchctl.project import Project
+from padcue import gui
+from padcue.project import Project
 
 
 @pytest.fixture

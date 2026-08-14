@@ -18,9 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from switchctl import gui  # noqa: E402
-from switchctl.mockdevice import MockDevice  # noqa: E402
-from switchctl.project import Project  # noqa: E402
+from padcue import gui  # noqa: E402
+from padcue.mockdevice import MockDevice  # noqa: E402
+from padcue.project import Project  # noqa: E402
 
 DEMO = {
     "素材周回": {

@@ -63,7 +63,7 @@ class Emission:
     gx: int = 0
     gy: int = 0
     gz: int = 0
-    # 既定は静止姿勢。加速度 0 は自由落下で、C 実装の padctl_state_neutral
+    # 既定は静止姿勢。加速度 0 は自由落下で、C 実装の pademu_state_neutral
     # (az=4096)と食い違う(binfmt.REST_A* を参照)
     ax: int = REST_AX
     ay: int = REST_AY
@@ -140,7 +140,7 @@ def run(
         elif isinstance(ev, Await):
             # 待つ間はニュートラル(入力を出しっぱなしにしない)。
             # ニュートラル = ボタンなし・スティック中央・回転なし・重力あり
-            # (C 実装の padctl_state_neutral と同じ値になること)
+            # (C 実装の pademu_state_neutral と同じ値になること)
             frame = base + ev.frame + shift - skip
             if frame < 0:
                 raise EngineError(f"再開点より前の時刻へ戻りました: idx={idx}")

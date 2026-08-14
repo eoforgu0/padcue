@@ -37,7 +37,7 @@ def add_device(project, host: str, name: str = "", port=None,
     if not info.device_id:
         return False, (f"{host} は個体IDを名乗らない古いファームです。"
                        "先に更新してください: "
-                       f"switchctl --host {host} ota firmware/build/padctl.bin")
+                       f"padcue --host {host} ota firmware/build/pademu.bin")
     if any(d.get("id") == info.device_id for d in devs):
         other = next(d for d in devs if d.get("id") == info.device_id)
         return False, f"この個体は「{other.get('name')}」として登録済みです"

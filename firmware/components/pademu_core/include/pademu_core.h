@@ -1,7 +1,7 @@
 // pademu_core: 手順データの decode と実行エンジン(移植可能な純粋C)
 //
 // FreeRTOS / ESP-IDF に依存しない。ホスト(PC)でビルドして Python 参照実装
-// (pctool/switchctl/engine.py)と送出列の完全一致を検証してから実機で使う。
+// (pctool/padcue/engine.py)と送出列の完全一致を検証してから実機で使う。
 // 仕様: docs/specs/procedure-format.md(schema v2)
 #pragma once
 

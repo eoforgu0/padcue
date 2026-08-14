@@ -15,9 +15,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from switchctl import gui
-from switchctl.mockdevice import MockDevice
-from switchctl.project import Project
+from padcue import gui
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 @pytest.fixture
@@ -214,7 +214,7 @@ def test_console_key_ignores_pairing_phase():
     (procon-protocol.md §7)。8バイトまるごとをキーにしていたため、同じ
     本体でも登録の前後で別物として扱われ、付けた名前が引き継がれなかった。
     """
-    from switchctl.devicepool import host_mac
+    from padcue.devicepool import host_mac
     # 01 形と 04 形で、フェーズと末尾のバイトだけが違う同じ本体
     a01, b01 = 0x0100005e, 0x0053013c
     a04, b04 = 0x0400005e, 0x00530100
@@ -225,7 +225,7 @@ def test_console_key_ignores_pairing_phase():
 
 def test_console_names_migrate_to_mac_key(tmp_path):
     """旧キー(8バイト)で付けた名前が、MAC キーへ移って残ること。"""
-    from switchctl.project import Project
+    from padcue.project import Project
     p = Project(tmp_path)
     cfg = p.load_config()
     cfg["consoles"] = {"0100005e0053013c": "Switch2",

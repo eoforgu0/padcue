@@ -90,7 +90,7 @@ def test_exact_multiple_is_stable_without_delay():
 
 def test_lint_threshold_matches_this_model():
     """リントの閾値が、この検証結果と一致していること。"""
-    from switchctl.dsl import _SHORT_FRAMES
+    from padcue.dsl import _SHORT_FRAMES
     assert _SHORT_FRAMES == 2, (
         "警告する下限が変わっている。0 回になりうるのは 1 フレームだけ"
         "(このファイルの検証を参照)")

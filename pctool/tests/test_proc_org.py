@@ -2,7 +2,7 @@
 import json
 import pathlib
 
-from switchctl.project import Project
+from padcue.project import Project
 
 from test_manage import make
 

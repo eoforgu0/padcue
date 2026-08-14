@@ -4,7 +4,7 @@
       procedures/<名前>.flow.json   フロー(正本)
       parts/<名前>.csv              行列部品
       build/<名前>.bin              コンパイル済み(転送するもの)
-      switchctl.json                デバイスの接続先など
+      padcue.json                デバイスの接続先など
 """
 from __future__ import annotations
 
@@ -69,13 +69,13 @@ class Project:
 
     @property
     def config_path(self) -> Path:
-        return self.root / "switchctl.json"
+        return self.root / "padcue.json"
 
     def load_config(self) -> dict:
         if self.config_path.is_file():
             cfg = json.loads(self.config_path.read_text(encoding="utf-8"))
         else:
-            cfg = {"host": "padctl.local", "port": 5555}
+            cfg = {"host": "pademu.local", "port": 5555}
         return self._migrate_config(cfg)
 
     def _migrate_config(self, cfg: dict) -> dict:
@@ -93,7 +93,7 @@ class Project:
                     bak.write_text(self.config_path.read_text(encoding="utf-8"),
                                    encoding="utf-8")
             cfg["devices"] = [{"id": "", "name": "1P",
-                              "host": cfg.get("host", "padctl.local"),
+                              "host": cfg.get("host", "pademu.local"),
                               "port": int(cfg.get("port", 5555))}]
             self.save_config(cfg)
         # 本体の名前(consoles)のキーを、ペアリング引数の先頭8バイトから

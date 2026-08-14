@@ -80,7 +80,7 @@ accel[G]   = (raw - accel原点)  * 4.0   / (accel係数 - accel原点)
 gyro[dps]  = (raw - gyro原点)   * 936.0 / (gyro係数  - gyro原点)
 ```
 
-本システムが返している値(`padctl_procon.c`)は 原点 0 / accel 係数 16384 /
+本システムが返している値(`pademu_procon.c`)は 原点 0 / accel 係数 16384 /
 gyro 係数 13371(実機の標準値)。これを式に入れると:
 
 | 軸 | 換算 | 生値 1 あたり |

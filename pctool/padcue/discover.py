@@ -2,12 +2,12 @@
 
 マイコンの IP はルーターの DHCP が決めるため変わりうる。そこで次の順に試す。
 
-1. **名前で呼ぶ**(padctl.local) — マイコンが mDNS で名乗るので、IP が変わっても
+1. **名前で呼ぶ**(pademu.local) — マイコンが mDNS で名乗るので、IP が変わっても
    名前は変わらない。ルーターの固定 IP 設定は不要
 2. **ブロードキャストで問いかける** — 名前解決が使えない環境向けの保険。
    PC に仮想アダプタ(WSL・VPN 等)が複数あると既定の1つしか送られないため、
    **各アダプタから個別に送る**
-3. 見つかったら「本当に padctl か」を識別子で確かめる
+3. 見つかったら「本当に pademu か」を識別子で確かめる
 """
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ import socket
 from dataclasses import dataclass
 
 PORT = 5557
-PROBE = b"PADCTL?"
-MAGIC = "padctl"
-HOSTNAME = "padctl.local"
+PROBE = b"PADEMU?"
+MAGIC = "pademu"
+HOSTNAME = "pademu.local"
 CTRL_PORT = 5555
 
 
@@ -36,7 +36,7 @@ class Found:
 
 
 def resolve_by_name(name: str = HOSTNAME) -> str | None:
-    """padctl.local を IP に解決する(OS の名前解決に任せる)。
+    """pademu.local を IP に解決する(OS の名前解決に任せる)。
 
     OS が解決するので、PC に複数のネットワークアダプタがあっても正しい経路を選ぶ。
     Windows 10 以降・macOS は標準で .local を解決できる。
@@ -127,11 +127,11 @@ def discover(timeout: float = 1.5, port: int = PORT,
             break      # 1つでも見つかれば全アダプタを試す必要はない
 
     if use_name and not found:
-        # 旧ファーム(固定名 padctl.local)の保険。新ファームは個体名
-        # (padctl-<MAC下4桁>.local)を名乗るため、ここでは見つからない
+        # 旧ファーム(固定名 pademu.local)の保険。新ファームは個体名
+        # (pademu-<MAC下4桁>.local)を名乗るため、ここでは見つからない
         ip = resolve_by_name()
         if ip:
             found[ip] = Found(host=ip, port=CTRL_PORT, device_id="", fw="",
-                              how="名前 padctl.local")
+                              how="名前 pademu.local")
 
     return sorted(found.values(), key=lambda f: f.host)

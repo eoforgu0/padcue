@@ -1,6 +1,6 @@
 """操作画面(GUI v1: 実行・監視)。ローカルの Web アプリとして動く。
 
-    switchctl gui
+    padcue gui
 
 デバイスに繋がっていなくてもコンパイルとタイムライン確認はできる
 (実機到着前でも手順を作って検証できるようにするため)。
@@ -165,7 +165,7 @@ class _Handler(BaseHTTPRequestHandler):
         return self._pool().get(dev).call(fn)
 
     def _reachable(self, host: str, port: int) -> bool:
-        """その住所で本当に padctl が応答するか(短い待ちで確かめる)。
+        """その住所で本当に pademu が応答するか(短い待ちで確かめる)。
 
         健康な登録済み装置がその宛先を使用中なら、試さずに到達可とする
         (実機は同時1接続・後着優先。試すと自分の接続を横取りして壊す)。
@@ -318,7 +318,7 @@ class _Handler(BaseHTTPRequestHandler):
             # ID学習済みなら本人(完全一致)のみ。未学習なら実機のみを
             # 対象にし、実機を差し置いて mock を採用しない(127.0.0.1 は
             # IP 順で先頭に来がち)。mock への切替は明示操作
-            # (padctl-練習.bat / device 127.0.0.1)だけで行う
+            # (padcue-練習.bat / device 127.0.0.1)だけで行う
             ordered = sorted(found,
                              key=lambda f: f.device_id.startswith("mock"))
             for f in ordered:
@@ -344,7 +344,7 @@ class _Handler(BaseHTTPRequestHandler):
                              "電源が入っているか・PC と同じ WiFi につながって"
                              "いるかを確認してください。"
                              "練習中(模擬デバイス)の場合は "
-                             "switchctl mock を起動してから押してください"}
+                             "padcue mock を起動してから押してください"}
         # ---- 装置台帳(登録・改名・削除は CLI と共通の registry を使う) ----
         if path == "/api/device_scan":
             # 追加登録の候補: LAN で見つかった「台帳にいない実機」だけ。
@@ -825,7 +825,7 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>padctl</title>
+<title>padcue</title>
 <style>
 /* ===== 文字の大きさ =====
    役目ごとに1つ。以前は 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 14 / 15px の
@@ -1572,7 +1572,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 </head>
 <body>
 <header>
-  <h1>padctl</h1>
+  <h1>padcue</h1>
   <div class="tabs">
     <!-- button にするのはキーボードで画面を切り替えられるようにするため
          (span だと Tab キーで到達できず、focus-visible の枠も死んでいた) -->
@@ -2196,7 +2196,7 @@ function migrateNotify(o) {
 
 let notify = (() => {
   try {
-    return migrateNotify(JSON.parse(localStorage.getItem('padctl-notify') || '{}'));
+    return migrateNotify(JSON.parse(localStorage.getItem('padcue-notify') || '{}'));
   } catch (e) { return JSON.parse(JSON.stringify(NOTIFY_DEFAULT)); }
 })();
 
@@ -2339,7 +2339,7 @@ function onNotify(kind) {
 let hotkeys = {on: false};
 try {
   Object.assign(hotkeys,
-                JSON.parse(localStorage.getItem('padctl-hotkeys') || '{}'));
+                JSON.parse(localStorage.getItem('padcue-hotkeys') || '{}'));
 } catch (e) { /* 読めなければ切のまま */ }
 
 // 音は「利用者が一度でも触ってから」でないと鳴らせない決まりがある。
@@ -2369,11 +2369,11 @@ try {
   const themes = document.getElementById('themelist');
   const grid = document.getElementById('notifygrid');
   const hk = document.getElementById('hotkeys');
-  let cur = localStorage.getItem('padctl-theme') || 'auto';
+  let cur = localStorage.getItem('padcue-theme') || 'auto';
   const markTheme = () => themes.querySelectorAll('button').forEach(
     b => b.classList.toggle('on', b.dataset.t === cur));
   const save = () => {
-    localStorage.setItem('padctl-notify', JSON.stringify(notify));
+    localStorage.setItem('padcue-notify', JSON.stringify(notify));
     paint();
   };
   // 行 = 場面、列 = 知らせ方。音を切った行は、種類と音量を押せなくする
@@ -2438,7 +2438,7 @@ try {
   };
   hk.onchange = () => {
     hotkeys.on = hk.checked;
-    localStorage.setItem('padctl-hotkeys', JSON.stringify(hotkeys));
+    localStorage.setItem('padcue-hotkeys', JSON.stringify(hotkeys));
     paint();
   };
   applyTheme(cur);
@@ -2460,7 +2460,7 @@ try {
   themes.querySelectorAll('button').forEach(b => {
     b.onclick = () => {
       cur = b.dataset.t;
-      localStorage.setItem('padctl-theme', cur);
+      localStorage.setItem('padcue-theme', cur);
       applyTheme(cur);
       markTheme();
     };
@@ -2856,7 +2856,7 @@ function buildDevRow(d) {
   row.host.type = 'text';
   row.host.className = 'devhost';
   row.host.size = 20;
-  row.host.placeholder = 'IP か padctl-xxxx.local';
+  row.host.placeholder = 'IP か pademu-xxxx.local';
   row.host.title = 'この装置の IP か名前。ふだんは「探す」で自動設定されます';
   row.find = el('button', 'small', '探す');
   row.find.title = 'LAN からこの装置(個体IDが一致する実機)を探して接続先にします';
@@ -6647,7 +6647,7 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
         # 「今すぐ止める」か、本体ボタンの長押し
         print()
         print("終了しました。実行中の手順は実機側で動き続けます"
-              "(止めるには padctl.bat をもう一度開いて「今すぐ止める」、"
+              "(止めるには padcue.bat をもう一度開いて「今すぐ止める」、"
               "または本体ボタンを1.5秒長押し)")
     finally:
         marker.unlink(missing_ok=True)

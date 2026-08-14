@@ -1,5 +1,5 @@
 [project]
-name = "switchctl"
+name = "padcue"
 version = "0.1.0"
 description = "Switch 2 自動操作システムの PC 側ツール"
 requires-python = ">=3.12"

@@ -1,7 +1,7 @@
 import pytest
 
-from switchctl import proto
-from switchctl.proto import Message
+from padcue import proto
+from padcue.proto import Message
 
 
 def test_roundtrip():
