@@ -254,15 +254,19 @@ function updateLane(lane, d) {
     lane.chip.className = 'chip';
     lane.chip.textContent = '未接続';
     showIn(lane.msg, '', '');
+    lane.errKey = '';               // 繋がり直したら異常の知らせを出し直す
     lane.tlprog.textContent = '';
     for (const b of [lane.run1, lane.run, lane.stopg, lane.stopi]) {
       b.disabled = true;
       b.title = '';
     }
     lane.awaitbox.textContent = '';
+    // 「前回どんな形で描いたか」も忘れる。忘れないと、収集が1周期
+    // 失敗しただけで選択肢が消えたまま二度と描き直されない
+    // (駐機中は await_gen が動かないので、復帰後の鍵が前と同じになる)
+    lane.awaitKey = '';
     return;
   }
-  showIn(lane.msg, '', '');
   // ペアリング未完了は装置パネルの詳細で対処するが、結論(⚠)はチップにも
   // 出す(原則 §1: 結論はレーン、原因・対処は装置カード)
   const pairIncomplete = 'pair_step' in d
@@ -273,13 +277,22 @@ function updateLane(lane, d) {
                                    : pairIncomplete ? 'warn' : '');
   lane.chip.textContent = stateJa(d.state) + (pairIncomplete ? ' ⚠' : '');
   if (d.state === 'ERROR') {
-    showIn(lane.msg, 'err', 'この装置が異常を報告しています');
-    const b = el('button', null, '異常を解除');
-    b.onclick = async () => {
-      await api('/api/clear_error', 'POST', {dev: lane.name});
-      refresh();
-    };
-    lane.msg.firstChild.append(b);
+    // 中身が同じなら作り直さない。毎秒作り直すと、解除ボタンを押している
+    // 最中に DOM が差し替わってクリックが失われる(上部バーの知らせと
+    // 装置カードの✎で同じ対処をしている)
+    if (lane.errKey !== 'err') {
+      lane.errKey = 'err';
+      showIn(lane.msg, 'err', 'この装置が異常を報告しています');
+      const b = el('button', null, '異常を解除');
+      b.onclick = async () => {
+        await api('/api/clear_error', 'POST', {dev: lane.name});
+        refresh();
+      };
+      lane.msg.firstChild.append(b);
+    }
+  } else if (lane.errKey) {
+    lane.errKey = '';
+    showIn(lane.msg, '', '');       // 異常が解けたら消す
   }
   syncLaneProc(lane, d, runName);
   // ボタンの抑止(1台時の renderStatus と同じ規則)

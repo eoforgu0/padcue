@@ -289,13 +289,14 @@ document.getElementById('recsave').onclick = async () => {
 
 // ============ 更新ループ ============
 async function refresh() {
-  let got;
-  try {
-    got = await api('/api/state');
-  } catch (e) {
-    // 画面サーバに届かない(落ちた・ネットワークが切れた)。前の値が
-    // 残ったままだと、止まっているのに再生位置が動き続けて「動いている」
-    // ように見える。古いことを画面全体で名乗り、補間も止める
+  const got = await api('/api/state');
+  // api() は決して例外を投げず、失敗も {error} で返す(core.js の約束)。
+  // ここを try/catch で書くと catch が一度も動かず、失敗した応答を
+  // そのまま state に入れてしまう —— 以降 state.procedures が無いので
+  // 描画が途中で止まり、しかも「古い」ことは名乗らないまま画面は
+  // 前の値を出し続ける(2026-08-15 のレビューで発覚)。
+  // 画面サーバに届かないときは、前の値を残したまま薄くして補間を止める
+  if (!got || got.error) {
     setStale(true);
     return;
   }

@@ -168,7 +168,12 @@ function renderPart() {
         // マウスは押した時点で切り替える(ドラッグの起点も塗られる)。
         // キーボード(Space/Enter)は click だけ来るので、その場合だけ click で処理する
         let byMouse = false;
-        b.onmousedown = () => { byMouse = true; paintTo = !on(); paint(paintTo); };
+        b.onmousedown = (e) => {
+          // 左ボタンだけ。右クリックやホイールクリックで塗ると、
+          // 気づかないまま値が変わる(部品編集に取り消しは無い)
+          if (e.button !== 0) return;
+          byMouse = true; paintTo = !on(); paint(paintTo);
+        };
         b.onclick = () => {
           if (byMouse) { byMouse = false; return; }
           paint(!on());

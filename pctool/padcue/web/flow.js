@@ -97,8 +97,11 @@ function enableBox(n) {
   const cb = el('input'); cb.type = 'checkbox'; cb.checked = !n.off;
   cb.onclick = (e) => {
     e.stopPropagation();
-    if (cb.checked) delete n.off; else n.off = true;
+    // 積むのは「変える前」。他の編集(削除・移動・複製・入力)はすべて
+    // その順で、ここだけ逆だった —— 1回目の Ctrl+Z が無反応になり、
+    // 2回目で直前の別の編集まで巻き戻る
     snapshot();
+    if (cb.checked) delete n.off; else n.off = true;
     renderFlow(true);
   };
   lab.onclick = (e) => e.stopPropagation();
