@@ -5,15 +5,16 @@
 端末に例外の山が出ていた。原因は contextmanager の中で 2 回目の yield を
 していたこと。P2-1 で接続管理は devicepool.DeviceLink に一本化されたが、
 守るべき規則は同じ:
- - TimeoutError は繋ぎ直して再送しない(二重実行防止)。理由はそのまま伝える
- - 接続断(ConnectionError/OSError)は1度だけ繋ぎ直して同じ操作をやり直す
+ - **やり直すのは「送り出す前に切れていた」と分かるときだけ**(NotSentError)。
+   装置が受け取った可能性がある切れ方でやり直すと、実行や転送が二重に効く
+ - TimeoutError も同じ理由で再送しない。理由はそのまま伝える
  - 続けて呼んでも接続は1本を使い回す(実機は同時1接続しか受けない)
 """
 from typing import ClassVar
 
 import pytest
 
-from padcue.client import DeviceError
+from padcue.client import DeviceError, NotSentError
 from padcue.devicepool import DeviceLink
 from padcue.project import Project
 
@@ -77,13 +78,31 @@ def test_timeout_is_not_masked(link):
     assert _FakeClient.made[0].closed
 
 
-def test_disconnect_is_retried_once(link):
-    """相手が黙って閉じていた場合は、繋ぎ直して同じ操作をやり直すこと。"""
-    _FakeClient.fail_first = ConnectionResetError("closed by peer")
+def test_disconnect_before_sending_is_retried_once(link):
+    """送り出す前に切れていたなら、繋ぎ直して同じ操作をやり直すこと。
+
+    装置は何も受け取っていないと分かっているので、二重実行にならない。
+    """
+    _FakeClient.fail_first = NotSentError("送り出せませんでした")
     link.call(lambda c: c.stop("immediate"))
     assert len(_FakeClient.made) == 2, "繋ぎ直していない"
     assert _FakeClient.made[1].stopped == "immediate", "やり直せていない"
     assert link.client is _FakeClient.made[1]
+
+
+def test_disconnect_after_sending_is_not_retried(link):
+    """送ったあとに切れた場合は、やり直さずに理由を伝えること。
+
+    実機は同時1接続・後着優先なので、相方の接続に横取りされて
+    「送った直後に切れる」のは普通に起きる。ここで RUN を送り直すと
+    BUSY で拒まれ、呼び出し元は「拒否された」と受け取って、実際には
+    走っている装置を監視の外に置いてしまう(2026-08-15 のレビュー)。
+    """
+    _FakeClient.fail_first = ConnectionResetError("closed by peer")
+    with pytest.raises(ConnectionError):
+        link.call(lambda c: c.stop("immediate"))
+    assert len(_FakeClient.made) == 1, "やり直してしまった"
+    assert link.client is None                # 壊れた接続は捨てる
 
 
 def test_connection_is_reused(link):

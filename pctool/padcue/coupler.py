@@ -407,7 +407,17 @@ class Coupler:
                 if msg != self._watch_error:
                     self._watch_error = msg
                     traceback.print_exc()
-                    members = self.members()
+                    # ここで members() を呼び直さない。異常の原因が
+                    # その呼び出し自身(設定ファイルが壊れている等)だと、
+                    # この except の中でもう一度落ちる。except の中から
+                    # 送出された例外は同じ try では捕まらないので、
+                    # **見張りごと死ぬ**(連動停止も自動合流も黙って
+                    # 止まり、GUI を再起動するまで戻らない)。
+                    # 記録できるときだけ記録する
+                    try:
+                        members = self.members()
+                    except Exception:   # noqa: BLE001
+                        members = []
                     if members:
                         self._log(members[0], "PC_WATCH_ERROR", a=0, b=0,
                                   message=msg)

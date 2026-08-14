@@ -269,6 +269,17 @@ class _Handler(BaseHTTPRequestHandler):
     # ---- ルーティング ----
 
     def do_GET(self):
+        # POST と同じく、想定外の例外をここで受ける。受けないと
+        # http.server が応答を返さずに接続を切り、画面には「操作画面に
+        # つながりません」としか出ない(/api/state は毎秒なので画面が
+        # 丸ごと死ぬ)。設定ファイルが壊れているだけでもここに来る
+        try:
+            return self._get()
+        except Exception as e:       # noqa: BLE001
+            traceback.print_exc()
+            return self._json({"error": f"内部エラー: {e}"}, 200)
+
+    def _get(self):
         u = urlparse(self.path)
         why = self._guard(need_json=False)
         if why:
@@ -421,13 +432,20 @@ class _Handler(BaseHTTPRequestHandler):
             # 対象にし、実機を差し置いて mock を採用しない(127.0.0.1 は
             # IP 順で先頭に来がち)。mock への切替は明示操作
             # (padcue-練習.bat / device 127.0.0.1)だけで行う
+            # 他のレーンが控えている個体は、ID 未学習でも採用しない。
+            # 1P が落ちている状態で 1P の「探す」を押すと、応答するのは 2P
+            # だけになる。ここを見ないと 1P の接続先が 2P の住所に書き換わり、
+            # 両方のレーンが同じ実機を掴む(片方の操作がもう片方に出る)。
+            # 追加登録(/api/device_scan)と CLI は同じ危険を既に防いでいた
+            others = {d.get("id") for i, d in enumerate(devs_all)
+                      if i != didx and d.get("id")}
             ordered = sorted(found,
                              key=lambda f: is_mock(f.device_id))
             for f in ordered:
                 if want_id:
                     if f.device_id != want_id:
                         continue
-                elif is_mock(f.device_id):
+                elif is_mock(f.device_id) or f.device_id in others:
                     continue
                 if not self._reachable(f.host, f.port):
                     continue

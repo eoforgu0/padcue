@@ -19,7 +19,13 @@ import time
 import traceback
 
 from . import proto
-from .client import DeviceClient, DeviceError, connect_verified, is_mock
+from .client import (
+    DeviceClient,
+    DeviceError,
+    NotSentError,
+    connect_verified,
+    is_mock,
+)
 
 
 def host_mac(a, b) -> str:
@@ -100,14 +106,24 @@ class DeviceLink:
     # ---- 操作(収集と同じ接続・同じ lock を通る唯一の窓口) ----
 
     def call(self, fn):
-        """装置への1コマンド。接続が切れていたら1度だけ繋ぎ直してやり直す。
+        """装置への1コマンド。
 
-        TimeoutError は繋ぎ直さない: 相手が受け取り済みの操作を二重実行
-        しかねないため、そのまま失敗として返す(従来 _retrying と同じ規則)。
+        やり直すのは **要求を送り出す前に切れていたと分かるとき**だけ
+        (NotSentError)。装置が受け取ってしまった可能性がある切れ方で
+        やり直すと、実行や転送が二重に効く —— 実機は同時1接続・後着優先
+        なので、相方の接続に横取りされた直後にここへ来るのは普通に起きる。
+        RUN を送り直せば BUSY で拒否され、呼び出し元は「拒否された」と
+        受け取って走っている装置を監視外に置いてしまう(2026-08-15 の
+        レビューで発覚)。
+
+        TimeoutError も同じ理由でやり直さない。
         """
         with self.lock:
             try:
                 return fn(self._ensure())
+            except NotSentError:
+                self._drop()
+                return fn(self._ensure())   # 装置は何も受け取っていない
             except TimeoutError:
                 self._drop()
                 raise
@@ -115,7 +131,7 @@ class DeviceLink:
                 raise                    # プロトコル上の拒否。接続は健康
             except (ConnectionError, OSError):
                 self._drop()
-                return fn(self._ensure())
+                raise
 
     def write_through(self, status: dict | None = None,
                       listing: dict | None = None) -> None:

@@ -13,6 +13,15 @@ from .binfmt import REST_AX, REST_AY, REST_AZ, proc_hash
 from .proto import Message
 
 
+class NotSentError(ConnectionError):
+    """要求を送り出す前に接続が切れていた(装置は何も受け取っていない)。
+
+    送ったあとに切れた場合と区別する。装置が受け取ってしまった可能性が
+    あるなら、同じ操作をやり直してはいけない(実行や転送が二重に効く)。
+    送る前に落ちたと分かっているときだけ、上位が黙って繋ぎ直してよい。
+    """
+
+
 class DeviceError(Exception):
     """デバイスが要求を拒否した(理由つき)。"""
 
@@ -94,7 +103,11 @@ class DeviceClient:
     def _send(self, msg: Message) -> Message:
         if self._sock is None:
             raise RuntimeError("接続していません")
-        self._sock.sendall(proto.pack(msg))
+        try:
+            self._sock.sendall(proto.pack(msg))
+        except OSError as e:
+            # まだ何も届いていない。上位は安全に繋ぎ直せる
+            raise NotSentError(f"送り出せませんでした: {e}") from e
         while True:
             got = proto.unpack_from(self._buf)
             if got is not None:

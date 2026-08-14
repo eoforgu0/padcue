@@ -17,6 +17,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from padcue import gui
+from padcue.coupler import Coupler
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 
@@ -390,3 +391,40 @@ def test_formations(env):
     assert post(base, "/api/formation_delete", {"name": "検証B"}).get("ok")
     names = [f["name"] for f in get(base, "/api/state")["formations"]]
     assert "検証A" not in names and "検証B" not in names, names
+
+
+def test_watch_survives_a_failure_in_the_error_path(tmp_path, monkeypatch):
+    """見張りの後始末そのものが失敗しても、輪が止まらないこと。
+
+    異常の記録は members() を呼んで「どの装置の記録か」を決めるが、異常の
+    原因がその members() 自身(設定ファイルが壊れている等)だと、except の
+    中で二度目の例外が出る。except から送出された例外は同じ try では
+    捕まらないので、以前は見張りスレッドごと死んでいた —— 連動停止も
+    自動合流も黙って止まり、設定を直しても GUI を再起動するまで戻らない。
+    """
+    proj = Project(tmp_path)
+    calls = []
+
+    class _Boom(Coupler):
+        def __init__(self):        # 見張りは自分で回すので起こさない
+            self.project = proj
+            self._stop = False
+            self._watch_error = ""
+            self.POLL_S = 0.01
+
+        def members(self):
+            calls.append(1)
+            raise OSError("設定を読めません")
+
+        def _watch_once(self):
+            self.members()
+
+    c = _Boom()
+    th = threading.Thread(target=c._watch_loop, daemon=True)
+    th.start()
+    time.sleep(0.2)
+    c.close()
+    th.join(timeout=2)
+    assert not th.is_alive(), "見張りが止まらない"
+    # 2周以上回っている = 1周目の二次例外で死んでいない
+    assert len(calls) >= 4, calls
