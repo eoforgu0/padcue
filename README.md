@@ -166,14 +166,14 @@ pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デ
 
 道具立て(利用者には不要。開発するときだけ):
 
-```bash
-pip install -e ./pctool[dev]     # pytest と playwright
+```powershell
+pip install -e "./pctool[dev]"   # pytest と playwright
 playwright install chromium      # 画面を実際に動かす検査に使う
 ```
 
 以下はすべてリポジトリ直下で実行します。
 
-```bash
+```powershell
 # PC 側のテスト(実機不要。C 実装の検証も含む)
 python -m pytest -q
 
@@ -190,7 +190,8 @@ python pctool/tools/shoot.py <出力先> [--dark]
 python pctool/tools/mdtable.py docs/<文書>.md
 
 # マイコン側のビルド(ESP-IDF 5.5 以上。Windows は PowerShell から)
-cd firmware && idf.py build
+cd firmware
+idf.py build
 
 # 実機への無線更新(2回目以降。ケーブル不要)
 python -m padcue ota

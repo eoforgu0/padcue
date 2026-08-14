@@ -10,8 +10,8 @@
 
 ## 変更を送る前に
 
-```bash
-pip install -e ./pctool[dev]
+```powershell
+pip install -e "./pctool[dev]"
 playwright install chromium
 
 python -m pytest -q                          # 実機なしで通ります
