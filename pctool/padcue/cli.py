@@ -87,6 +87,30 @@ def _gui_dev(base: str, args) -> tuple[dict | None, dict]:
     return None, st
 
 
+def _dev_arg(args) -> str:
+    """--device の値(未指定なら空文字)。API へ渡す装置の指定。"""
+    return getattr(args, "device", "") or ""
+
+
+def _via_gui(p: Project, path: str, body: dict, done) -> int | None:
+    """画面が開いていれば、その API を叩いて終了コードを返す。
+
+    開いていなければ None を返すので、呼ぶ側は直結の処理へ進む。
+    「開いているか見る → 投げる → error を見る → 印を出す」の4段が
+    コマンドごとに書き写されるのを防ぐ(計画 D10 の経路選択はここだけ)。
+    done は成功したときに表示する文言。応答の中身を使いたいときは関数を渡す。
+    """
+    base = _gui_base(p)
+    if base is None:
+        return None
+    r = _gui_post(base, path, body)
+    if r.get("error"):
+        print(r["error"])
+        return 1
+    print(done(r) if callable(done) else done)
+    return 0
+
+
 def _refuse_while_gui(p: Project, what: str) -> bool:
     """装置を専有する操作(OTA・設定・方式切替)は画面と両立しない。"""
     if _gui_base(p) is None:
@@ -263,16 +287,10 @@ def cmd_push(args) -> int:
         print(f"コンパイル失敗: {e}")
         return 1
     _print_build(r)
-    base = _gui_base(p)
-    if base:
-        res = _gui_post(base, "/api/push",
-                        {"name": args.name,
-                         "dev": getattr(args, "device", "") or ""})
-        if res.get("error"):
-            print(res["error"])
-            return 1
-        print(f"転送・保存しました(hash {res.get('hash')}・操作画面経由)")
-        return 0
+    rc = _via_gui(p, "/api/push", {"name": args.name, "dev": _dev_arg(args)},
+                  lambda r: f"転送・保存しました(hash {r.get('hash')}・操作画面経由)")
+    if rc is not None:
+        return rc
     with _client(args) as c:
         h = c.put(r.name, r.blob)
         c.commit(r.name)
@@ -288,7 +306,7 @@ def cmd_run(args) -> int:
         # 連結の人為停止の印も、サーバ側の同じ規則で扱われる
         r = _gui_post(base, "/api/run",
                       {"name": args.name, "loops": args.loops,
-                       "dev": getattr(args, "device", "") or ""})
+                       "dev": _dev_arg(args)})
         if r.get("error"):
             print(r["error"])
             return 1
@@ -306,7 +324,7 @@ def cmd_run(args) -> int:
             except KeyboardInterrupt:
                 _gui_post(base, "/api/stop",
                           {"mode": "immediate",
-                           "dev": getattr(args, "device", "") or ""})
+                           "dev": _dev_arg(args)})
                 print("\n停止しました")
         return 0
     with _client(args) as c:
@@ -340,16 +358,11 @@ def cmd_stop(args) -> int:
                       "(既に止まっていた場合は停止のままです)",
             "graceful": "区切り停止を指示しました",
             "immediate": "即時停止しました"}[mode]
-    base = _gui_base(_project(args))
-    if base:
-        r = _gui_post(base, "/api/stop",
-                      {"mode": mode,
-                       "dev": getattr(args, "device", "") or ""})
-        if r.get("error"):
-            print(r["error"])
-            return 1
-        print(said + "(操作画面経由)")
-        return 0
+    rc = _via_gui(_project(args), "/api/stop",
+                  {"mode": mode, "dev": _dev_arg(args)},
+                  said + "(操作画面経由)")
+    if rc is not None:
+        return rc
     with _client(args) as c:
         c.stop(mode)
         print(said)
@@ -480,15 +493,10 @@ def cmd_config(args) -> int:
 
 
 def cmd_clear_error(args) -> int:
-    base = _gui_base(_project(args))
-    if base:
-        r = _gui_post(base, "/api/clear_error",
-                      {"dev": getattr(args, "device", "") or ""})
-        if r.get("error"):
-            print(r["error"])
-            return 1
-        print("異常状態を解除しました(操作画面経由)")
-        return 0
+    rc = _via_gui(_project(args), "/api/clear_error", {"dev": _dev_arg(args)},
+                  "異常状態を解除しました(操作画面経由)")
+    if rc is not None:
+        return rc
     with _client(args) as c:
         c.clear_error()
     print("異常状態を解除しました")
@@ -646,7 +654,7 @@ def cmd_device(args) -> int:
             # 画面が開いている間は画面の「探す」と同じ経路(D10)。直結の
             # 到達確認が画面の接続を横取りしない
             r = _gui_post(base, "/api/discover",
-                          {"dev": getattr(args, "device", "") or ""})
+                          {"dev": _dev_arg(args)})
             if r.get("error"):
                 print(r["error"])
                 return 1
