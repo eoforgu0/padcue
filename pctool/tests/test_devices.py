@@ -17,6 +17,7 @@ from padcue.project import Project
 
 # ---- 設定の移行 ----
 
+
 def test_old_config_migrates_to_devices(tmp_path):
     p = Project(tmp_path)
     p.config_path.write_text(json.dumps({"host": "10.0.0.9", "port": 5556}),

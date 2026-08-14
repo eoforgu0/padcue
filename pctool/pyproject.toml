@@ -44,9 +44,25 @@ line-length = 88
 extend-exclude = ["build"]
 
 [tool.ruff.lint]
+# preview を開けるのは、pycodestyle の空白・空行の規則(E1xx / E2xx / E3xx)が
+# ruff ではまだ preview 扱いだから。"E" を選んでいても動かないので、空行が
+# 2つでも4つでも lint は緑のままだった(実際に 27 箇所ずれていた)。
+# explicit-preview-rules = true と対で使い、**番号で指名したものだけ**を
+# 有効にする。開けっ放しにすると ruff を上げるたびに未知の規則が増えて、
+# コードに触っていない日に CI が赤くなる。
+preview = true
+explicit-preview-rules = true
+
 # BLE(握り潰しの検出)は必ず含める。既存の `# noqa: BLE001` は意図して
 # 置いた注釈で、外すと RUF100(不要な noqa)で一斉に消される。
-select = ["E", "F", "W", "I", "B", "BLE", "UP", "RUF"]
+select = [
+    "E", "F", "W", "I", "B", "BLE", "UP", "RUF",
+    # 空行の数(定義の前後・入れ子の定義の前)。接頭辞 "E3" では preview の
+    # 規則は起きないので、6つとも番号で書く
+    "E301", "E302", "E303", "E304", "E305", "E306",
+    # 桁まわり: コメントのぶら下げ / カンマの後の空白 / 行末コメントの前の空白
+    "E116", "E231", "E261",
+]
 
 ignore = [
     # 日本語のコメント・文字列・docstring に全角記号を使うのは正当。

@@ -42,10 +42,10 @@ class Coupler:
         self._stop = False
         self._state = self._load_runstate()
         # 監視の作業メモ(再起動で失われてよいもの)
-        self._err_since: dict[str, float] = {}    # 装置名 -> 見えなくなった時刻
-        self._parked_since: dict[str, float] = {} # 装置名 -> 駐機を見つけた時刻
-        self._parked_gen: dict[str, int] = {}     # 装置名 -> その駐機の世代
-        self._late_warned: dict[str, int] = {}    # 装置名 -> 警告済みの駐機世代
+        self._err_since: dict[str, float] = {}     # 装置名 -> 見えなくなった時刻
+        self._parked_since: dict[str, float] = {}  # 装置名 -> 駐機を見つけた時刻
+        self._parked_gen: dict[str, int] = {}      # 装置名 -> その駐機の世代
+        self._late_warned: dict[str, int] = {}     # 装置名 -> 警告済みの駐機世代
         # 片送りに終わった SELECT の再送待ち: 装置名 -> (世代, 腕)。
         # 放置すると到達順の対応が1周ずれる(2026-08-06 レビュー)
         self._select_retry: dict[str, tuple] = {}

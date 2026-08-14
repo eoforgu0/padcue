@@ -22,6 +22,7 @@ def _lum(hexcol: str) -> float:
     if len(h) == 3:
         h = "".join(c * 2 for c in h)
     parts = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
     def f(c):
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
     r, g, b = (f(c) for c in parts)

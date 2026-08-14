@@ -90,6 +90,7 @@ def test_status_and_run_go_through_gui(env, capsys):
     assert "操作画面経由" in capsys.readouterr().out
     # 実際に走ったかは画面のサーバ経由で見る(直結すると接続を奪ってしまう)
     base = cli._gui_base(proj)
+
     def running():
         d = cli._gui_get(base, "/api/state")["devices"][0]
         return bool(d.get("running"))

@@ -12,6 +12,7 @@ from tests.helpers import make_project as make
 
 # ---------------- ジャイロ ----------------
 
+
 def test_gyro_block_sets_rate_until_changed(tmp_path):
     p = make(tmp_path, {"p": [
         {"type": "gyro", "gy": 300},
@@ -36,7 +37,6 @@ def test_gyro_text_dsl():
     c = compile_source("proc p\ngyro 0 300 0\nwait 30\ngyro 0 0 0\nwait 10\nend\n")
     states = [e for e in c.events if isinstance(e, binfmt.State)]
     assert [(e.frame, e.gy) for e in states] == [(0, 300), (30, 0)]
-
 
 
 # ---------------- 静止姿勢(加速度の既定値) ----------------
@@ -91,7 +91,6 @@ def test_gyro_block_keeps_gravity(tmp_path):
     states = [e for e in compile_flow(str(p.root), "p").events
               if isinstance(e, binfmt.State)]
     assert [(s.gy, s.az) for s in states] == [(2000, 4096)]
-
 
 
 # ---------------- ジャイロの「長さ」指定 ----------------
@@ -160,7 +159,6 @@ def test_wait_branch_arm_does_not_leak_motion(tmp_path):
                                       binfmt.REST_AZ) for h in heads)
 
 
-
 # ---------------- タイムラインのモーション行 ----------------
 
 def test_timeline_shows_gyro_and_hides_resting_accel():
@@ -183,7 +181,6 @@ def test_timeline_shows_freefall_as_activity():
     tl = build_timeline(binfmt.encode("z", ev, 20))
     az = next(t for t in tl["tracks"] if t["name"] == "AZ")
     assert az["spans"] == [[0, 10, 0]]
-
 
 
 # ---------------- ゆらぎ(ゼロ点自動較正よけ) ----------------
@@ -248,7 +245,6 @@ def test_gyro_sway_ignored_without_frames(tmp_path):
     c = compile_flow(str(p.root), "p")
     assert any("ゆらぎは長さ 0" in w["msg"] if isinstance(w, dict)
                else "ゆらぎは長さ 0" in w.msg for w in c.warnings)
-
 
 
 # ---------------- ジャイロ定常のリント(60F) ----------------
@@ -329,7 +325,6 @@ def test_capacity_warning(tmp_path):
     c = compile_flow(str(p.root), "p")
     assert any("保存容量" in w.msg for w in c.warnings), \
         [w.msg for w in c.warnings]
-
 
 
 # ---------------- 間欠ゆらぎ(実測 2026-08-01 の方式) ----------------

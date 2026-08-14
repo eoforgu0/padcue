@@ -17,7 +17,6 @@ from padcue.switchsim import handshake_sequence, verify_reply
 # ---- プロジェクトの下ごしらえ ----
 
 
-
 def make_project(tmp_path, flows: dict, parts: dict | None = None) -> Project:
     tmp_path = pathlib.Path(tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -57,6 +56,7 @@ def run_c(host_exe, blob: bytes, tmp_path, session_loops=1, max_steps=1_000_000)
 # ホスト検査の装置が名乗る MAC(host/procon_host.c と同じ値)。実機は装置ごとに
 # 下位3バイトを自分の MAC から作るので、ここは検査用の固定値でよい
 MAC = bytes([0x04, 0x03, 0xD6, 0x00, 0x00, 0x01])
+
 
 class Device:
     """C 実装のプロセスを「デバイス」として扱うラッパ。"""
@@ -159,6 +159,7 @@ class Device:
     def close(self) -> None:
         self.proc.stdin.close()
         self.proc.wait(timeout=10)
+
 
 def run_handshake(device: Device) -> None:
     for exp in handshake_sequence(MAC):

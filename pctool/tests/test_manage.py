@@ -11,6 +11,7 @@ from tests.helpers import make_project as make
 
 # ---------------- 改名 ----------------
 
+
 def test_rename_procedure_updates_callers(tmp_path):
     """呼んでいる側の参照も直すこと(直さないと変換に失敗する)。"""
     p = make(tmp_path, {

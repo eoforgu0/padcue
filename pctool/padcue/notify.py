@@ -141,8 +141,8 @@ class RunWatcher:
             prev = self._prev.get(key)
             self._prev[key] = {"busy": busy, "waiting": waiting}
             if prev is None:
-                continue            # 最初の1回は基準を作るだけ(起動直後に
-                                    # 鳴らさない)
+                # 最初の1回は基準を作るだけ(起動直後に鳴らさない)
+                continue
             if busy and not prev["busy"]:
                 self._forget_manual(members)   # 新しい実行。古い印は無効
             if prev["busy"] and not busy:

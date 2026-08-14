@@ -66,6 +66,7 @@ def proc_hash(data: bytes) -> str:
     """
     return hashlib.sha256(data).hexdigest()[:16]
 
+
 # ボタンのビット割り当て(転送層がレポート形式へ変換する。ここは方式非依存の論理表現)
 BUTTONS = {
     "A": 0, "B": 1, "X": 2, "Y": 3,

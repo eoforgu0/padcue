@@ -74,18 +74,18 @@ def _random_body(rng, depth, lines):
         kind = rng.randint(0, 5)
         if kind == 0:
             lines.append(
-                f"press {rng.choice(['A','B','X','ZL','DU'])} "
+                f"press {rng.choice(['A', 'B', 'X', 'ZL', 'DU'])} "
                 f"{rng.randint(3, 20)}")
         elif kind == 1:
             lines.append(f"wait {rng.randint(3, 30)}")
         elif kind == 2:
             lines.append(
-                f"stick {rng.choice(['L','R'])} "
+                f"stick {rng.choice(['L', 'R'])} "
                 f"{rng.randint(-2048, 2047)} {rng.randint(-2048, 2047)}")
         elif kind == 3:
-            lines.append(f"hold {rng.choice(['ZR','L'])}")
+            lines.append(f"hold {rng.choice(['ZR', 'L'])}")
         elif kind == 4:
-            lines.append(f"release {rng.choice(['ZR','L'])}")
+            lines.append(f"release {rng.choice(['ZR', 'L'])}")
         elif kind == 5 and depth < 2:
             lines.append(f"loop {rng.randint(2, 4)} {{  # lint:allow-loop-reset")
             _random_body(rng, depth + 1, lines)

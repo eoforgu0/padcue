@@ -1346,8 +1346,6 @@ def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(900)
     c.check("別の手順を呼ぶブロックが使える", t_call_block)
 
-
-
     # ================= 手順を編集 =================
 
 
@@ -2042,8 +2040,6 @@ def run_flow_branch_and_folders(c: Checker, page, proj: Project, prompt_value: l
     c.check("一覧のドラッグで開いている手順が切り替わらない",
             t_proc_drag_keeps_open_flow)
 
-
-
     # ================= 部品を編集 =================
 
 
@@ -2533,6 +2529,7 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
         assert rows() == n0, rows()
         page.click("#savepart")
         page.wait_for_timeout(700)
+
     def t_keyboard_insert_delete():
         """Alt+Insert で上に1行挿し、Alt+Delete でその行を削れること(新設)。
 
@@ -2641,8 +2638,6 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
         prompt_value[0] = "自動テスト"
     c.check("フォルダを跨ぐ名前は弾かれる", t_bad_part_name)
 
-
-
     # ================= 未接続 =================
 
 
@@ -2692,9 +2687,6 @@ def run_disconnected(c: Checker, page, dev: MockDevice):
             "チップをクリックしても装置行が開かない"
     c.check("未接続: 装置行が自動で開いて赤くなり、チップから装置行へ飛べる(新設)",
             t_disconnected)
-
-
-
 
 
 def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
@@ -3056,7 +3048,6 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("2台目を外すとレーン1本の画面に戻る", t_remove_returns_to_solo)
 
     m1.stop()
-
 
 
 def run_coupling(c: Checker, page, proj: Project,
@@ -3624,8 +3615,6 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
         page.wait_for_timeout(600)
     (proj.root / "procedures" / "選んで進む(遅).flow.json").unlink(
         missing_ok=True)
-
-
 
 
 if __name__ == "__main__":

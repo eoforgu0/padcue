@@ -50,6 +50,7 @@ _STATIC = {
        for name in _SCRIPTS},
 }
 
+
 def web_asset(name: str) -> str:
     """画面の資産(index.html / app.css / app.js)を読む。
 
@@ -534,6 +535,7 @@ class _Handler(BaseHTTPRequestHandler):
             if r is None:
                 return {"error": err}
             link = self._pool().get(body.get("dev", ""))
+
             def _push(c):
                 c.put(r.name, r.blob)
                 c.commit(r.name)
@@ -557,6 +559,7 @@ class _Handler(BaseHTTPRequestHandler):
                     return {"error": f"再開点が見つかりません: {at}"}
                 resume = {"index": pt["index"], "base": pt["base"]}
             link = self._pool().get(body.get("dev", ""))
+
             def _run(c):
                 listing = {e["name"]: e["hash"] for e in c.list()}
                 if listing.get(name) != r.hash:
@@ -944,8 +947,6 @@ def _why(e: Exception, host: str) -> str:
     if "unreachable" in text.lower() or "10051" in text or "10065" in text:
         return f"{host} まで届きません。同じネットワークにいるか確認してください"
     return f"{host} につながりません({text})"
-
-
 
 
 def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
