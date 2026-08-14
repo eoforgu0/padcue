@@ -134,7 +134,6 @@ header { display:flex; align-items:center; gap:10px; padding:9px 18px;
   border-bottom:1px solid var(--line); background:var(--surface); flex-wrap:wrap;
   flex:none; }
 header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
-header .spacer { margin-left:auto; }
 /* 装置の状態と接続先は同じことなので1つの枠にまとめる。
    状態だけ左端に離れていると、何の状態なのか・どこで直すのかが分からない */
 header { position:relative; }
@@ -725,11 +724,8 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   padding:6px 10px; border-radius:8px;
   background:var(--ok-bg); color:var(--ok); font-size:var(--fs-body); }
 .nowplaying b { font-size:var(--fs-name); }
-.playmark { color:var(--ok); font-size:var(--fs-sub); }
 /* 入力値を勝手に直したセルの一瞬の強調(partmsg の説明とセットで出す) */
 table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
-/* 実行中の行に付く印(一覧の中でどれが動いているか) */
-.proc .playmark { margin-left:4px; }
 /* 手動操作中はカード全体を縁取って、終い忘れに気づけるようにする */
 /* 対象を切り替えている間は、図を薄くして触れなくする(押せてしまうと、
    その入力がどちらの装置へ行ったのか言えない) */
@@ -737,5 +733,3 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 #manualcard.on { border-color:var(--ok); box-shadow:0 0 0 2px var(--ok-bg); }
 #manualcard.on h2::after { content:' ● 操作中'; color:var(--ok);
   font-weight:700; letter-spacing:0; }
-/* 実行中の手順を編集したときの注意書き */
-.editwarn { margin-top:7px; }
