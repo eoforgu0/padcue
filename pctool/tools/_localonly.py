@@ -17,14 +17,17 @@ import sys
 
 from padcue import gui
 from padcue.discover import Found
+from padcue.mockdevice import FW_VERSION
 
 _LOCAL = ("127.0.0.1", "localhost", "::1")
 
 
 def pin_discovery(port: int) -> None:
     """「探す」の結果をモック(loopback)だけにする。"""
+    # 版は模擬デバイスの値をそのまま名乗る(ここに書き写すと、版を上げた
+    # 日から「探す」の結果だけ古い版を返し続ける)
     gui.discover = lambda *a, **k: [
-        Found(host="127.0.0.1", port=port, device_id="", fw="0.3.0-mock",
+        Found(host="127.0.0.1", port=port, device_id="", fw=FW_VERSION,
               how="探索")]
 
 
