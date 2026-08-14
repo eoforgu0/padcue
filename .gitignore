@@ -23,6 +23,14 @@ runstate.json
 gui_server.json
 uicheck/
 runbook_walk/
+# 検査道具の出力先(CI と同じ名前で手元で流したときの生成物)
+uicheck-out/
+runbook-walk-out/
+# パッケージのビルド成果物
+dist/
+*.egg-info/
+.venv/
+
 # 画面の写しの出力先(pctool/tools/shoot.py <出力フォルダ>)。
 # 文書に載せるものだけ docs/images/ に置いて追跡する
 shots/

@@ -2,7 +2,10 @@
 name = "padcue"
 version = "0.3.0"
 description = "Switch 2 自動操作システムの PC 側ツール"
-readme = "../README.md"
+# readme は指定しない。README はリポジトリ直下(このフォルダの外)にあり、
+# setuptools はパッケージのフォルダより外のファイルを読まない
+# (`Cannot access ... (or anything outside ...)` で必ず失敗する)。
+# 置き場所を変えるより、説明は description と GitHub の README に任せる
 license = "Apache-2.0"
 requires-python = ">=3.10"
 
@@ -13,9 +16,10 @@ dependencies = []
 
 [project.optional-dependencies]
 # 開発時だけ必要。pytest は検査、playwright は画面を実際に動かす検査に使う
-# (uicheck.py / runbook_walk.py / shoot.py)。pytest の pythonpath 設定は
-# 7.0 以降の機能なので下限に根拠がある。
-dev = ["pytest>=7.0", "playwright>=1.40"]
+# (uicheck.py / runbook_walk.py / shoot.py)、ruff は lint。pytest の
+# pythonpath 設定は 7.0 以降の機能なので下限に根拠がある。ruff は CI が
+# 門番にしている検査なので、手元でも同じものが入るようにしておく。
+dev = ["pytest>=7.0", "playwright>=1.40", "ruff>=0.6"]
 
 [project.scripts]
 padcue = "padcue.cli:main"

@@ -20,8 +20,14 @@ jobs:
           # pyproject が宣言している最小版で検証する(最新版は手元で通している)
           python-version: "3.10"
 
-      - name: 開発用の依存を入れる
-        run: pip install "pytest>=7.0" ruff
+      # README と CONTRIBUTING が最初に案内する手順そのものを回す。
+      # ここを通さないと、パッケージの宣言が壊れていても検査は緑のままになる
+      # (readme に外のパスを書いていて install が必ず失敗する状態が実在した)
+      - name: 開発用の依存を入れる(README と同じ手順)
+        run: pip install -e "./pctool[dev]"
+
+      - name: コマンドが入口から動く
+        run: padcue --help
 
       - name: lint
         run: ruff check pctool
@@ -48,10 +54,11 @@ jobs:
         with:
           python-version: "3.10"
 
-      # ブラウザは playwright が取ってくる(Windows なので OS 側の追加は不要)
+      # ブラウザは playwright が取ってくる(Windows なので OS 側の追加は不要)。
+      # 依存は pc ジョブと同じく CONTRIBUTING の手順で入れる
       - name: 画面検査の依存を入れる
         run: |
-          pip install playwright
+          pip install -e "./pctool[dev]"
           playwright install chromium
 
       # 実機に触れないよう、道具の側で探索先を模擬デバイスに固定している

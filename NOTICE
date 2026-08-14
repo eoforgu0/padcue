@@ -32,14 +32,37 @@ Third-party rights in this product
    任天堂株式会社に帰属し、本プロジェクトはその使用を許諾する立場に
    ありません(Apache License 第6条は商標の許諾を含みません)。
 
-3. 参考にした一次資料
+3. 保険モード(HID ゲームパッド方式)が名乗る識別子と 86 バイトの記述
+
+   VID 0x0F0D / PID 0x0092 / "HORI CO.,LTD." / "HORIPAD S"
+   firmware/components/pademu_core/pademu_usb_desc_hidpad.c(86 バイト)
+   firmware/main/app_usb.c(製品文字列)
+
+   `padcue mode hidpad` に切り替えた装置は、単純な有線コントローラーとして
+   これらの識別子で名乗ります。プロコン方式が本体に受理されないときの
+   逃げ道として同梱しているもので、接続に技術的に必要な範囲での使用です。
+   これらの標章に関する権利は株式会社 HORI に帰属し、本プロジェクトは
+   その使用を許諾する立場にありません。
+
+   86 バイトの HID レポートディスクリプタは、公開されている Switch 用
+   HID ゲームパッド実装で広く使われている形をそのまま用いています
+   (一次資料との照合は未実施)。本プロジェクトの著作物ではなく、
+   Apache License による許諾の対象ではありません。
+
+   The fallback mode presents itself with the identifiers above and an
+   86-byte HID report descriptor taken from widely published Switch
+   gamepad implementations, included solely for interoperability.
+   Not authored by this project and not covered by the Apache License
+   grant above.
+
+4. 参考にした一次資料
 
    - dekuNukem/Nintendo_Switch_Reverse_Engineering(コミュニティの解析資料)
    - mzyy94 による Linux USB Gadget 実装
 
    仕様の理解にこれらを参照しました。コードそのものの複製は含みません。
 
-4. 含まれていないもの
+5. 含まれていないもの
 
    任天堂の暗号鍵・ファームウェア断片・その他の著作物は一切含みません。
    ペアリング応答で返す長期鍵(LTK)は、この装置自身の MAC アドレスから
@@ -49,10 +72,12 @@ Third-party rights in this product
 --------------------------------------------------------------------
 
 本プロジェクトは任天堂株式会社とは一切関係が無く、同社の公認・後援・
-支持を受けていません。「Nintendo Switch」「Joy-Con」「Pro コントローラー」
-その他の名称は各権利者の商標であり、本ソフトウェアおよび文書では対象機器を
+支持を受けていません。株式会社 HORI とも関係がありません。
+「Nintendo Switch」「Joy-Con」「Pro コントローラー」「HORIPAD」その他の
+名称は各権利者の商標であり、本ソフトウェアおよび文書では対象機器を
 指し示す記述的用法としてのみ使用しています。
 
 This project is not affiliated with, endorsed by, or sponsored by
-Nintendo Co., Ltd. All product names are trademarks of their respective
-owners and are used here only to identify the hardware involved.
+Nintendo Co., Ltd. or HORI CO., LTD. All product names are trademarks of
+their respective owners and are used here only to identify the hardware
+involved.
