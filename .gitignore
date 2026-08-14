@@ -5,7 +5,6 @@ firmware/sdkconfig.old
 # WiFi の接続情報(この PC 固有。リポジトリには入れない)
 firmware/sdkconfig.defaults.local
 firmware/managed_components/
-firmware/dependencies.lock
 
 # Python
 __pycache__/
