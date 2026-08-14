@@ -9,7 +9,7 @@ import struct
 import pytest
 
 from padcue import binfmt
-from padcue.binfmt import Djnz, End, Jmp, SetCnt, State
+from padcue.binfmt import Await, Djnz, End, Jmp, SetCnt, State
 
 ALL_EVENTS = [
     State(0, buttons=0b101, lx=-2048, ly=2047, rx=1, ry=-1,
@@ -17,7 +17,9 @@ ALL_EVENTS = [
     SetCnt(3, 500),
     State(10, buttons=0),
     Djnz(3, target=2, advance=10),
-    Jmp(5),
+    # 待機分岐。腕ごとに飛び先を持つ唯一のレコードで、往復で崩れやすい
+    Await(20, targets=(5, 6), timeout_frames=600, on_timeout=2),
+    Jmp(6),
     End(),
 ]
 
@@ -77,6 +79,14 @@ def test_out_of_range_values_rejected():
         binfmt.encode("p", [State(0, lx=2048)], 0)
     with pytest.raises(ValueError, match="i16"):
         binfmt.encode("p", [State(0, gx=40000)], 0)
+
+    # 待機分岐の腕の本数と、時間切れの行き先
+    with pytest.raises(ValueError, match="腕は"):
+        binfmt.encode("p", [Await(0, targets=(1, 2, 3, 4, 5)), End()], 0)
+    with pytest.raises(ValueError, match="腕は"):
+        binfmt.encode("p", [Await(0, targets=()), End()], 0)
+    with pytest.raises(ValueError, match="on_timeout"):
+        binfmt.encode("p", [Await(0, targets=(1,), on_timeout=9), End()], 0)
 
 
 def test_jump_target_validated_on_decode():
