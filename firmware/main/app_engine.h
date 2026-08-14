@@ -72,7 +72,6 @@ void app_engine_snapshot_at(pademu_state_t *out, uint64_t *pub_us_out);
 uint64_t app_engine_now_us(void);
 
 // 即時停止が要求されている(まだ完了していない)か。USB タスクが安全側へ倒す判断に使う
-bool app_engine_stop_pending(void);
 
 // ---- 待機分岐 ----
 // 待機分岐で止まっているか(止まっている間は全ニュートラルを出し続ける)

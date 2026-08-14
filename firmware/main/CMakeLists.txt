@@ -6,3 +6,7 @@ idf_component_register(
     REQUIRES driver nvs_flash esp_wifi pademu_core esp_timer
              json spiffs mbedtls app_update lwip esp_hw_support
 )
+
+# ESP32 固有の層。pademu_core と同じ厳しさで通す。入れてみたところ指摘は
+# 0 件だったので、最初から -Werror にしてある(以後は増やせない)
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

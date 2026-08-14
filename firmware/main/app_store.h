@@ -33,15 +33,11 @@ size_t app_store_buffer_size(void);
 // app_store_buffer() へ直接書き込んだ len バイトを確定する(分割転送用)
 esp_err_t app_store_stage_buffered(const char *name, size_t len, char *hash_out);
 
-esp_err_t app_store_stage(const char *name, const uint8_t *data, size_t len,
-                          char *hash_out);
 const char *app_store_staged_name(void);
-size_t app_store_staged_len(void);
 
 // ---- 永続化 ----
 esp_err_t app_store_commit(const char *name);   // ステージング→フラッシュ
 esp_err_t app_store_load(const char *name, size_t *len_out, char *hash_out);
-esp_err_t app_store_delete(const char *name);
 
 typedef struct {
     char name[APP_STORE_MAX_NAME + 1];

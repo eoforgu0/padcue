@@ -23,10 +23,6 @@ bool pademu_tx_push_reply(pademu_tx_t *tx, const uint8_t *data, size_t len) {
     return true;
 }
 
-bool pademu_tx_has_reply(const pademu_tx_t *tx) {
-    return tx->count > 0;
-}
-
 // 先頭の応答をキューから外す
 static void pop_reply(pademu_tx_t *tx) {
     tx->head = (uint8_t)((tx->head + 1) % PADEMU_TX_QUEUE_DEPTH);

@@ -57,8 +57,6 @@ void pademu_tx_init(pademu_tx_t *tx);
 // 応答をキューへ積む。溢れたら false(最古を残し新しい方を捨てる)
 bool pademu_tx_push_reply(pademu_tx_t *tx, const uint8_t *data, size_t len);
 
-bool pademu_tx_has_reply(const pademu_tx_t *tx);
-
 // IN エンドポイントが空いたときに呼ぶ。応答があればそれを、無ければ
 // build() で定期入力レポートを作って out へ書き、長さを返す。
 //

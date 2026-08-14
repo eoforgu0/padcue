@@ -46,7 +46,6 @@ bool app_usb_take_host_info(uint8_t out[8], uint8_t *len);
 uint8_t app_usb_pair_reqs(void);   // 0x01(ペアリング)を受けた累計
 uint8_t app_usb_pair_step(void);   // 直近のペアリングフェーズ(0=未受信)
 uint8_t app_usb_input_mode(void);  // 本体が設定した入力モード(0x30=通常)
-uint32_t app_usb_get_dropped_replies(void); // 送出キュー溢れ(正常時 0)
 
 // 送出まわりの実測値。「割り込みは定刻だったが実際の出力は遅れた」を
 // 見逃さないための計器一式(2026-08-04 監査で追加)

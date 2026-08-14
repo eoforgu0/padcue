@@ -18,21 +18,22 @@ static int16_t le16s(const uint8_t *p) { return (int16_t)le16(p); }
 
 // zlib 互換 CRC32(テーブルなし・ビット逐次。制御プレーン用途なので速度不問)
 // 対象: ヘッダ(crc 欄 4B を除く 46B)+レコード部
-static uint32_t crc32_header_and_recs(const uint8_t *data, size_t rec_len) {
-    // crc 欄(ヘッダ末尾4B)を除いた 46B + レコード部。データは連続なので
-    // 2回に分けて計算する
-    uint32_t crc = 0xFFFFFFFFu;
-    const uint8_t *parts[2] = { data, data + PADEMU_HEADER_SIZE };
-    size_t lens[2] = { PADEMU_HEADER_SIZE - 4, rec_len };
-    for (int k = 0; k < 2; k++) {
-        for (size_t i = 0; i < lens[k]; i++) {
-            crc ^= parts[k][i];
-            for (int b = 0; b < 8; b++) {
-                crc = (crc >> 1) ^ (0xEDB88320u & (uint32_t)(-(int32_t)(crc & 1)));
-            }
+uint32_t pademu_crc32(const uint8_t *p, size_t n, uint32_t crc) {
+    crc = ~crc;
+    for (size_t i = 0; i < n; i++) {
+        crc ^= p[i];
+        for (int b = 0; b < 8; b++) {
+            crc = (crc >> 1) ^ (0xEDB88320u & (uint32_t)(-(int32_t)(crc & 1)));
         }
     }
-    return crc ^ 0xFFFFFFFFu;
+    return ~crc;
+}
+
+static uint32_t crc32_header_and_recs(const uint8_t *data, size_t rec_len) {
+    // crc 欄(ヘッダ末尾4B)を除いた 46B + レコード部。前半の戻り値を
+    // 後半へ渡して、離れた2領域をひと続きとして計算する
+    uint32_t crc = pademu_crc32(data, PADEMU_HEADER_SIZE - 4, 0);
+    return pademu_crc32(data + PADEMU_HEADER_SIZE, rec_len, crc);
 }
 
 static bool utf8_valid(const uint8_t *s, size_t n) {

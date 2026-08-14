@@ -375,7 +375,6 @@ bool app_usb_take_host_info(uint8_t out[8], uint8_t *len) {
     taskEXIT_CRITICAL(&s_hi_mux);
     return got;
 }
-uint32_t app_usb_get_dropped_replies(void) { return s_tx.dropped_replies; }
 
 // ペアリングの観測値(切り分け用)。登録が完了しない本体は 0x01 を
 // 再要求し続けるため、「pair_step が 1〜2 のまま pair_reqs が増え続ける」

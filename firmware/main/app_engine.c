@@ -109,10 +109,6 @@ uint64_t app_engine_now_us(void) {
     return (uint64_t)esp_timer_get_time();
 }
 
-bool app_engine_stop_pending(void) {
-    return atomic_load_explicit(&s_stop_now, memory_order_acquire);
-}
-
 void app_engine_snapshot_at(pademu_state_t *out, uint64_t *pub_us_out) {
     if (pub_us_out) *pub_us_out = 0;
     // 即時停止が要求されたら、次のアラームを待たずにその場でニュートラルへ倒す

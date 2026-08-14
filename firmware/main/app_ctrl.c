@@ -59,16 +59,6 @@ static uint8_t *s_rx;      // 受信パケット組み立て用
 static uint8_t *s_tx;      // 送信パケット組み立て用
 
 // ---- CRC32(zlib 互換)----
-static uint32_t crc32z(const uint8_t *p, size_t n, uint32_t crc) {
-    crc = ~crc;
-    for (size_t i = 0; i < n; i++) {
-        crc ^= p[i];
-        for (int b = 0; b < 8; b++) {
-            crc = (crc >> 1) ^ (0xEDB88320u & (uint32_t)(-(int32_t)(crc & 1)));
-        }
-    }
-    return ~crc;
-}
 
 static int send_all(int sock, const uint8_t *p, size_t n) {
     size_t sent = 0;
@@ -102,7 +92,7 @@ static int send_frame(int sock, uint8_t type, cJSON *json, const uint8_t *blob,
     body[2] = (uint8_t)((js_len >> 8) & 0xFF);
     if (js_len) memcpy(body + 3, js, js_len);
     if (blob_len) memcpy(body + 3 + js_len, blob, blob_len);
-    uint32_t crc = crc32z(body, body_len, 0);
+    uint32_t crc = pademu_crc32(body, body_len, 0);
     uint8_t *tail = body + body_len;
     tail[0] = (uint8_t)(crc & 0xFF);
     tail[1] = (uint8_t)((crc >> 8) & 0xFF);
@@ -711,7 +701,7 @@ static void handle_client(int sock) {
         uint32_t crc = (uint32_t)s_rx[body_len] | ((uint32_t)s_rx[body_len + 1] << 8)
                      | ((uint32_t)s_rx[body_len + 2] << 16)
                      | ((uint32_t)s_rx[body_len + 3] << 24);
-        if (crc32z(s_rx, body_len, 0) != crc) {
+        if (pademu_crc32(s_rx, body_len, 0) != crc) {
             send_error(sock, "CRC", "パケットが破損しています");
             return;
         }

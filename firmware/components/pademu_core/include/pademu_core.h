@@ -92,6 +92,11 @@ typedef struct {
     uint32_t await_timeout_frames;       // 0=無期限
 } pademu_engine_t;
 
+// CRC-32(多項式 0xEDB88320。zlib と同じ)。手順バイナリの検証にも、
+// PC との通信パケットの検証にも同じものを使う。crc に前回の戻り値を
+// 渡せば、離れた領域を続けて計算できる(最初は 0)
+uint32_t pademu_crc32(const uint8_t *p, size_t n, uint32_t crc);
+
 // バイナリ全体(ヘッダ+レコード)を検証して out を埋める。data は保持されること
 pademu_err_t pademu_decode(const uint8_t *data, size_t len, pademu_proc_t *out);
 

@@ -69,7 +69,6 @@ esp_err_t app_store_init(void) {
 uint8_t *app_store_buffer(void) { return s_buf; }
 size_t app_store_buffer_size(void) { return APP_STORE_MAX_PROC_SIZE; }
 const char *app_store_staged_name(void) { return s_staged_name; }
-size_t app_store_staged_len(void) { return s_staged_len; }
 
 static bool name_ok(const char *name) {
     size_t n = strlen(name);
@@ -83,17 +82,6 @@ static bool name_ok(const char *name) {
 esp_err_t app_store_stage_buffered(const char *name, size_t len, char *hash_out) {
     if (!name_ok(name)) return ESP_ERR_INVALID_ARG;
     if (len == 0 || len > APP_STORE_MAX_PROC_SIZE) return ESP_ERR_INVALID_SIZE;
-    s_staged_len = len;
-    strlcpy(s_staged_name, name, sizeof(s_staged_name));
-    app_store_hash(s_buf, len, hash_out);
-    return ESP_OK;
-}
-
-esp_err_t app_store_stage(const char *name, const uint8_t *data, size_t len,
-                          char *hash_out) {
-    if (!name_ok(name)) return ESP_ERR_INVALID_ARG;
-    if (len == 0 || len > APP_STORE_MAX_PROC_SIZE) return ESP_ERR_INVALID_SIZE;
-    if (data != s_buf) memcpy(s_buf, data, len);
     s_staged_len = len;
     strlcpy(s_staged_name, name, sizeof(s_staged_name));
     app_store_hash(s_buf, len, hash_out);
@@ -131,15 +119,6 @@ esp_err_t app_store_load(const char *name, size_t *len_out, char *hash_out) {
     strlcpy(s_staged_name, name, sizeof(s_staged_name));
     *len_out = n;
     app_store_hash(s_buf, n, hash_out);
-    return ESP_OK;
-}
-
-esp_err_t app_store_delete(const char *name) {
-    if (!name_ok(name)) return ESP_ERR_INVALID_ARG;
-    char path[128];
-    path_of(name, path, sizeof(path));
-    if (remove(path) != 0) return ESP_ERR_NOT_FOUND;
-    refresh_cache();   // 削除で中身が変わったので一覧を作り直す
     return ESP_OK;
 }
 

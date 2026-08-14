@@ -4,3 +4,8 @@ idf_component_register(
     INCLUDE_DIRS "include"
     LDFRAGMENTS "linker.lf"
 )
+
+# 純粋C・IDF 非依存・小規模なので、ホストの検査(gcc -Wall -Werror)と
+# 同じ厳しさで通す。ここが緩いと、ホストでは弾かれる書き方が実機側の
+# ビルドだけ通ってしまう
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
