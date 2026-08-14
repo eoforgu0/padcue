@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
 
 # 連結中の2台をまとめて数えるときの控えのキー。装置名と衝突しないよう、
 # 名前に使えない文字を使う
@@ -37,6 +38,8 @@ class RunWatcher:
     def __init__(self, pool, coupler, autostart: bool = True):
         self.pool = pool
         self.coupler = coupler
+        # 見張りが落ちた直近の理由(同じ理由で端末を埋めないため)
+        self._tick_error = ""
         self._lock = threading.Lock()
         self._waiters: list[threading.Event] = []
         self._events: list[dict] = []
@@ -103,8 +106,16 @@ class RunWatcher:
         while not self._stop:
             try:
                 self.tick()
-            except Exception:   # noqa: BLE001  見張りは死なせない
-                pass
+                self._tick_error = ""
+            except Exception as e:   # noqa: BLE001  見張りは死なせない
+                # 死なせないのはよいが、黙って捨てると「終了の知らせが
+                # 来ない」としか見えなくなる。放置運転を待っている人には
+                # 「まだ終わっていない」と区別がつかない。同じ理由で
+                # 端末が埋まらないよう、変わったときだけ出す
+                msg = f"{type(e).__name__}: {e}"
+                if msg != self._tick_error:
+                    self._tick_error = msg
+                    traceback.print_exc()
             time.sleep(self.POLL_S)
 
     def tick(self) -> None:

@@ -282,3 +282,29 @@ def test_繋ぐ前に起きた事は流さない(server):
     lines = [r.readline(), r.readline()]
     assert json.loads(lines[1][6:])["kind"] == "await"   # done は流れてこない
     r.close()
+
+
+def test_見張りは落ちても止まらず理由を残す(capsys):
+    """tick が例外を投げ続けても、ループは回り続けて理由が残ること。
+
+    見張りを死なせない方針は正しいが、黙って捨てると「終了の知らせが
+    来ない」としか見えない。24時間の放置運転では、それが原因究明の
+    唯一の手がかりを奪う。同じ理由で端末が埋まらないよう、出すのは
+    理由が変わったときだけ。
+    """
+    import time
+
+    class BadPool:
+        def links(self):
+            raise RuntimeError("わざと壊す")
+
+    w = RunWatcher(BadPool(), FakeCoupler(), autostart=True)
+    try:
+        time.sleep(RunWatcher.POLL_S * 3)
+        assert w._tick_error == "RuntimeError: わざと壊す"
+        assert w._thread.is_alive(), "見張りが死んでいる"
+        # 出るのは1回だけ(毎周期は出さない)
+        err = capsys.readouterr().err
+        assert err.count("Traceback (most recent call last)") == 1, err
+    finally:
+        w.close()

@@ -18,6 +18,7 @@ import json
 import statistics
 import threading
 import time
+import traceback
 
 from . import binfmt
 from .client import DeviceError
@@ -49,6 +50,9 @@ class Coupler:
         # 放置すると到達順の対応が1周ずれる(2026-08-06 レビュー)
         self._select_retry: dict[str, tuple] = {}
         self._idle_since: float | None = None     # 全員停止を最初に見た時刻
+        # 見張りが落ちた直近の理由。同じ理由で記録が溢れないよう
+        # 「変わったときだけ」書く
+        self._watch_error = ""
         self._thread = threading.Thread(target=self._watch_loop, daemon=True)
         self._thread.start()
 
@@ -392,8 +396,21 @@ class Coupler:
         while not self._stop:
             try:
                 self._watch_once()
-            except Exception:   # noqa: BLE001  監視は死なせない
-                pass
+                self._watch_error = ""
+            except Exception as e:   # noqa: BLE001  監視は死なせない
+                # 死なせないのはよいが、黙って捨てると計器が静かに壊れる。
+                # 連動停止も自動合流もこの見張りが担っているので、毎周期
+                # 落ち続けていても、利用者からは「連動が効かなくなった」と
+                # しか見えず、原因を追う手がかりが残らない。
+                # 同じ理由で溢れないよう、変わったときだけ記録する
+                msg = f"{type(e).__name__}: {e}"
+                if msg != self._watch_error:
+                    self._watch_error = msg
+                    traceback.print_exc()
+                    members = self.members()
+                    if members:
+                        self._log(members[0], "PC_WATCH_ERROR", a=0, b=0,
+                                  message=msg)
             time.sleep(self.POLL_S)
 
     def _watch_once(self) -> None:
