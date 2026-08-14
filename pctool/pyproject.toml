@@ -2,6 +2,8 @@
 name = "padcue"
 version = "0.1.0"
 description = "Switch 2 自動操作システムの PC 側ツール"
+license = "Apache-2.0"
+license-files = ["../LICENSE", "../NOTICE"]
 requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
