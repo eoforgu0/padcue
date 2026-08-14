@@ -1,0 +1,22 @@
+# 編集時点で改行と文字コードの揺れを防ぐ(.gitattributes は取り込み時の保険)。
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# cmd.exe が読む。改行は CRLF で固定する
+[*.bat]
+end_of_line = crlf
+
+# 表の桁を目で合わせている箇所があるため、行末の空白を落とさない
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{yml,yaml,json}]
+indent_size = 2

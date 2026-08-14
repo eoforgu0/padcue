@@ -1,0 +1,20 @@
+# 改行は索引も作業ツリーも LF に固定する。
+# 揃えないと、環境ごとの既定値の違いだけで全面差分が出る。作業ツリー側まで
+# 固定するのは、同じファイルの中で改行が混ざる事故が実際に起きたため
+# (test_discover.py に CRLF と LF が同居していた)。
+* text=auto eol=lf
+
+# 利用者が最初にダブルクリックするファイル。cmd.exe の LF 解釈には保証が
+# 無く、goto とラベルを含む書き方は改行で壊れる報告がある。確実さを取る。
+*.bat text eol=crlf
+
+# 中身がテキストであることを明示する(拡張子から判定できないもの)
+*.lock text
+*.lf text
+
+# バイナリ(改行変換も差分表示もしない)
+*.png binary
+*.jpg binary
+*.gif binary
+*.bin binary
+*.ico binary
