@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
-#include "padctl_core.h"
+#include "pademu_core.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,7 +34,7 @@ typedef struct {
     uint32_t loops_done;        // 最後まで走り切った周回数(中断時は途中の周を含まない)
     uint32_t late_events;       // 予定時刻を超過して処理したイベント数(A-4)
     uint32_t max_late_us;       // 超過の最大値
-    int engine_err;             // padctl_err_t
+    int engine_err;             // pademu_err_t
 } app_engine_progress_t;
 
 esp_err_t app_engine_init(void);
@@ -63,12 +63,12 @@ bool app_engine_is_running(void);
 void app_engine_get_progress(app_engine_progress_t *out);
 
 // USB タスクが送出直前に呼ぶ。実行中でない・停止指示済みなら全ニュートラルを返す
-void app_engine_snapshot(padctl_state_t *out);
+void app_engine_snapshot(pademu_state_t *out);
 
 // 同上。加えて「その状態が公開された時刻」(エンジンタイマーのマイクロ秒)を返す。
 // 0 なら測れない(実行していない/読み取りが安定しなかった)。
 // app_engine_now_us() との差が「状態が変わってから実際に送るまでの遅れ」になる
-void app_engine_snapshot_at(padctl_state_t *out, uint64_t *pub_us_out);
+void app_engine_snapshot_at(pademu_state_t *out, uint64_t *pub_us_out);
 uint64_t app_engine_now_us(void);
 
 // 即時停止が要求されている(まだ完了していない)か。USB タスクが安全側へ倒す判断に使う

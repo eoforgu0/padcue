@@ -3,7 +3,7 @@
 // 設計: docs/design/firmware-architecture.md §3・§4
 // - 転送層モード(プロコン / HID パッド)はディスクリプタごと切り替える。
 //   切替は NVS へ保存し再起動で反映する(USB 再列挙の複雑さを避ける)
-// - 送出は必ず padctl_tx を経由する(応答優先・定期入力は埋め草)
+// - 送出は必ず pademu_tx を経由する(応答優先・定期入力は埋め草)
 // - tud_hid_report() の report_id には 0 を渡す(バッファ自身が ID を含む)
 #pragma once
 
@@ -11,7 +11,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
-#include "padctl_core.h"
+#include "pademu_core.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,7 +34,7 @@ esp_err_t app_usb_start(app_usb_mode_t mode, const app_usb_cb_t *cb);
 
 // 手動操作の中継(パススルー)。有効な間は PC から送られた状態をそのまま出力する。
 // 自動実行中は実行が優先されるため、待機中にのみ意味を持つ。
-void app_usb_set_manual(const padctl_state_t *st, bool enable);
+void app_usb_set_manual(const pademu_state_t *st, bool enable);
 bool app_usb_manual_enabled(void);
 
 app_usb_mode_t app_usb_get_mode(void);

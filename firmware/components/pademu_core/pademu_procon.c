@@ -1,4 +1,4 @@
-#include "padctl_procon.h"
+#include "pademu_procon.h"
 
 #include <string.h>
 
@@ -71,7 +71,7 @@ typedef struct {
     const uint8_t *src;
 } spi_region_t;
 
-void padctl_procon_spi_read(uint32_t addr, uint8_t size, uint8_t *out) {
+void pademu_procon_spi_read(uint32_t addr, uint8_t size, uint8_t *out) {
     memset(out, 0xFF, size);  // 未定義領域は 0xFF(未書き込み)
 
     uint8_t calib[25];
@@ -114,8 +114,8 @@ void padctl_procon_spi_read(uint32_t addr, uint8_t size, uint8_t *out) {
     }
 }
 
-void padctl_procon_init(padctl_procon_t *pc, const uint8_t mac[6],
-                        const padctl_procon_cb_t *cb) {
+void pademu_procon_init(pademu_procon_t *pc, const uint8_t mac[6],
+                        const pademu_procon_cb_t *cb) {
     memset(pc, 0, sizeof(*pc));
     memcpy(pc->mac, mac, 6);
     pc->input_mode = 0x3F;
@@ -123,9 +123,9 @@ void padctl_procon_init(padctl_procon_t *pc, const uint8_t mac[6],
 }
 
 // 0x21 応答の共通ヘッダを組み立て、データ部の先頭オフセット(15)を返す
-static void fill_subcmd_header(padctl_procon_t *pc, uint8_t *r, uint8_t ack,
+static void fill_subcmd_header(pademu_procon_t *pc, uint8_t *r, uint8_t ack,
                                uint8_t subcmd) {
-    memset(r, 0, PADCTL_PROCON_REPORT_SIZE);
+    memset(r, 0, PADEMU_PROCON_REPORT_SIZE);
     r[0] = RPT_IN_SUBCMD;
     r[1] = pc->timer++;
     r[2] = BATTERY_CONN;
@@ -138,7 +138,7 @@ static void fill_subcmd_header(padctl_procon_t *pc, uint8_t *r, uint8_t ack,
     r[14] = subcmd;
 }
 
-static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
+static size_t handle_subcommand(pademu_procon_t *pc, const uint8_t *data,
                                 size_t len, uint8_t *r) {
     uint8_t sub = (len > 10) ? data[10] : 0x00;
     const uint8_t *arg = data + 11;
@@ -149,7 +149,7 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
         if (pc->pair_reqs < 255) pc->pair_reqs++;
         uint8_t step = (arglen >= 1) ? arg[0] : 0x00;
         pc->pair_last_step = step;
-        // 本体識別子の控え(padctl_procon.h 参照)は、識別子を運ぶフェーズ
+        // 本体識別子の控え(pademu_procon.h 参照)は、識別子を運ぶフェーズ
         // (0x01=新規ペアリング開始 / 0x04=既知本体の記録手渡し)のときだけ
         // 更新する。0x02/0x03 は引数がフェーズ番号だけ(残りはゼロ埋め)
         // なので、控えると「02+ゼロ」が識別子として記録され、どの本体でも
@@ -192,10 +192,10 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
             r[15] = 0x03;   // 実機プロコンの実測応答(arg 0x04)と同じ
             break;
         }
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     }
     case 0x02: {  // デバイス情報
-        pc->breadcrumb |= PADCTL_BC_SUB_DEVINFO;
+        pc->breadcrumb |= PADEMU_BC_SUB_DEVINFO;
         fill_subcmd_header(pc, r, 0x82, sub);
         r[15] = 0x03; r[16] = 0x48;          // FW 3.72
         r[17] = DEV_TYPE_PROCON;
@@ -203,21 +203,21 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
         memcpy(r + 19, pc->mac, 6);          // 正順
         r[25] = 0x03;                        // 実測値(資料は 0x01)
         r[26] = 0x01;                        // SPI の色情報を使う
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     }
     case 0x03:    // 入力レポートモード設定
-        pc->breadcrumb |= PADCTL_BC_SUB_MODE;
+        pc->breadcrumb |= PADEMU_BC_SUB_MODE;
         if (arglen >= 1) pc->input_mode = arg[0];
         fill_subcmd_header(pc, r, 0x80, sub);
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     case 0x04:    // トリガー経過時間(全ゼロ)
         fill_subcmd_header(pc, r, 0x83, sub);
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     case 0x10: {  // SPI 読み出し
-        pc->breadcrumb |= PADCTL_BC_SUB_SPI;
+        pc->breadcrumb |= PADEMU_BC_SUB_SPI;
         if (arglen < 5) {
             fill_subcmd_header(pc, r, 0x00, sub);  // NACK
-            return PADCTL_PROCON_REPORT_SIZE;
+            return PADEMU_PROCON_REPORT_SIZE;
         }
         uint32_t addr = (uint32_t)arg[0] | ((uint32_t)arg[1] << 8)
                       | ((uint32_t)arg[2] << 16) | ((uint32_t)arg[3] << 24);
@@ -226,8 +226,8 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
         fill_subcmd_header(pc, r, 0x90, sub);
         memcpy(r + 15, arg, 4);              // アドレスはそのままエコー
         r[19] = size;                        // サイズはクランプ後の実データ長
-        padctl_procon_spi_read(addr, size, r + 20);
-        return PADCTL_PROCON_REPORT_SIZE;
+        pademu_procon_spi_read(addr, size, r + 20);
+        return PADEMU_PROCON_REPORT_SIZE;
     }
     case 0x21: {  // NFC/IR MCU 設定。実測ログの応答ペイロードをそのまま返す
         // (bypass_procon_log.txt: 01 00 ff 00 03 00 05 01 …(+33)5c。
@@ -236,57 +236,57 @@ static size_t handle_subcommand(padctl_procon_t *pc, const uint8_t *data,
         fill_subcmd_header(pc, r, 0xA0, sub);
         r[15] = 0x01; r[17] = 0xFF; r[19] = 0x03; r[21] = 0x05; r[22] = 0x01;
         r[48] = 0x5C;
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     }
     case 0x30:    // プレイヤーLED
-        pc->breadcrumb |= PADCTL_BC_SUB_LED;
+        pc->breadcrumb |= PADEMU_BC_SUB_LED;
         if (arglen >= 1) {
             pc->player_lights = arg[0];
             if (pc->cb.on_player_lights) pc->cb.on_player_lights(pc->cb.ctx, arg[0]);
         }
         fill_subcmd_header(pc, r, 0x80, sub);
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     case 0x40:    // IMU 有効化
-        pc->breadcrumb |= PADCTL_BC_SUB_IMU;
+        pc->breadcrumb |= PADEMU_BC_SUB_IMU;
         if (arglen >= 1) pc->imu_enabled = (arg[0] != 0);
         fill_subcmd_header(pc, r, 0x80, sub);
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     case 0x48:    // 振動有効化
-        pc->breadcrumb |= PADCTL_BC_SUB_RUMBLE;
+        pc->breadcrumb |= PADEMU_BC_SUB_RUMBLE;
         if (arglen >= 1) pc->rumble_enabled = (arg[0] != 0);
         fill_subcmd_header(pc, r, 0x80, sub);
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     default:      // 未知のサブコマンドにも単純 ACK を返す(接続を落とさない)
         fill_subcmd_header(pc, r, 0x80, sub);
-        return PADCTL_PROCON_REPORT_SIZE;
+        return PADEMU_PROCON_REPORT_SIZE;
     }
 }
 
-size_t padctl_procon_handle_output(padctl_procon_t *pc, const uint8_t *data,
+size_t pademu_procon_handle_output(pademu_procon_t *pc, const uint8_t *data,
                                    size_t len, uint8_t *r) {
     if (len < 1) return 0;
     pc->out_reports++;
 
     if (data[0] == RPT_OUT_HANDSHK) {
         uint8_t sub = (len > 1) ? data[1] : 0x00;
-        memset(r, 0, PADCTL_PROCON_REPORT_SIZE);
+        memset(r, 0, PADEMU_PROCON_REPORT_SIZE);
         switch (sub) {
         case 0x01:  // 接続状態・デバイス種別・MAC(逆順)
-            pc->breadcrumb |= PADCTL_BC_HS_STATUS;
+            pc->breadcrumb |= PADEMU_BC_HS_STATUS;
             r[0] = RPT_IN_HANDSHK; r[1] = 0x01; r[2] = 0x00; r[3] = DEV_TYPE_PROCON;
             for (int i = 0; i < 6; i++) r[4 + i] = pc->mac[5 - i];
-            return PADCTL_PROCON_REPORT_SIZE;
+            return PADEMU_PROCON_REPORT_SIZE;
         case 0x02:  // ハンドシェイク
-            pc->breadcrumb |= PADCTL_BC_HS_SHAKE;
+            pc->breadcrumb |= PADEMU_BC_HS_SHAKE;
             pc->handshake_done = true;
             r[0] = RPT_IN_HANDSHK; r[1] = 0x02;
-            return PADCTL_PROCON_REPORT_SIZE;
+            return PADEMU_PROCON_REPORT_SIZE;
         case 0x03:  // ボーレート切替(有線では通常来ない)
-            pc->breadcrumb |= PADCTL_BC_HS_BAUD;
+            pc->breadcrumb |= PADEMU_BC_HS_BAUD;
             r[0] = RPT_IN_HANDSHK; r[1] = 0x03;
-            return PADCTL_PROCON_REPORT_SIZE;
+            return PADEMU_PROCON_REPORT_SIZE;
         case 0x04:  // HID-only(応答は返さない。実測でも 0x81 応答は観測されず)
-            pc->breadcrumb |= PADCTL_BC_HS_HIDONLY;
+            pc->breadcrumb |= PADEMU_BC_HS_HIDONLY;
             pc->hid_only = true;
             return 0;
         case 0x05:  // タイムアウト許可
@@ -309,7 +309,7 @@ size_t padctl_procon_handle_output(padctl_procon_t *pc, const uint8_t *data,
     return 0;
 }
 
-// 論理ボタン(padctl_core の割り当て)→ 0x30 レポートのボタン3バイト
+// 論理ボタン(pademu_core の割り当て)→ 0x30 レポートのボタン3バイト
 static void map_buttons(uint32_t b, uint8_t *r3, uint8_t *r4, uint8_t *r5) {
     uint8_t right = 0, shared = 0, left = 0;
     if (b & (1u << 3))  right |= 0x01;  // Y
@@ -334,9 +334,9 @@ static void map_buttons(uint32_t b, uint8_t *r3, uint8_t *r4, uint8_t *r5) {
     *r3 = right; *r4 = shared; *r5 = left;
 }
 
-size_t padctl_procon_build_input(padctl_procon_t *pc, const padctl_state_t *st,
+size_t pademu_procon_build_input(pademu_procon_t *pc, const pademu_state_t *st,
                                  uint8_t *r) {
-    memset(r, 0, PADCTL_PROCON_REPORT_SIZE);
+    memset(r, 0, PADEMU_PROCON_REPORT_SIZE);
     r[0] = RPT_IN_FULL;
     r[1] = pc->timer++;
     r[2] = BATTERY_CONN;
@@ -359,6 +359,6 @@ size_t padctl_procon_build_input(padctl_procon_t *pc, const padctl_state_t *st,
             put16le(p + 10, st->gz);
         }
     }
-    pc->breadcrumb |= PADCTL_BC_INPUT_SENT;
-    return PADCTL_PROCON_REPORT_SIZE;
+    pc->breadcrumb |= PADEMU_BC_INPUT_SENT;
+    return PADEMU_PROCON_REPORT_SIZE;
 }

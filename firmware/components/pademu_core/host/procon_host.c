@@ -9,10 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "padctl_hidpad.h"
-#include "padctl_procon.h"
-#include "padctl_tx.h"
-#include "padctl_usb_desc.h"
+#include "pademu_hidpad.h"
+#include "pademu_procon.h"
+#include "pademu_tx.h"
+#include "pademu_usb_desc.h"
 
 static uint8_t g_last_led = 0xFF;
 static int g_led_calls = 0;
@@ -23,9 +23,9 @@ static void on_led(void *ctx, uint8_t bitmap) {
     g_led_calls++;
 }
 
-// 定期入力レポートの生成(padctl_tx から呼ばれる)
-static size_t procon_build_cb(void *ctx, const padctl_state_t *st, uint8_t *out) {
-    return padctl_procon_build_input((padctl_procon_t *)ctx, st, out);
+// 定期入力レポートの生成(pademu_tx から呼ばれる)
+static size_t procon_build_cb(void *ctx, const pademu_state_t *st, uint8_t *out) {
+    return pademu_procon_build_input((pademu_procon_t *)ctx, st, out);
 }
 
 static int hexval(int c) {
@@ -57,24 +57,24 @@ static void print_hex(const char *tag, const uint8_t *p, size_t n) {
 
 int main(void) {
     static const uint8_t MAC[6] = { 0x04, 0x03, 0xD6, 0x00, 0x00, 0x01 };
-    padctl_procon_cb_t cb = { .on_player_lights = on_led, .on_rumble = NULL, .ctx = NULL };
-    padctl_procon_t pc;
-    padctl_procon_init(&pc, MAC, &cb);
+    pademu_procon_cb_t cb = { .on_player_lights = on_led, .on_rumble = NULL, .ctx = NULL };
+    pademu_procon_t pc;
+    pademu_procon_init(&pc, MAC, &cb);
 
-    padctl_state_t st;
+    pademu_state_t st;
     memset(&st, 0, sizeof(st));
 
-    padctl_tx_t tx;
-    padctl_tx_init(&tx);
+    pademu_tx_t tx;
+    pademu_tx_init(&tx);
 
     char line[8192];
     uint8_t buf[4096];
-    uint8_t resp[PADCTL_PROCON_REPORT_SIZE];
+    uint8_t resp[PADEMU_PROCON_REPORT_SIZE];
 
     while (fgets(line, sizeof(line), stdin)) {
         if (strncmp(line, "out ", 4) == 0) {
             size_t n = parse_hex(line + 4, buf, sizeof(buf));
-            size_t rn = padctl_procon_handle_output(&pc, buf, n, resp);
+            size_t rn = pademu_procon_handle_output(&pc, buf, n, resp);
             if (rn == 0) printf("none\n");
             else print_hex("in", resp, rn);
         } else if (strncmp(line, "state ", 6) == 0) {
@@ -92,38 +92,38 @@ int main(void) {
             st.ax = (int16_t)v[8]; st.ay = (int16_t)v[9]; st.az = (int16_t)v[10];
             printf("ok\n");
         } else if (strncmp(line, "input", 5) == 0) {
-            size_t rn = padctl_procon_build_input(&pc, &st, resp);
+            size_t rn = pademu_procon_build_input(&pc, &st, resp);
             print_hex("in", resp, rn);
         } else if (strncmp(line, "txout ", 6) == 0) {
             // USB 統合を模した経路: 出力レポート → 応答はキューへ積むだけ
             size_t n = parse_hex(line + 6, buf, sizeof(buf));
-            size_t rn = padctl_procon_handle_output(&pc, buf, n, resp);
+            size_t rn = pademu_procon_handle_output(&pc, buf, n, resp);
             if (rn == 0) {
                 printf("none\n");
             } else {
-                bool ok = padctl_tx_push_reply(&tx, resp, rn);
+                bool ok = pademu_tx_push_reply(&tx, resp, rn);
                 printf("queued %d\n", ok ? 1 : 0);
             }
         } else if (strncmp(line, "txfail", 6) == 0) {
             // 送出に失敗した場合(応答は再送に回り、定期入力は落ちる)
-            size_t rn = padctl_tx_next(&tx, procon_build_cb, &pc, &st, resp);
-            padctl_tx_commit(&tx, false);
+            size_t rn = pademu_tx_next(&tx, procon_build_cb, &pc, &st, resp);
+            pademu_tx_commit(&tx, false);
             printf("fail %u\n", (unsigned)rn);
         } else if (strncmp(line, "txbad", 5) == 0) {
             // レポートIDが不正だったとして捨てる
-            padctl_tx_next(&tx, procon_build_cb, &pc, &st, resp);
-            padctl_tx_discard(&tx);
+            pademu_tx_next(&tx, procon_build_cb, &pc, &st, resp);
+            pademu_tx_discard(&tx);
             printf("discarded\n");
         } else if (strncmp(line, "txnext", 6) == 0) {
             // IN エンドポイントが空いたときの送出(応答優先・定期入力は埋め草)
-            size_t rn = padctl_tx_next(&tx, procon_build_cb, &pc, &st, resp);
+            size_t rn = pademu_tx_next(&tx, procon_build_cb, &pc, &st, resp);
             if (rn == 0) {
                 printf("empty\n");
-            } else if (!padctl_tx_report_id_valid(resp, rn)) {
-                padctl_tx_discard(&tx);
+            } else if (!pademu_tx_report_id_valid(resp, rn)) {
+                pademu_tx_discard(&tx);
                 printf("ERR badid\n");
             } else {
-                padctl_tx_commit(&tx, true);   // 送出成功
+                pademu_tx_commit(&tx, true);   // 送出成功
                 print_hex("in", resp, rn);
             }
         } else if (strncmp(line, "txstats2", 8) == 0) {
@@ -135,13 +135,13 @@ int main(void) {
                    (unsigned)tx.inputs_sent, (unsigned)tx.dropped_replies,
                    (unsigned)tx.count);
         } else if (strncmp(line, "desc", 4) == 0) {
-            printf("desc %d %d %02x %02x\n", PADCTL_PROCON_HID_DESC_LEN,
-                   PADCTL_HIDPAD_HID_DESC_LEN,
-                   padctl_procon_hid_report_desc[0],
-                   padctl_procon_hid_report_desc[PADCTL_PROCON_HID_DESC_LEN - 1]);
+            printf("desc %d %d %02x %02x\n", PADEMU_PROCON_HID_DESC_LEN,
+                   PADEMU_HIDPAD_HID_DESC_LEN,
+                   pademu_procon_hid_report_desc[0],
+                   pademu_procon_hid_report_desc[PADEMU_PROCON_HID_DESC_LEN - 1]);
         } else if (strncmp(line, "hidpad", 6) == 0) {
-            uint8_t hp[PADCTL_HIDPAD_REPORT_SIZE];
-            size_t rn = padctl_hidpad_build_input(&st, hp);
+            uint8_t hp[PADEMU_HIDPAD_REPORT_SIZE];
+            size_t rn = pademu_hidpad_build_input(&st, hp);
             print_hex("in", hp, rn);
         } else if (strncmp(line, "pair", 4) == 0) {
             // ペアリングの観測値(受けた回数と直近フェーズ)

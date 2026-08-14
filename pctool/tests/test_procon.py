@@ -29,9 +29,9 @@ def procon_exe(tmp_path_factory):
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
            "-I", str(CORE / "include"),
-           str(CORE / "padctl_procon.c"), str(CORE / "padctl_hidpad.c"),
-           str(CORE / "padctl_tx.c"), str(CORE / "padctl_usb_desc.c"),
-           str(CORE / "padctl_usb_desc_hidpad.c"),
+           str(CORE / "pademu_procon.c"), str(CORE / "pademu_hidpad.c"),
+           str(CORE / "pademu_tx.c"), str(CORE / "pademu_usb_desc.c"),
+           str(CORE / "pademu_usb_desc_hidpad.c"),
            str(CORE / "host" / "procon_host.c"),
            "-o", str(out)]
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -167,7 +167,7 @@ def test_full_handshake_sequence(device):
     assert bc & required == required, f"到達段階が不足: {bc:#x}"
 
 
-# padctl_procon.h の padctl_procon_bc_t と対応(順序が正)
+# pademu_procon.h の pademu_procon_bc_t と対応(順序が正)
 _BC = {
     "HS_STATUS": 0, "HS_SHAKE": 1, "HS_BAUD": 2, "HS_HIDONLY": 3,
     "SUB_DEVINFO": 4, "SUB_MODE": 5, "SUB_SPI": 6, "SUB_LED": 7,
@@ -403,7 +403,7 @@ def test_replies_are_never_dropped_under_load(device):
     """定期入力レポートを送り続けながらサブコマンドを連投しても応答が落ちないこと。
 
     TinyUSB は送信中のレポートを黙って捨てるため、応答を優先キューに積み
-    「空いたら応答→無ければ定期入力」の順に送る仲裁が要る(設計 padctl_tx)。
+    「空いたら応答→無ければ定期入力」の順に送る仲裁が要る(設計 pademu_tx)。
     """
     run_handshake(device)
     sent = 0
@@ -453,7 +453,7 @@ def test_reply_queue_overflow_is_counted(device):
 def test_failed_reply_is_resent_not_lost(device):
     """送出に失敗した応答は消えず、次の周期でもう一度出ること。
 
-    以前は padctl_tx_next() の時点でキューから外して「送った」と数えていたため、
+    以前は pademu_tx_next() の時点でキューから外して「送った」と数えていたため、
     tud_hid_report() が false を返すと応答はどこにも残らず、数にも入らないまま
     消えていた(Switch 側は応答を待ち続ける)。
     """
@@ -474,7 +474,7 @@ def test_reply_that_never_sends_is_dropped_and_counted(device):
     """送れない応答でキューが詰まったままにならず、捨てた数が残ること。"""
     run_handshake(device)
     device.tx_out(bytes([0x01, 0x00]) + bytes(8) + bytes([0x04]))
-    for _ in range(8):     # PADCTL_TX_MAX_RETRY 回
+    for _ in range(8):     # PADEMU_TX_MAX_RETRY 回
         device.tx_fail()
     assert device.tx_stats()["pending"] == 0       # 詰まらせない
     assert device.tx_stats()["dropped"] == 1       # 捨てたことは残る
@@ -587,7 +587,7 @@ def test_imu_calibration_defines_the_scale():
     意図せず変わると挙動が変わるので固定して見張る。
     """
     import re
-    src = (CORE / "padctl_procon.c").read_text(encoding="utf-8")
+    src = (CORE / "pademu_procon.c").read_text(encoding="utf-8")
     acc = int(re.search(r"#define IMU_ACC_SENS\s+(\d+)", src).group(1))
     gyro = int(re.search(r"#define IMU_GYRO_SENS\s+(\d+)", src).group(1))
     assert acc == 16384 and gyro == 13371, (acc, gyro)

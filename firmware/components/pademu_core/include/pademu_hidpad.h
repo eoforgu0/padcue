@@ -1,4 +1,4 @@
-// padctl_hidpad: HID ゲームパッド方式(保険モード)の転送層
+// pademu_hidpad: HID ゲームパッド方式(保険モード)の転送層
 //
 // 位置づけ: プロコン方式が Switch 2 で成立しなかった場合の縮退先。
 // 自作機での Switch 2 動作報告がある方式。
@@ -9,13 +9,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "padctl_core.h"
+#include "pademu_core.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define PADCTL_HIDPAD_REPORT_SIZE 8
+#define PADEMU_HIDPAD_REPORT_SIZE 8
 
 // レポート内のボタンビット(HORIPAD 系の標準割り当て)
 #define HIDPAD_BTN_Y       (1u << 0)
@@ -46,7 +46,7 @@ extern "C" {
 // 入力レポート(8 バイト固定)を組み立てる。
 // スティックは 12bit 生値 → 8bit(値+2048 を 4 ビット右シフト)。
 // モーションはこの方式では送出できないため無視される。
-size_t padctl_hidpad_build_input(const padctl_state_t *st, uint8_t *out);
+size_t pademu_hidpad_build_input(const pademu_state_t *st, uint8_t *out);
 
 #ifdef __cplusplus
 }

@@ -10,7 +10,7 @@ static led_strip_handle_t s_strip;
 void app_led_init(void)
 {
     led_strip_config_t strip_cfg = {
-        .strip_gpio_num = PADCTL_PIN_LED,
+        .strip_gpio_num = PADEMU_PIN_LED,
         .max_leds = 1,
         .led_model = LED_MODEL_WS2812,
         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,

@@ -9,10 +9,10 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "padctl_hidpad.h"
-#include "padctl_procon.h"
-#include "padctl_tx.h"
-#include "padctl_usb_desc.h"
+#include "pademu_hidpad.h"
+#include "pademu_procon.h"
+#include "pademu_tx.h"
+#include "pademu_usb_desc.h"
 #include "sdkconfig.h"
 #include "tinyusb.h"
 #include "tusb.h"
@@ -22,12 +22,12 @@ static const char *TAG = "usb";
 #define USB_EP_IN 0x81
 #define USB_EP_OUT 0x01
 #define USB_EP_SIZE 64
-#define USB_BINTERVAL CONFIG_PADCTL_USB_BINTERVAL
+#define USB_BINTERVAL CONFIG_PADEMU_USB_BINTERVAL
 
 static app_usb_mode_t s_mode;
 static app_usb_cb_t s_cb;
-static padctl_procon_t s_procon;
-static padctl_tx_t s_tx;
+static pademu_procon_t s_procon;
+static pademu_tx_t s_tx;
 
 // ---- 配送の遅れ(状態が変わってから実際に USB へ渡すまで) ----
 // エンジン側の late_events は「割り込みが定刻に入ったか」しか見ていない。
@@ -53,15 +53,15 @@ static _Atomic uint32_t s_ep_busy;         // 接続中なのに送出口が空�
 // 手動操作(パススルー)。書き手=制御タスク(コア0)、読み手=USBタスク(コア1)。
 // 実行エンジンの ISR はこのロックを取らないため、R1 の経路には影響しない。
 static portMUX_TYPE s_manual_mux = portMUX_INITIALIZER_UNLOCKED;
-static padctl_state_t s_manual;
+static pademu_state_t s_manual;
 static bool s_manual_on;
 
-void app_usb_set_manual(const padctl_state_t *st, bool enable) {
+void app_usb_set_manual(const pademu_state_t *st, bool enable) {
     taskENTER_CRITICAL(&s_manual_mux);
     if (enable && st) {
         s_manual = *st;
     } else {
-        padctl_state_neutral(&s_manual);
+        pademu_state_neutral(&s_manual);
     }
     s_manual_on = enable;
     taskEXIT_CRITICAL(&s_manual_mux);
@@ -84,8 +84,8 @@ static const tusb_desc_device_t s_desc_procon = {
     .bDeviceSubClass = 0x00,
     .bDeviceProtocol = 0x00,
     .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor = PADCTL_PROCON_VID,
-    .idProduct = PADCTL_PROCON_PID,
+    .idVendor = PADEMU_PROCON_VID,
+    .idProduct = PADEMU_PROCON_PID,
     .bcdDevice = 0x0200,
     .iManufacturer = 0x01,
     .iProduct = 0x02,
@@ -101,8 +101,8 @@ static const tusb_desc_device_t s_desc_hidpad = {
     .bDeviceSubClass = 0x00,
     .bDeviceProtocol = 0x00,
     .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor = PADCTL_HIDPAD_VID,
-    .idProduct = PADCTL_HIDPAD_PID,
+    .idVendor = PADEMU_HIDPAD_VID,
+    .idProduct = PADEMU_HIDPAD_PID,
     .bcdDevice = 0x0100,
     .iManufacturer = 0x01,
     .iProduct = 0x02,
@@ -116,7 +116,7 @@ static const uint8_t s_cfg_procon[] = {
     TUD_CONFIG_DESCRIPTOR(1, 1, 0, CFG_TOTAL_LEN,
                           TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 500),
     TUD_HID_INOUT_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE,
-                             PADCTL_PROCON_HID_DESC_LEN,
+                             PADEMU_PROCON_HID_DESC_LEN,
                              USB_EP_OUT, USB_EP_IN, USB_EP_SIZE, USB_BINTERVAL),
 };
 
@@ -124,7 +124,7 @@ static const uint8_t s_cfg_hidpad[] = {
     TUD_CONFIG_DESCRIPTOR(1, 1, 0, CFG_TOTAL_LEN,
                           TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 500),
     TUD_HID_INOUT_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE,
-                             PADCTL_HIDPAD_HID_DESC_LEN,
+                             PADEMU_HIDPAD_HID_DESC_LEN,
                              USB_EP_OUT, USB_EP_IN, USB_EP_SIZE, USB_BINTERVAL),
 };
 
@@ -146,8 +146,8 @@ static const char *s_str_hidpad[] = {
 
 const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance) {
     (void)instance;
-    return (s_mode == APP_USB_MODE_PROCON) ? padctl_procon_hid_report_desc
-                                           : padctl_hidpad_hid_report_desc;
+    return (s_mode == APP_USB_MODE_PROCON) ? pademu_procon_hid_report_desc
+                                           : pademu_hidpad_hid_report_desc;
 }
 
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
@@ -173,8 +173,8 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            uint16_t bufsize) {
     (void)instance; (void)report_id; (void)report_type;
     if (s_mode != APP_USB_MODE_PROCON) return;
-    uint8_t resp[PADCTL_PROCON_REPORT_SIZE];
-    size_t n = padctl_procon_handle_output(&s_procon, buffer, bufsize, resp);
+    uint8_t resp[PADEMU_PROCON_REPORT_SIZE];
+    size_t n = pademu_procon_handle_output(&s_procon, buffer, bufsize, resp);
     if (s_procon.host_info_seen) {
         // このタスクだけが s_procon に触る(競合しない)。ロックは控えの側
         taskENTER_CRITICAL(&s_hi_mux);
@@ -186,7 +186,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
     }
     if (n > 0) {
         // 直接送らずキューへ積む(定期入力レポートとの競合で捨てられるのを防ぐ)
-        padctl_tx_push_reply(&s_tx, resp, n);
+        pademu_tx_push_reply(&s_tx, resp, n);
     }
 }
 
@@ -218,24 +218,24 @@ static void on_player_lights(void *ctx, uint8_t bitmap) {
     if (s_cb.on_player_lights) s_cb.on_player_lights(bitmap);
 }
 
-static size_t build_procon(void *ctx, const padctl_state_t *st, uint8_t *out) {
-    return padctl_procon_build_input((padctl_procon_t *)ctx, st, out);
+static size_t build_procon(void *ctx, const pademu_state_t *st, uint8_t *out) {
+    return pademu_procon_build_input((pademu_procon_t *)ctx, st, out);
 }
 
-static size_t build_hidpad(void *ctx, const padctl_state_t *st, uint8_t *out) {
+static size_t build_hidpad(void *ctx, const pademu_state_t *st, uint8_t *out) {
     (void)ctx;
-    return padctl_hidpad_build_input(st, out);
+    return pademu_hidpad_build_input(st, out);
 }
 
 // TinyUSB のイベント処理と送出を **1つのタスク** で行う。
-// こうすることで、応答キュー(padctl_tx)と転送層の状態(s_procon)へ触れるのが
+// こうすることで、応答キュー(pademu_tx)と転送層の状態(s_procon)へ触れるのが
 // このタスクだけになり、並行アクセスによる応答の取りこぼしや timer の
 // 更新漏れが構造的に起きない(CONFIG_TINYUSB_NO_DEFAULT_TASK=y)。
 static void usb_task(void *arg) {
     (void)arg;
-    padctl_tx_build_fn build = (s_mode == APP_USB_MODE_PROCON) ? build_procon
+    pademu_tx_build_fn build = (s_mode == APP_USB_MODE_PROCON) ? build_procon
                                                                : build_hidpad;
-    uint8_t buf[PADCTL_TX_REPORT_MAX];
+    uint8_t buf[PADEMU_TX_REPORT_MAX];
     for (;;) {
         // 最大 1ms までイベントを待つ(来ればすぐ処理される)
         tud_task_ext(1, false);
@@ -246,7 +246,7 @@ static void usb_task(void *arg) {
             continue;
         }
 
-        padctl_state_t st;
+        pademu_state_t st;
         uint64_t pub_us = 0;
         // 実行中でない・停止指示済みなら全ニュートラル(pub_us は 0 になる)
         app_engine_snapshot_at(&st, &pub_us);
@@ -256,19 +256,19 @@ static void usb_task(void *arg) {
             st = s_manual;
             taskEXIT_CRITICAL(&s_manual_mux);
         }
-        size_t n = padctl_tx_next(&s_tx, build, &s_procon, &st, buf);
+        size_t n = pademu_tx_next(&s_tx, build, &s_procon, &st, buf);
         if (n == 0) continue;
         bool is_reply = s_tx.pending_is_reply;
         if (s_mode == APP_USB_MODE_PROCON
-            && !padctl_tx_report_id_valid(buf, n)) {
+            && !pademu_tx_report_id_valid(buf, n)) {
             // 送出直前の健全性チェック(先頭バイトが既知のレポートIDか)
             ESP_LOGE(TAG, "不正なレポートID 0x%02x を送出しようとしました", buf[0]);
-            padctl_tx_discard(&s_tx);
+            pademu_tx_discard(&s_tx);
             continue;
         }
         // report_id には 0 を渡す(バッファ先頭が既にレポートID)
         bool sent = tud_hid_report(0, buf, (uint16_t)n);
-        padctl_tx_commit(&s_tx, sent);
+        pademu_tx_commit(&s_tx, sent);
 
         // 新しく公開された状態を実際に送れたので、公開から送出までを測る。
         // 応答を送った周期は状態を送っていないので測らない(次の周期で測る)
@@ -321,13 +321,13 @@ void app_usb_reset_tx_stats(void) {
 esp_err_t app_usb_start(app_usb_mode_t mode, const app_usb_cb_t *cb) {
     s_mode = mode;
     if (cb) s_cb = *cb;
-    padctl_tx_init(&s_tx);
-    padctl_procon_cb_t pcb = {
+    pademu_tx_init(&s_tx);
+    pademu_procon_cb_t pcb = {
         .on_player_lights = on_player_lights,
         .on_rumble = NULL,
         .ctx = NULL,
     };
-    padctl_procon_init(&s_procon, s_mac, &pcb);
+    pademu_procon_init(&s_procon, s_mac, &pcb);
 
     tinyusb_config_t cfg = {
         .device_descriptor = (mode == APP_USB_MODE_PROCON) ? &s_desc_procon

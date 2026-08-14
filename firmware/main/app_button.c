@@ -16,7 +16,7 @@ static void btn_task(void *arg)
     int held_ms = 0;
     bool long_fired = false;
     for (;;) {
-        bool down = gpio_get_level(PADCTL_PIN_BUTTON) == 0;
+        bool down = gpio_get_level(PADEMU_PIN_BUTTON) == 0;
         if (down) {
             held_ms += POLL_MS;
             if (held_ms >= LONG_PRESS_MS && !long_fired) {
@@ -38,7 +38,7 @@ static void btn_task(void *arg)
 
 bool app_button_is_pressed(void)
 {
-    return gpio_get_level(PADCTL_PIN_BUTTON) == 0;
+    return gpio_get_level(PADEMU_PIN_BUTTON) == 0;
 }
 
 void app_button_init(app_button_cb_t on_short, app_button_cb_t on_long)
@@ -46,7 +46,7 @@ void app_button_init(app_button_cb_t on_short, app_button_cb_t on_long)
     s_on_short = on_short;
     s_on_long = on_long;
     gpio_config_t io = {
-        .pin_bit_mask = 1ULL << PADCTL_PIN_BUTTON,
+        .pin_bit_mask = 1ULL << PADEMU_PIN_BUTTON,
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
     };

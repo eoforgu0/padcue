@@ -5,9 +5,9 @@
 // バイト照合を行っていない。保険モードを実際に使う場合は、使用前に公開実装
 // または実機ダンプと照合すること(docs/design/procon-protocol.md §9 に追記)。
 // 8 バイトの入力レポート(ボタン16 + HAT + X/Y/Z/Rz + ベンダ1)に対応する。
-#include "padctl_usb_desc.h"
+#include "pademu_usb_desc.h"
 
-const uint8_t padctl_hidpad_hid_report_desc[PADCTL_HIDPAD_HID_DESC_LEN] = {
+const uint8_t pademu_hidpad_hid_report_desc[PADEMU_HIDPAD_HID_DESC_LEN] = {
     0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
     0x09, 0x05,        // Usage (Game Pad)
     0xA1, 0x01,        // Collection (Application)

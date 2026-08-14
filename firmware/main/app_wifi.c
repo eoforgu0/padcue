@@ -47,7 +47,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 static bool load_creds(char *ssid, size_t ssid_len, char *pass, size_t pass_len)
 {
     nvs_handle_t h;
-    if (nvs_open("padctl", NVS_READONLY, &h) == ESP_OK) {
+    if (nvs_open("pademu", NVS_READONLY, &h) == ESP_OK) {
         size_t sl = ssid_len;
         size_t pl = pass_len;
         bool ok = nvs_get_str(h, "wifi_ssid", ssid, &sl) == ESP_OK
@@ -58,9 +58,9 @@ static bool load_creds(char *ssid, size_t ssid_len, char *pass, size_t pass_len)
             return true;
         }
     }
-    if (strlen(CONFIG_PADCTL_WIFI_SSID) > 0) {
-        strlcpy(ssid, CONFIG_PADCTL_WIFI_SSID, ssid_len);
-        strlcpy(pass, CONFIG_PADCTL_WIFI_PASS, pass_len);
+    if (strlen(CONFIG_PADEMU_WIFI_SSID) > 0) {
+        strlcpy(ssid, CONFIG_PADEMU_WIFI_SSID, ssid_len);
+        strlcpy(pass, CONFIG_PADEMU_WIFI_PASS, pass_len);
         ESP_LOGI(TAG, "ビルド設定の資格情報を使用");
         return true;
     }

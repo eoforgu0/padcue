@@ -1,5 +1,5 @@
-// WiFi STA 接続。資格情報は NVS(padctl/wifi_ssid, wifi_pass)優先、
-// 未設定時は Kconfig(PADCTL_WIFI_SSID/PASS)へフォールバック。
+// WiFi STA 接続。資格情報は NVS(pademu/wifi_ssid, wifi_pass)優先、
+// 未設定時は Kconfig(PADEMU_WIFI_SSID/PASS)へフォールバック。
 // 切断時はコア0で自動再接続する(コア1の実行には無干渉)。
 #pragma once
 

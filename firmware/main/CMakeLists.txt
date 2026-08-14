@@ -3,6 +3,6 @@ idf_component_register(
          "app_engine.c" "app_usb.c" "app_log.c" "app_state.c"
          "app_store.c" "app_ctrl.c" "app_discover.c"
     INCLUDE_DIRS "."
-    REQUIRES driver nvs_flash esp_wifi padctl_core esp_timer
+    REQUIRES driver nvs_flash esp_wifi pademu_core esp_timer
              json spiffs mbedtls app_update lwip esp_hw_support
 )

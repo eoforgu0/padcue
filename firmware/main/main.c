@@ -1,4 +1,4 @@
-// padctl: Switch 2 自動操作ファームウェア
+// pademu: Switch 2 自動操作ファームウェア
 // 責務分担(設計文書 7.1): コア0=WiFi/通信/ログ/OTA、コア1=USB/実行エンジン
 
 #include "app_button.h"
@@ -22,7 +22,7 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
-static const char *TAG = "padctl";
+static const char *TAG = "pademu";
 
 static void on_button_short(void)
 {
@@ -87,13 +87,13 @@ static void init_nvs(void)
 
 static app_usb_mode_t load_settings(void)
 {
-#ifdef CONFIG_PADCTL_TRANSPORT_HIDPAD
+#ifdef CONFIG_PADEMU_TRANSPORT_HIDPAD
     app_usb_mode_t mode = APP_USB_MODE_HIDPAD;
 #else
     app_usb_mode_t mode = APP_USB_MODE_PROCON;
 #endif
     nvs_handle_t h;
-    if (nvs_open("padctl", NVS_READONLY, &h) == ESP_OK) {
+    if (nvs_open("pademu", NVS_READONLY, &h) == ESP_OK) {
         uint8_t v = 0;
         if (nvs_get_u8(h, "tmode", &v) == ESP_OK) {
             mode = (v == 1) ? APP_USB_MODE_HIDPAD : APP_USB_MODE_PROCON;
@@ -215,7 +215,7 @@ static void supervisor_task(void *arg)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "padctl fw %s 起動", PADCTL_FW_VERSION);
+    ESP_LOGI(TAG, "pademu fw %s 起動", PADEMU_FW_VERSION);
     init_nvs();
     app_log_init();
     app_led_init();

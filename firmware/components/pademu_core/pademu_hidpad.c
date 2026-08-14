@@ -1,8 +1,8 @@
-#include "padctl_hidpad.h"
+#include "pademu_hidpad.h"
 
 #include <string.h>
 
-// 論理ビット(padctl_core / binfmt.BUTTONS)→ HIDPAD のビット
+// 論理ビット(pademu_core / binfmt.BUTTONS)→ HIDPAD のビット
 static uint16_t map_buttons(uint32_t b) {
     uint16_t out = 0;
     if (b & (1u << 0))  out |= HIDPAD_BTN_A;
@@ -56,8 +56,8 @@ static uint8_t to8_inv(int16_t v) {
     return (uint8_t)((inv + 2048) >> 4);
 }
 
-size_t padctl_hidpad_build_input(const padctl_state_t *st, uint8_t *out) {
-    memset(out, 0, PADCTL_HIDPAD_REPORT_SIZE);
+size_t pademu_hidpad_build_input(const pademu_state_t *st, uint8_t *out) {
+    memset(out, 0, PADEMU_HIDPAD_REPORT_SIZE);
     uint16_t btn = map_buttons(st->buttons);
     out[0] = (uint8_t)(btn & 0xFF);
     out[1] = (uint8_t)((btn >> 8) & 0xFF);
@@ -67,5 +67,5 @@ size_t padctl_hidpad_build_input(const padctl_state_t *st, uint8_t *out) {
     out[5] = to8(st->rx);
     out[6] = to8_inv(st->ry);
     out[7] = 0x00;  // vendor specific
-    return PADCTL_HIDPAD_REPORT_SIZE;
+    return PADEMU_HIDPAD_REPORT_SIZE;
 }

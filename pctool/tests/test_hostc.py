@@ -1,4 +1,4 @@
-"""C 実行エンジン(firmware/components/padctl_core)と Python 参照実装の一致検証。
+"""C 実行エンジン(firmware/components/pademu_core)と Python 参照実装の一致検証。
 
 同一バイナリに対する送出列(絶対フレーム+全状態12値)の完全一致を、
 固定の手順群+乱数生成の手順群で確認する。gcc(WinLibs)が無い環境では skip。
@@ -16,7 +16,7 @@ from switchctl import binfmt, engine
 from switchctl.dsl import compile_source
 
 REPO = Path(__file__).resolve().parents[2]
-CORE = REPO / "firmware" / "components" / "padctl_core"
+CORE = REPO / "firmware" / "components" / "pademu_core"
 
 
 def find_gcc() -> str | None:
@@ -39,11 +39,11 @@ def host_exe(tmp_path_factory):
     # ウイルス対策ソフトが「一時フォルダに現れた無署名 exe」を誤検知・
     # 隔離して 64 件の検査ごと落とすことがある(2026-08-06 に ESET の
     # 定義更新で実際に発生)。リポジトリを除外設定していれば巻き込まれない
-    out = CORE.parents[2] / "build" / "hosttest" / "padctl_host.exe"
+    out = CORE.parents[2] / "build" / "hosttest" / "pademu_host.exe"
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
            "-I", str(CORE / "include"),
-           str(CORE / "padctl_core.c"), str(CORE / "host" / "host_main.c"),
+           str(CORE / "pademu_core.c"), str(CORE / "host" / "host_main.c"),
            "-o", str(out)]
     res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, f"C ビルド失敗:\n{res.stderr}"
@@ -172,4 +172,4 @@ def test_c_rejects_corruption(host_exe, tmp_path):
     res = subprocess.run([str(host_exe), str(p), "1", "1000"],
                         capture_output=True, text=True)
     assert res.returncode == 3
-    assert "ERR decode 5" in res.stdout  # PADCTL_ERR_CRC
+    assert "ERR decode 5" in res.stdout  # PADEMU_ERR_CRC

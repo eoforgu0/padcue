@@ -27,8 +27,8 @@ const char *app_discover_device_id(void) {
     return s_device_id;
 }
 
-// 名前で呼べるようにする。ホスト名は個体別(padctl-<MAC下4桁>)。
-// 固定名 "padctl" だと2台目を同じ LAN に置いた時に名前が衝突し、
+// 名前で呼べるようにする。ホスト名は個体別(pademu-<MAC下4桁>)。
+// 固定名 "pademu" だと2台目を同じ LAN に置いた時に名前が衝突し、
 // どちらに繋がるか不定になる(2026-08-04 2台化 P1)
 static void start_mdns(void) {
     esp_err_t err = mdns_init();
@@ -41,7 +41,7 @@ static void start_mdns(void) {
     snprintf(host, sizeof(host), "%s-%s", APP_DISCOVER_HOSTNAME, id + 8);
     mdns_hostname_set(host);
     mdns_instance_name_set(host);
-    mdns_service_add(NULL, "_padctl", "_tcp", APP_CTRL_PORT, NULL, 0);
+    mdns_service_add(NULL, "_pademu", "_tcp", APP_CTRL_PORT, NULL, 0);
     ESP_LOGI(TAG, "名前で呼べます: %s.local", host);
 }
 
@@ -83,7 +83,7 @@ static void discover_task(void *arg) {
             }
             int len = snprintf(reply, sizeof(reply),
                 "{\"magic\":\"%s\",\"id\":\"%s\",\"fw\":\"%s\",\"port\":%d}",
-                APP_DISCOVER_MAGIC, id, PADCTL_FW_VERSION, APP_CTRL_PORT);
+                APP_DISCOVER_MAGIC, id, PADEMU_FW_VERSION, APP_CTRL_PORT);
             sendto(sock, reply, len, 0, (struct sockaddr *)&from, flen);
         }
         close(sock);

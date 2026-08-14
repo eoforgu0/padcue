@@ -10,4 +10,4 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults.local")
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(padctl)
+project(pademu)

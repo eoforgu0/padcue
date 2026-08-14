@@ -1,14 +1,14 @@
-menu "padctl"
+menu "pademu"
 
-config PADCTL_WIFI_SSID
+config PADEMU_WIFI_SSID
     string "WiFi SSID (NVS 未設定時のフォールバック)"
     default ""
 
-config PADCTL_WIFI_PASS
+config PADEMU_WIFI_PASS
     string "WiFi パスワード (同上)"
     default ""
 
-config PADCTL_USB_BINTERVAL
+config PADEMU_USB_BINTERVAL
     int "USB IN エンドポイントの bInterval (ms)"
     range 1 16
     default 1
@@ -17,12 +17,12 @@ config PADCTL_USB_BINTERVAL
         実在の Pro コントローラーは 8。Switch が 1 を受け入れない場合は
         8 に戻す(設計文書 7.3-1 / 未検証事項1)。
 
-choice PADCTL_TRANSPORT_DEFAULT
+choice PADEMU_TRANSPORT_DEFAULT
     prompt "起動時の転送層モード(NVS 未設定時)"
-    default PADCTL_TRANSPORT_PROCON
-    config PADCTL_TRANSPORT_PROCON
+    default PADEMU_TRANSPORT_PROCON
+    config PADEMU_TRANSPORT_PROCON
         bool "Pro コントローラー方式(本命・ジャイロ可)"
-    config PADCTL_TRANSPORT_HIDPAD
+    config PADEMU_TRANSPORT_HIDPAD
         bool "HID ゲームパッド方式(保険・ジャイロ不可)"
 endchoice
 

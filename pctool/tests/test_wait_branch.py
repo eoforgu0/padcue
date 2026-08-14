@@ -110,8 +110,8 @@ def test_c_engine_matches_python(proj, host_exe, tmp_path):
     for choice in (0, 1):
         expected = [(e.frame, e.buttons) for e in
                     engine.run(ev, total, 1, choices=[choice], await_frames=120)]
-        env = dict(os.environ, PADCTL_CHOICES=str(choice),
-                   PADCTL_AWAIT_FRAMES="120")
+        env = dict(os.environ, PADEMU_CHOICES=str(choice),
+                   PADEMU_AWAIT_FRAMES="120")
         res = subprocess.run([str(host_exe), str(p), "1", "100000"],
                              capture_output=True, text=True, env=env)
         assert res.returncode == 0, res.stdout + res.stderr

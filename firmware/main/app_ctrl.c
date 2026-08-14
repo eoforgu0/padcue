@@ -22,7 +22,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
-#include "padctl_core.h"
+#include "pademu_core.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "ctrl";
@@ -163,16 +163,16 @@ static const char *reset_reason_name(void) {
 
 static int cmd_hello(int sock) {
     cJSON *j = cJSON_CreateObject();
-    cJSON_AddStringToObject(j, "magic", "padctl");
+    cJSON_AddStringToObject(j, "magic", "pademu");
     // 個体識別子。探索(UDP)と同じ値を TCP でも名乗ることで、PC 側が
     // 「いま繋がっている相手は登録したあの個体か」を接続のたびに照合できる
     // (2台運用で IP が入れ替わっても取り違えない。2026-08-04 P1)
     cJSON_AddStringToObject(j, "id", app_discover_device_id());
-    cJSON_AddStringToObject(j, "fw", PADCTL_FW_VERSION);
-    cJSON_AddNumberToObject(j, "schema", PADCTL_SCHEMA_VERSION);
+    cJSON_AddStringToObject(j, "fw", PADEMU_FW_VERSION);
+    cJSON_AddNumberToObject(j, "schema", PADEMU_SCHEMA_VERSION);
     cJSON_AddStringToObject(j, "mode",
         app_usb_get_mode() == APP_USB_MODE_PROCON ? "procon" : "hidpad");
-    cJSON_AddNumberToObject(j, "binterval", CONFIG_PADCTL_USB_BINTERVAL);
+    cJSON_AddNumberToObject(j, "binterval", CONFIG_PADEMU_USB_BINTERVAL);
     const esp_partition_t *run = esp_ota_get_running_partition();
     cJSON_AddStringToObject(j, "partition", run ? run->label : "?");
     cJSON_AddStringToObject(j, "reset_reason", reset_reason_name());
@@ -418,7 +418,7 @@ static int cmd_mode(int sock, cJSON *req) {
     else if (strcmp(mode->valuestring, "hidpad") == 0) v = 1;
     else return send_error(sock, "BAD_ARG", "mode は procon か hidpad");
     nvs_handle_t h;
-    if (nvs_open("padctl", NVS_READWRITE, &h) != ESP_OK) {
+    if (nvs_open("pademu", NVS_READWRITE, &h) != ESP_OK) {
         return send_error(sock, "NVS_FAILED", "設定を保存できません");
     }
     nvs_set_u8(h, "tmode", v);
@@ -441,7 +441,7 @@ static int cmd_config(int sock, cJSON *req) {
         }
         app_engine_set_frame_period_ns((uint32_t)val->valuedouble);
         nvs_handle_t h;
-        if (nvs_open("padctl", NVS_READWRITE, &h) == ESP_OK) {
+        if (nvs_open("pademu", NVS_READWRITE, &h) == ESP_OK) {
             nvs_set_u32(h, "period_ns", (uint32_t)val->valuedouble);
             nvs_commit(h);
             nvs_close(h);
@@ -461,7 +461,7 @@ static int cmd_config(int sock, cJSON *req) {
             return send_error(sock, "BAD_ARG", "値が長すぎます(64バイトまで)");
         }
         nvs_handle_t h;
-        if (nvs_open("padctl", NVS_READWRITE, &h) != ESP_OK) {
+        if (nvs_open("pademu", NVS_READWRITE, &h) != ESP_OK) {
             return send_error(sock, "NVS", "設定の保存領域を開けません");
         }
         esp_err_t err = nvs_set_str(h, key->valuestring, val->valuestring);
@@ -605,8 +605,8 @@ static int cmd_passthru(int sock, cJSON *req) {
     }
     cJSON *en = cJSON_GetObjectItem(req, "enable");
     bool enable = cJSON_IsTrue(en);
-    padctl_state_t st;
-    padctl_state_neutral(&st);   // 指定しなかった軸は静止相当(加速度は重力ぶん)
+    pademu_state_t st;
+    pademu_state_neutral(&st);   // 指定しなかった軸は静止相当(加速度は重力ぶん)
     if (enable) {
         struct { const char *k; int16_t *p; int16_t lo, hi; } axes[] = {
             {"lx", &st.lx, -2048, 2047}, {"ly", &st.ly, -2048, 2047},

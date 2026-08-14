@@ -22,14 +22,14 @@ static const char *TAG = "engine";
 
 typedef struct {
     _Atomic uint32_t seq;       // 偶数=安定、奇数=書き込み中
-    padctl_state_t state;
+    pademu_state_t state;
     uint64_t pub_us;            // この状態を公開した時刻(配送の遅れを測るため)
 } shared_state_t;
 
 static gptimer_handle_t s_timer;
 static shared_state_t s_shared;
-static padctl_engine_t s_engine;
-static padctl_proc_t s_proc;
+static pademu_engine_t s_engine;
+static pademu_proc_t s_proc;
 
 static uint32_t s_period_ns = 16666667;   // 60.00Hz。実機で較正する
 static _Atomic bool s_running;
@@ -38,7 +38,7 @@ static _Atomic bool s_stop_graceful;
 static _Atomic int s_status;              // app_engine_status_t
 
 // 次に適用する状態(アラーム時刻に publish する)
-static padctl_state_t s_pending;
+static pademu_state_t s_pending;
 static bool s_pending_valid;
 static uint64_t s_pending_abs_frame;
 // s_pending が待機分岐(AWAIT)のニュートラルであることの印。
@@ -81,14 +81,14 @@ static _Atomic uint32_t s_await_gen;
 // ことになり、その瞬間にパニックして再起動する。
 // 実機で実行の 3% がこれで落ちていた(2026-08-02。実行終了時に到達するため
 // 完了ログも残らず、USB が切れて Switch にはコントローラー選択画面が出た)
-static void IRAM_ATTR neutral_state(padctl_state_t *st) {
-    padctl_state_neutral(st);   // 加速度は重力ぶんが入る(0 埋めは自由落下になる)
+static void IRAM_ATTR neutral_state(pademu_state_t *st) {
+    pademu_state_neutral(st);   // 加速度は重力ぶんが入る(0 埋めは自由落下になる)
 }
 
 // 単一書き手(ISR)。読み手は seq が偶数かつ前後一致であることを確認する。
 // 公開した時刻も一緒に持たせる。これが無いと「割り込みは定刻だったが、
 // 実際に USB へ渡すまでに遅れた」という区間を誰も測れない(2026-08-04 監査)
-static void IRAM_ATTR publish_state(const padctl_state_t *st) {
+static void IRAM_ATTR publish_state(const pademu_state_t *st) {
     // 時刻は esp_timer(システム共通の64bit µs)で取る。
     // GPTimer のカウンタは実行開始のたびに 0 に戻され、停止すると止まるので、
     // 実行をまたいだ引き算が成り立たない。esp_timer は起動から単調増加で、
@@ -113,7 +113,7 @@ bool app_engine_stop_pending(void) {
     return atomic_load_explicit(&s_stop_now, memory_order_acquire);
 }
 
-void app_engine_snapshot_at(padctl_state_t *out, uint64_t *pub_us_out) {
+void app_engine_snapshot_at(pademu_state_t *out, uint64_t *pub_us_out) {
     if (pub_us_out) *pub_us_out = 0;
     // 即時停止が要求されたら、次のアラームを待たずにその場でニュートラルへ倒す
     // (長い wait の途中でも 1ms 以内に停止が効くようにするための経路)
@@ -138,7 +138,7 @@ void app_engine_snapshot_at(padctl_state_t *out, uint64_t *pub_us_out) {
     neutral_state(out);  // 読み取りが安定しない異常時は安全側へ倒す
 }
 
-void app_engine_snapshot(padctl_state_t *out) {
+void app_engine_snapshot(pademu_state_t *out) {
     app_engine_snapshot_at(out, NULL);
 }
 
@@ -147,8 +147,8 @@ static bool IRAM_ATTR advance_to_next_emission(void) {
     for (int i = 0; i < MAX_ZERO_TIME_EVENTS; i++) {
         bool emitted = false;
         uint64_t abs = 0;
-        padctl_err_t err = padctl_engine_step(&s_engine, &emitted, &abs);
-        if (err != PADCTL_OK) {
+        pademu_err_t err = pademu_engine_step(&s_engine, &emitted, &abs);
+        if (err != PADEMU_OK) {
             atomic_store_explicit(&s_status, APP_ENGINE_FAULT, memory_order_relaxed);
             return false;
         }
@@ -195,7 +195,7 @@ static bool IRAM_ATTR advance_to_next_emission(void) {
 
 static void IRAM_ATTR stop_engine_from_isr(void) {
     atomic_store_explicit(&s_running, false, memory_order_release);
-    padctl_state_t n;
+    pademu_state_t n;
     neutral_state(&n);
     publish_state(&n);
     gptimer_stop(s_timer);
@@ -378,21 +378,21 @@ esp_err_t app_engine_start(const uint8_t *data, size_t len, uint32_t session_loo
                            uint32_t start_index, uint64_t start_base) {
     if (atomic_load(&s_running)) return ESP_ERR_INVALID_STATE;
 
-    padctl_err_t perr = padctl_decode(data, len, &s_proc);
-    if (perr != PADCTL_OK) {
+    pademu_err_t perr = pademu_decode(data, len, &s_proc);
+    if (perr != PADEMU_OK) {
         ESP_LOGE(TAG, "手順データが不正: err=%d", (int)perr);
         return ESP_ERR_INVALID_ARG;
     }
-    perr = padctl_engine_init_at(&s_engine, &s_proc, session_loops,
+    perr = pademu_engine_init_at(&s_engine, &s_proc, session_loops,
                                  start_index, start_base);
-    if (perr != PADCTL_OK) return ESP_ERR_INVALID_ARG;
+    if (perr != PADEMU_OK) return ESP_ERR_INVALID_ARG;
 
     atomic_store(&s_stop_now, false);
     atomic_store(&s_stop_graceful, false);
     atomic_store(&s_late_events, 0);
     atomic_store(&s_max_late_us, 0);
     atomic_store(&s_frames_elapsed, 0);
-    atomic_store(&s_pub_total_frames, padctl_engine_total_frames(&s_engine));
+    atomic_store(&s_pub_total_frames, pademu_engine_total_frames(&s_engine));
     atomic_store(&s_pub_loop_n, session_loops);
     atomic_store(&s_pub_pass, 1);
     atomic_store(&s_pub_index, 0);
@@ -521,8 +521,8 @@ esp_err_t app_engine_select(uint8_t arm) {
     // 以前はここで実時間を測って加算するつもりのコードが書かれていたが、
     // カウンタが止まっている以上その値は必ず 0 で、動いていなかった。
     // 「測っているつもりで測っていない」コードは残さない(2026-08-04)
-    padctl_err_t perr = padctl_engine_select(&s_engine, arm, 0);
-    if (perr != PADCTL_OK) {
+    pademu_err_t perr = pademu_engine_select(&s_engine, arm, 0);
+    if (perr != PADEMU_OK) {
         // 腕が不正など。入場券(awaiting)を戻さないと、エンジンは駐機した
         // ままなのに選択待ちが見えなくなり、誰も選べなくなる
         atomic_store_explicit(&s_awaiting, true, memory_order_release);

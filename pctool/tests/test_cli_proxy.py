@@ -89,7 +89,7 @@ def test_exclusive_ops_are_refused_while_gui(env, capsys):
     assert cli.cmd_config(_args(tmp, key="frame_period_ns",
                                 value="16666667")) == 1
     assert "画面を閉じてから" in capsys.readouterr().out
-    assert cli.cmd_ota(_args(tmp, image="firmware/build/padctl.bin")) == 1
+    assert cli.cmd_ota(_args(tmp, image="firmware/build/pademu.bin")) == 1
     assert "画面を閉じてから" in capsys.readouterr().out
 
 

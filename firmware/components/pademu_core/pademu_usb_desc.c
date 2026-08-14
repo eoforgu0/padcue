@@ -4,9 +4,9 @@
 // hid_report_descriptor.txt に注釈付き原文を保管)。
 // **機能的に等価に見えても再構成してはならない** — バイト列そのものを複製する。
 // Switch 側が実在製品と同一のディスクリプタを期待する可能性があるため。
-#include "padctl_usb_desc.h"
+#include "pademu_usb_desc.h"
 
-const uint8_t padctl_procon_hid_report_desc[PADCTL_PROCON_HID_DESC_LEN] = {
+const uint8_t pademu_procon_hid_report_desc[PADEMU_PROCON_HID_DESC_LEN] = {
     0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
     0x15, 0x00,        // Logical Minimum (0)
     0x09, 0x04,        // Usage (Joystick)
