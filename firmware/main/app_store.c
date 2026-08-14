@@ -92,8 +92,13 @@ static void path_of(const char *name, char *out, size_t cap) {
     snprintf(out, cap, "%s/%s.bin", BASE, name);
 }
 
+// 緩衝(s_buf)は転送の受け皿と実行時の読み込みで共用している。実行のたびに
+// app_store_load が中身と s_staged_name を塗り替えるので、**確定は「いま載って
+// いるのが本当にその名前で転送されたものか」を見てから**行う。見ないと
+// 「PUT foo -> RUN bar -> COMMIT foo」で foo に bar の中身が保存される
 esp_err_t app_store_commit(const char *name) {
     if (!name_ok(name) || s_staged_len == 0) return ESP_ERR_INVALID_STATE;
+    if (strcmp(name, s_staged_name) != 0) return ESP_ERR_INVALID_STATE;
     char path[128];
     path_of(name, path, sizeof(path));
     FILE *f = fopen(path, "wb");

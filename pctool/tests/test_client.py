@@ -199,3 +199,21 @@ def test_bad_procedure_data_is_rejected(client):
     client.commit("broken")
     with pytest.raises(DeviceError, match="BAD_DATA"):
         client.run("broken", proc_hash(b"NOT A VALID PROCEDURE BINARY"))
+
+
+def test_commit_refuses_a_name_that_was_not_staged():
+    """転送した名前とは違う名前での確定を断ること。
+
+    実機は転送の受け皿と実行時の読み込みで同じ緩衝を使う(96KB を2つ持てない)。
+    実行のたびにそこが塗り替わるので、確定の前に名前を照合しないと
+    「PUT foo -> RUN bar -> COMMIT foo」で foo に bar の中身が保存される。
+    模擬デバイスも実機と同じ判定にしてある(app_store.c の app_store_commit)。
+    """
+    with MockDevice() as d, DeviceClient("127.0.0.1", d.port) as c:
+        c0 = compile_source("proc ほんもの\npress A 3\nwait 27\nend\n")
+        blob = binfmt.encode(c0.name, c0.events, c0.total_frames)
+        c.put("ほんもの", blob)
+        with pytest.raises(DeviceError):
+            c.commit("べつの名前")
+        c.commit("ほんもの")            # 正しい名前なら通る
+        assert [p["name"] for p in c.list()] == ["ほんもの"]

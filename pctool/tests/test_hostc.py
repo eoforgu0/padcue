@@ -155,6 +155,30 @@ def test_c_rejects_overflowing_event_count(host_exe, tmp_path):
         binfmt.decode(blob)
 
 
+def test_c_rejects_out_of_range_resume_base(host_exe, tmp_path):
+    """手順より先の時刻から始めろと言われたら断ること(先頭からの実行でも)。
+
+    断らないと、最初の送出のアラームが遠い未来に置かれ、装置は RUNNING の
+    まま何も出さずに固着する(PUT/COMMIT/RUN は BUSY で断られ、STOP でしか
+    戻れない)。以前は「先頭は手順の自然な開始位置だから検証不要」として
+    index==0 の枝だけ上限検査を飛ばしていた。参照実装は index に関係なく
+    弾くので、両実装の判定を揃えるという意味もある。
+    """
+    c = compile_source("proc p\npress A 5\nwait 5\nend\n")
+    blob = binfmt.encode(c.name, c.events, c.total_frames)
+    p = tmp_path / "resume.bin"
+    p.write_bytes(blob)
+    # 手順は 10 フレーム。その先(216000 = 60Hz で1時間先)を基準に指定する
+    res = subprocess.run([str(host_exe), str(p), "1", "1000", "0", "216000"],
+                         capture_output=True, text=True)
+    assert res.returncode == 3
+    assert "ERR init 7" in res.stdout   # PADEMU_ERR_TARGET
+    # 正しい範囲(先頭・基準 0)は通る
+    ok = subprocess.run([str(host_exe), str(p), "1", "1000", "0", "0"],
+                        capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stdout
+
+
 def test_c_rejects_zero_loop_count(host_exe, tmp_path):
     """くり返し回数 0 のバイナリを、装置側も実行前に弾くこと。
 

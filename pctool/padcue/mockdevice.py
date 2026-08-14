@@ -383,6 +383,13 @@ class MockDevice:
             if self._staged is None:
                 return self._err("NO_STAGED", "転送されたデータがありません")
             name, data = self._staged
+            # 実機は緩衝を転送と実行で共用しているので、確定の前に
+            # 「いま載っているのが本当にその名前で転送されたものか」を見る
+            # (app_store.c の app_store_commit)。模擬も同じ判定にする
+            want = (msg.obj or {}).get("name", name)
+            if want != name:
+                return self._err("BAD_STATE",
+                                 f"転送されたのは「{name}」です")
             self._procs[name] = _Proc(name, data, binfmt.proc_hash(data))
             return Message(proto.T_COMMIT | proto.T_RESP, {})
         if t == proto.T_LIST:

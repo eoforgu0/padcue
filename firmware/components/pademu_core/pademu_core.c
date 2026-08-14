@@ -149,8 +149,16 @@ pademu_err_t pademu_engine_init_at(pademu_engine_t *e, const pademu_proc_t *p,
         }
         // 再開点を時刻 0 に寄せる(飛ばした前半ぶん何も出さずに待たないため)
         skip = start_base + le32(p->recs + (size_t)i * PADEMU_RECORD_SIZE);
-        if (skip > p->total_frames) return PADEMU_ERR_TARGET;
+    } else {
+        // 先頭から始めるときも基準時刻は受け取る。ここを見ないと、手順の
+        // 長さより先の時刻を渡されたときに「実行中なのに何も出さない」まま
+        // 固着する(最初の送出のアラームが遠い未来に置かれ、状態は RUNNING の
+        // まま。PUT/COMMIT/RUN は BUSY で断られ、STOP でしか戻れない)。
+        // 参照実装(engine.py の resume_start_frame)は index に関係なく
+        // 同じ式で弾いており、ここだけ検査が抜けていた
+        skip = start_base;
     }
+    if (skip > p->total_frames) return PADEMU_ERR_TARGET;
     memset(e, 0, sizeof(*e));
     // 全ゼロの state は自由落下(az=0)を意味してしまう。ニュートラル
     // (重力あり)へ直す。最初の送出は必ず STATE/AWAIT なので現状この値が
