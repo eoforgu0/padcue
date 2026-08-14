@@ -11,7 +11,7 @@ import pytest
 
 from padcue import binfmt, engine
 from padcue.client import DeviceClient, DeviceError, proc_hash
-from padcue.flowfmt import FlowError
+from padcue.flowfmt import FlowError, compile_flow
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 
@@ -167,3 +167,25 @@ def test_select_without_await_is_rejected(proj):
         cli.commit(r.name)
         with pytest.raises(DeviceError, match="待機分岐"):
             cli.select(0)
+
+
+# ---------------- 模擬デバイスの待機分岐時刻 ----------------
+
+def test_mock_first_await_is_absolute(tmp_path):
+    """ループの後ろの待機分岐は、ループ消化後の絶対時刻で来ること。
+
+    Await.frame はセグメント相対なので、そのまま使うと開始直後に選択待ちが
+    来てしまう(模擬デバイスにあったバグ)。
+    """
+    from padcue.mockdevice import _first_await
+    p = make(tmp_path, {"schema": 1, "name": "p", "body": [
+        {"type": "loop", "count": 3, "body": [{"type": "wait", "frames": 30}]},
+        {"type": "wait_branch", "arms": {
+            "甲": [{"type": "wait", "frames": 5}],
+            "乙": [{"type": "wait", "frames": 10}]}},
+        {"type": "wait", "frames": 5}]}, name="p")
+    c = compile_flow(str(p.root), "p")
+    rel, arms, timeout, on_to = _first_await(list(c.events), 0, 0, 0)
+    assert rel == 90, rel        # 30F × 3周 の後
+    assert arms == 2
+    assert (timeout, on_to) == (0, 0)    # 未指定なら無期限に待つ

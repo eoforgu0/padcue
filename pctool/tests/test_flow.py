@@ -4,6 +4,7 @@ import json
 import pytest
 
 from padcue import binfmt, engine
+from padcue.dsl import compile_source
 from padcue.flowfmt import FlowError, compile_flow
 from padcue.matrix import PartError, load_part
 
@@ -303,3 +304,22 @@ def test_part_in_loop_still_resets_each_lap(tmp_path):
     assert c.total_frames == 20   # (3+7)×2
     ems = [(e.frame, e.buttons) for e in engine.run(c.events, c.total_frames)]
     assert ems == [(0, A), (3, 0), (10, A), (13, 0)]
+
+
+# ---------------- 0フレームの「離す」 ----------------
+
+def test_release_swallowed_by_next_press_warns():
+    """離してすぐ押し直すと「離す」が出力に現れない。これは警告する。"""
+    c = compile_source("proc p\npress A 2\nrelease A\npress A 2\nwait 10\nend\n")
+    assert any("離す" in w.msg and "現れず" in w.msg for w in c.warnings), \
+        [w.msg for w in c.warnings]
+    # 実際に 4 フレーム押しっぱなしになる
+    states = [(e.frame, bool(e.buttons & A)) for e in c.events
+              if isinstance(e, binfmt.State)]
+    assert states == [(0, True), (2, True), (4, False)]
+
+
+def test_release_with_wait_is_not_warned():
+    c = compile_source("proc p\npress A 2\nwait 2\npress A 2\nwait 10\nend\n")
+    assert not any("離す" in w.msg for w in c.warnings), \
+        [w.msg for w in c.warnings]
