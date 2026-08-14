@@ -70,7 +70,16 @@ pademu_err_t pademu_decode(const uint8_t *data, size_t len, pademu_proc_t *out) 
     uint32_t total = le32(data + 42);
     uint32_t crc = le32(data + 46);
     size_t rec_len = len - PADEMU_HEADER_SIZE;
-    if (rec_len != (size_t)count * PADEMU_RECORD_SIZE) return PADEMU_ERR_LENGTH;
+    // 割り算で照合する。`count * 32` と掛けると、実機の size_t は 32bit なので
+    // count が 2^27 以上で積が回り込む。0x08000000 なら積はちょうど 0 になり、
+    // レコード部が空(len = 50)のデータが検査を通り抜けて、直後のループが
+    // 1億3千万回ぶん確保外を読む。crc はヘッダだけが対象なので合わせられる。
+    // PC 側(binfmt.py)は多倍長整数なので同じ入力を正しく弾く = 両実装の
+    // 振る舞いが分かれる。ホスト検査は 64bit で走るため、この形でしか防げない
+    if (rec_len % PADEMU_RECORD_SIZE != 0
+        || count != rec_len / PADEMU_RECORD_SIZE) {
+        return PADEMU_ERR_LENGTH;
+    }
     if (crc32_header_and_recs(data, rec_len) != crc) return PADEMU_ERR_CRC;
 
     const uint8_t *recs = data + PADEMU_HEADER_SIZE;

@@ -142,6 +142,35 @@ def test_c_rejects_corruption(host_exe, tmp_path):
     assert "ERR decode 5" in res.stdout  # PADEMU_ERR_CRC
 
 
+def test_c_rejects_overflowing_event_count(host_exe, tmp_path):
+    """イベント数が桁あふれを起こす値でも、長さ検査が弾くこと。
+
+    実機の size_t は 32bit なので、`count * 32` と掛けると count が 2^27 で
+    積が回り込んで 0 になる。レコード部が空(50B ちょうど)のデータが検査を
+    通り抜け、直後のループが1億3千万回ぶん確保外を読んでいた。crc の対象は
+    ヘッダだけになるので、値も合わせられる。
+
+    この検査自体はホスト(64bit)で走るので、掛け算のままでも通ってしまう
+    ——桁あふれを再現できない。**割り算で照合する形に保つ**ための錠として
+    置く(掛け算に戻すと実機だけが壊れ、ここでは気づけない)。
+    """
+    import struct
+    import zlib
+    head = struct.pack("<4sH32sII", b"PDT0", binfmt.SCHEMA_VERSION,
+                       b"x".ljust(32, b"\x00"), 0x08000000, 10)
+    blob = head + struct.pack("<I", zlib.crc32(head))
+    assert len(blob) == 50
+    p = tmp_path / "overflow.bin"
+    p.write_bytes(blob)
+    res = subprocess.run([str(host_exe), str(p), "1", "1000"],
+                         capture_output=True, text=True)
+    assert res.returncode == 3
+    assert "ERR decode 4" in res.stdout   # PADEMU_ERR_LENGTH
+    # PC 側は多倍長なので元から弾く(両実装が同じ判定であることの確認)
+    with pytest.raises(binfmt.DecodeError):
+        binfmt.decode(blob)
+
+
 def test_c_rejects_zero_loop_count(host_exe, tmp_path):
     """くり返し回数 0 のバイナリを、装置側も実行前に弾くこと。
 

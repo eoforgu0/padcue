@@ -19,6 +19,11 @@ from .proto import Message
 
 FW_VERSION = "0.3.0-mock"
 
+# 有線で正常に初期化を終えた装置の到達段階。ビット2(0x80 0x03 ボーレート指令)
+# だけは有線では届かないので立たない。実機の実測値と同じ 0x7fb を返す
+# (以前は 0x3ff を返していたが、これは有線では起こり得ない値だった)
+BREADCRUMB_OK = 0x7FB
+
 
 @dataclass
 class _Proc:
@@ -345,7 +350,7 @@ class MockDevice:
                 "partition": "ota_0", "reset_reason": "POWERON",
                 "rolled_back": False, "state": self._state,
                 "frame_period_ns": self.frame_period_ns,
-                "usb_mounted": self.usb_mounted, "breadcrumb": 0x3FF,
+                "usb_mounted": self.usb_mounted, "breadcrumb": BREADCRUMB_OK,
                 "imu_enabled": True,
             })
         if t == proto.T_PUT:
@@ -569,7 +574,7 @@ class MockDevice:
                     "deliver_late": 0, "deliver_max_us": 0,
                     "failed_replies": 0, "dropped_inputs": 0, "bad_reports": 0,
                     "ep_busy": 0, "log_dropped": 0,
-                    "usb_mounted": self.usb_mounted, "breadcrumb": 0x3FF,
+                    "usb_mounted": self.usb_mounted, "breadcrumb": BREADCRUMB_OK,
                     "imu_enabled": True,
                     # ペアリング・入力モード・手動操作の可観測化(実機と同形)。
                     # 模擬は「既知本体の記録手渡し(0x04)を 1 回受けて登録済み」
