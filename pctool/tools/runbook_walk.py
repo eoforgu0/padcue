@@ -22,7 +22,6 @@ from padcue import gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "runbook_walk")
 NOTES = []
 
 
@@ -67,9 +66,12 @@ def open_dev_row(page, name="1P"):
 
 
 def main():
+    # 出力先は必ず引数で受け取る。既定値を置くと、引数なしで
+    # 起動できてしまう(この道具は模擬デバイスと操作画面を立ち上げる)
     if len(sys.argv) < 2:
         print(__doc__.strip())
         return 2
+    OUT = Path(sys.argv[1])
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
