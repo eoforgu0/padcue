@@ -126,8 +126,12 @@ def test_gui_serves_page_and_state(guiserver):
     from tests.conftest import page_assets
     with urllib.request.urlopen(guiserver + "/", timeout=5) as r:
         html = r.read().decode("utf-8")
+    from padcue.gui import _SCRIPTS
     assert "padcue" in html                  # 画面の題(index.html)
-    assert "app.css" in html and "app.js" in html   # 資産を読み込んでいる
+    # 資産を全部読み込んでいること(1本でも抜けると画面が動かない)
+    assert "app.css" in html
+    for name in _SCRIPTS:
+        assert name in html, f"index.html が {name} を読み込んでいない"
     assert "タイムライン" in page_assets(guiserver)
 
     st = http_get(guiserver + "/api/state")

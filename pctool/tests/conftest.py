@@ -27,8 +27,10 @@ def page_assets(base: str) -> str:
     ここを通す(どのファイルにあるかまで問うなら web_asset を直接読む)。
     """
     import urllib.request
+
+    from padcue.gui import _SCRIPTS
     parts = []
-    for path in ("/", "/app.css", "/app.js"):
+    for path in ("/", "/app.css", *(f"/{s}" for s in _SCRIPTS)):
         with urllib.request.urlopen(base + path, timeout=5) as r:
             parts.append(r.read().decode("utf-8"))
     return "\n".join(parts)

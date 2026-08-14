@@ -196,7 +196,7 @@ def test_page_has_no_duplicate_ids(server):
 
 def test_page_guards_unsaved_edits(server):
     from padcue.gui import web_asset
-    js = web_asset("app.js")
-    assert "confirmDiscard" in js and "beforeunload" in js
+    shell = web_asset("shell.js")
+    assert "confirmDiscard" in shell and "beforeunload" in shell
     # キーボード操作でも位置が分かる(見た目なので CSS 側)
     assert "focus-visible" in web_asset("app.css")

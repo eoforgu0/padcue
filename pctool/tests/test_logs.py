@@ -127,7 +127,7 @@ def test_log_kinds_are_known_to_the_gui():
     import re
 
     from padcue.gui import web_asset
-    js = web_asset("app.js")
+    js = web_asset("lists.js")
     m = re.search(r"const LOG_JA = \{(.*?)\n\};", js, re.S)
     assert m, "LOG_JA が見つかりません"
     ja = set(re.findall(r"^\s{2}([A-Z_]+):", m.group(1), re.M))

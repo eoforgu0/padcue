@@ -30,13 +30,19 @@ from .record import Recorder
 
 _WEB = Path(__file__).resolve().parent / "web"
 
-# 配信するのはこの3つだけ。要求されたパスを組み立てずに辞書で引くので、
-# 外から任意のファイルを読み出せる経路が構造的に存在しない
+# 画面の資産。読み込む順に依存があるので、この並びが index.html の
+# script タグの順と一致していること
+_SCRIPTS = ["core.js", "shell.js", "lists.js", "devices.js",
+            "run.js", "flow.js", "part.js", "manual.js"]
+
+# 配信するのはここに挙げたものだけ。要求されたパスを組み立てずに辞書で
+# 引くので、外から任意のファイルを読み出せる経路が構造的に存在しない
 _STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/app.css": ("app.css", "text/css; charset=utf-8"),
-    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    **{f"/{name}": (name, "text/javascript; charset=utf-8")
+       for name in _SCRIPTS},
 }
 
 def web_asset(name: str) -> str:
