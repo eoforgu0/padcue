@@ -716,6 +716,9 @@ def cmd_discover(args) -> int:
 
 
 def cmd_mock(args) -> int:
+    # 模擬デバイスと操作画面は、その小道具(HTTP サーバ・ブラウザ起動・
+    # 記録)を芋づるで連れてくる。使う命令のときだけ読み込んで、
+    # `padcue status` のような短い命令の立ち上がりを鈍らせない
     from .discover import PORT as DISCOVER_PORT
     from .mockdevice import MockDevice
     d = MockDevice(host="127.0.0.1", port=args.port, speed=args.speed,
@@ -752,7 +755,7 @@ def cmd_mock(args) -> int:
 
 
 def cmd_gui(args) -> int:
-    from .gui import serve
+    from .gui import serve  # cmd_mock と同じ理由で、ここで読み込む
     return serve(_project(args), args.host or "", args.port, args.open)
 
 

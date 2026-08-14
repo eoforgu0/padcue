@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import threading
 import time
@@ -17,6 +19,7 @@ from pathlib import Path
 from . import binfmt
 from .discover import HOSTNAME
 from .flowfmt import FlowError, compile_flow
+from .matrix import load_part
 from .proto import DEFAULT_PORT
 
 # 名前はそのままファイル名になる。フォルダを跨げる文字を混ぜられると
@@ -514,8 +517,6 @@ class Project:
 
     def load_part_table(self, name: str) -> dict:
         """CSV を編集しやすい形(ヘッダ+行の二次元配列)で返す。"""
-        import csv
-        import io
         text = self.part_path(name).read_text(encoding="utf-8").lstrip("﻿")
         rows = list(csv.reader(io.StringIO(text)))
         if not rows:
@@ -532,10 +533,6 @@ class Project:
 
     def save_part_table(self, name: str, header: list, rows: list) -> None:
         """編集結果を CSV へ書く。書く前に必ず検証する。"""
-        import csv
-        import io
-
-        from .matrix import load_part
         header = [str(h).strip() for h in header if str(h).strip()]
         if not header:
             raise ValueError("列がありません")

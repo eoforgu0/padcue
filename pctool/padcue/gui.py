@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import threading
 import time
 import traceback
@@ -896,7 +897,6 @@ def _why(e: Exception, host: str) -> str:
     if isinstance(e, DeviceError):
         return f"{e.message}"
     text = str(e)
-    import socket
     if isinstance(e, socket.gaierror) or "getaddrinfo" in text:
         return (f"「{host}」の名前を引けません。"
                 "マイコンの電源が入っているか、PC と同じ WiFi につながっているかを"
