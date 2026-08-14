@@ -34,14 +34,14 @@ Excel を前提とした機能は置かない。CSV/JSON は汎用形式とし�
     {"type": "press", "buttons": ["A"], "frames": 5},
     {"type": "hold", "buttons": ["ZL"]},
     {"type": "release", "buttons": ["ZL"]},
-    {"type": "loop", "count": 3, "body": ["…node…"]},
+    {"type": "loop", "count": 3, "body": ["...node..."]},
     {"type": "part", "ref": "コンボ"},
     {"type": "call", "ref": "共通_メニューを開く"},
-    {"type": "counter_branch", "arms": [["…奇数周…"], ["…偶数周…"]]},
+    {"type": "counter_branch", "arms": [["...奇数周..."], ["...偶数周..."]]},
     {"type": "wait_branch",
      "timeout_frames": 3600,
      "on_timeout": 0,
-     "arms": {"成功": ["…node…"], "失敗": ["…node…"]}}
+     "arms": {"成功": ["...node..."], "失敗": ["...node..."]}}
   ]
 }
 ```
