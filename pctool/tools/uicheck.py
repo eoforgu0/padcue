@@ -170,6 +170,61 @@ def lane(page):
     return page.locator("#lanes .lane").first
 
 
+def lane_at(page, i: int):
+    """2台以上のときの i 番目のレーン(0 始まり)。"""
+    return page.locator("#lanes .lane").nth(i)
+
+
+def lane_chip(page, i: int) -> str:
+    """i 番目のレーンの状態チップ。
+
+    チップは状態(.chip)とバッジ(.chip.runchip)の2つがあり得るので、
+    バッジを除いた方(状態=結論だけ。原則 §1)を読む。
+    """
+    return lane_at(page, i).locator(".chip:not(.runchip)").first.inner_text()
+
+
+def wait_lane_state(page, i: int, want: str, timeout_ms: int = 12000) -> None:
+    """i 番目のレーンが目的の状態になるまで待つ。"""
+    page.wait_for_function(
+        "([i, want]) => {"
+        "  const ln = document.querySelectorAll('#lanes .lane')[i];"
+        "  const ch = ln && ln.querySelector('.chip:not(.runchip)');"
+        "  return ch && ch.textContent === want; }",
+        arg=[i, want], timeout=timeout_ms)
+
+
+def set_lane_proc(page, i: int, name: str) -> None:
+    """i 番目のレーンの手順を選ぶ(選択肢に出るまで待ってから)。"""
+    page.wait_for_function(
+        f"() => document.querySelectorAll('#lanes .lane .lproc')[{i}]"
+        f" && [...document.querySelectorAll('#lanes .lane .lproc')[{i}]"
+        f".options].some(o => o.value === {name!r})", timeout=8000)
+    lane_at(page, i).locator(".lproc").select_option(name)
+
+
+def wait_lanes_idle(page, timeout_ms: int = 30000) -> None:
+    """2台とも「実行していない・待っていない・異常でない」まで待つ。"""
+    page.wait_for_function(
+        "() => (state.devices || []).slice(0, 2).every("
+        "  d => !d.error && !d.running && !d.awaiting)",
+        timeout=timeout_ms)
+
+
+def form_row(page, name: str):
+    """プリセット一覧の行。"""
+    return page.locator("#formlist .devrow", has_text=name).first
+
+
+def open_form(page, name: str):
+    """プリセットの中身を開く(既に開いていれば何もしない)。"""
+    row = form_row(page, name)
+    if "open" not in (row.get_attribute("class") or ""):
+        row.locator(".devtoggle").click()
+        page.wait_for_timeout(250)
+    return row
+
+
 def wait_state(page, want: str, timeout_ms: int = 8000) -> None:
     # チップは状態チップ(.chip)とバッジ(.chip.runchip)の2つがあり得るので、
     # バッジを除いた方(結論だけ。原則 §1)を読む
@@ -297,9 +352,15 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     """
     run_home(c, page)
     run_devices(c, page, dev)
-    run_procedures(c, page, proj, dev, prompt_value)
-    run_flow_editor(c, page, proj, prompt_value)
-    run_part_editor(c, page, proj, prompt_value, dialogs)
+    run_procedures(c, page)
+    run_look_and_alerts(c, page)
+    run_stop_and_partial(c, page)
+    run_manual_and_branch(c, page, proj, dev, prompt_value)
+    run_flow_editor(c, page, proj)
+    run_flow_list(c, page, proj, prompt_value)
+    run_flow_branch_and_folders(c, page, proj, prompt_value)
+    run_part_editor(c, page, proj)
+    run_part_keys_and_files(c, page, proj, prompt_value, dialogs)
     run_disconnected(c, page, dev)
 
 
@@ -535,9 +596,8 @@ def run_devices(c: Checker, page, dev: MockDevice):
     # ---- 手順の実行 ----
 
 
-def run_procedures(c: Checker, page, proj: Project, dev: MockDevice,
-                   prompt_value: list):
-    """手順の転送・実行・停止・部分実行・待機分岐。"""
+def run_procedures(c: Checker, page):
+    """手順の選択・転送・実行・停止・周回・ログ。"""
     print("[手順の実行]", flush=True)
 
     def t_select_switches_timeline():
@@ -697,6 +757,9 @@ def run_procedures(c: Checker, page, proj: Project, dev: MockDevice,
             "消去後もログが残っている"
     c.check("ログが溜まり、日時・色・消去が効く", t_logs_panel)
 
+
+def run_look_and_alerts(c: Checker, page):
+    """配色と知らせ(選択の保持・通知の場面・キー・タブの印)。"""
     def t_theme_switch():
         """右上の ⚙ から配色を選べ、再読込しても残ること。"""
         sel_before = lane(page).locator(".lproc").input_value()
@@ -896,6 +959,9 @@ def run_procedures(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(150)
     c.check("今すぐ止めるでは通知しない(新設)", t_notify_silent_on_manual_stop)
 
+
+def run_stop_and_partial(c: Checker, page):
+    """止める予約と部分実行(今の周で止める・開始ラベル・前提条件)。"""
     def t_stopg_armed():
         """「今の周で止める」を押すと、予約中だと分かる見た目になること。"""
         ln = lane(page)
@@ -1076,6 +1142,10 @@ def run_procedures(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("部分実行はすぐ動き出す(前半ぶん待たされない)",
             t_resume_starts_immediately)
 
+
+def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
+                          prompt_value: list):
+    """手動操作と記録、待機分岐・異常・別の手順の呼び出し。"""
     def t_manual():
         page.click("#manual")
         page.wait_for_timeout(700)
@@ -1272,11 +1342,13 @@ def run_procedures(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(900)
     c.check("別の手順を呼ぶブロックが使える", t_call_block)
 
+
+
     # ================= 手順を編集 =================
 
 
-def run_flow_editor(c: Checker, page, proj: Project, prompt_value: list):
-    """フロー編集(ブロックの追加・並べ替え・取り消し・保存)。"""
+def run_flow_editor(c: Checker, page, proj: Project):
+    """フロー編集(読み・値の変更・取り消し・追加・並べ替え・ドラッグ)。"""
     print("[手順を編集]", flush=True)
 
     def t_open_editor():
@@ -1527,6 +1599,9 @@ def run_flow_editor(c: Checker, page, proj: Project, prompt_value: list):
             page.locator("#flowlist .proc b").all_inner_texts()
     c.check("一覧の並べ替えが保存され両画面で共有される", t_list_reorder_shared)
 
+
+def run_flow_list(c: Checker, page, proj: Project, prompt_value: list):
+    """手順の一覧と、ブロックの細部・保存時の警告。"""
     def t_proc_row_frames():
         """一覧の各手順に、名前の右で所要フレーム数が読めること。
 
@@ -1738,6 +1813,9 @@ def run_flow_editor(c: Checker, page, proj: Project, prompt_value: list):
         assert "選択肢の名前" in props, props
     c.check("待機分岐が選択肢ごとに表示・編集できる", t_wait_branch_editor)
 
+
+def run_flow_branch_and_folders(c: Checker, page, proj: Project, prompt_value: list):
+    """分岐ブロック・手順の新規と削除・表示の切り替え・フォルダ。"""
     def t_edit_inside_wait_branch_arm():
         page.locator("#flowbody .arm .blk").first.click()
         page.wait_for_timeout(350)
@@ -1960,12 +2038,13 @@ def run_flow_editor(c: Checker, page, proj: Project, prompt_value: list):
     c.check("一覧のドラッグで開いている手順が切り替わらない",
             t_proc_drag_keeps_open_flow)
 
+
+
     # ================= 部品を編集 =================
 
 
-def run_part_editor(c: Checker, page, proj: Project, prompt_value: list,
-                    dialogs: list):
-    """部品編集(表の入力・複製・行の操作・保存)。"""
+def run_part_editor(c: Checker, page, proj: Project):
+    """部品編集(列・ON/OFF・保存・畳み・数値の欄・行の操作)。"""
     print("[部品を編集]", flush=True)
 
     def t_open_part():
@@ -2191,6 +2270,9 @@ def run_part_editor(c: Checker, page, proj: Project, prompt_value: list,
     c.check("rep を入れるとフレーム範囲が出る", t_rep_changes_frame_numbers)
 
 
+def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
+                             dialogs: list):
+    """未保存の確認・縦コピー・キー操作・部品の新規と削除。"""
     def t_part_unsaved_guard():
         page.locator("#parttable td.b .tg").first.click()
         page.wait_for_timeout(250)
@@ -2555,6 +2637,8 @@ def run_part_editor(c: Checker, page, proj: Project, prompt_value: list,
         prompt_value[0] = "自動テスト"
     c.check("フォルダを跨ぐ名前は弾かれる", t_bad_part_name)
 
+
+
     # ================= 未接続 =================
 
 
@@ -2626,22 +2710,6 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     m1.start()
     d2.start()
 
-    def lane(i: int):
-        return page.locator("#lanes .lane").nth(i)
-
-    def lane_chip(i: int) -> str:
-        # チップは状態チップ(.chip)とバッジ(.chip.runchip)の2つがあり得るので、
-        # バッジを除いた方(状態=結論だけ。原則 §1)を読む
-        return lane(i).locator(".chip:not(.runchip)").first.inner_text()
-
-    def wait_lane_state(i: int, want: str, timeout_ms: int = 12000):
-        page.wait_for_function(
-            "([i, want]) => {"
-            "  const ln = document.querySelectorAll('#lanes .lane')[i];"
-            "  const ch = ln && ln.querySelector('.chip:not(.runchip)');"
-            "  return ch && ch.textContent === want; }",
-            arg=[i, want], timeout=timeout_ms)
-
     def t_register_switches_to_lanes():
         page.click(".tab[data-view='home']")
         cfg = proj.load_config()
@@ -2664,98 +2732,99 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             t_register_switches_to_lanes)
 
     def t_lane_layout():
-        h1 = lane(0).locator("h2").inner_text()
-        h2 = lane(1).locator("h2").inner_text()
+        h1 = lane_at(page, 0).locator("h2").inner_text()
+        h2 = lane_at(page, 1).locator("h2").inner_text()
         assert "1P" in h1 and "2P" in h2, (h1, h2)
         # ボタンの文言に装置名は付かない(レーンの見出しに出ているため)
         for i in (0, 1):
-            btns = lane(i).locator("button").all_inner_texts()
+            btns = lane_at(page, i).locator("button").all_inner_texts()
             assert any("1回実行" in b for b in btns), btns
             assert any("今の周で止める" in b for b in btns), btns
             assert any("今すぐ止める" in b for b in btns), btns
-            assert lane(i).locator(".lproc").count() == 1, "手順の選択が無い"
-            assert lane(i).locator(".lloops").count() == 1, "周回の欄が無い"
+            assert lane_at(page, i).locator(".lproc").count() == 1, "手順の選択が無い"
+            assert lane_at(page, i).locator(".lloops").count() == 1, "周回の欄が無い"
             # 小見出しは「タイムライン」だけ。レーン=実行の場所なので、
             # 「実行」の見出しは面積を食うだけだった(2026-08-08 指摘)
-            subhs = lane(i).locator(".subh").all_inner_texts()
+            subhs = lane_at(page, i).locator(".subh").all_inner_texts()
             assert subhs == ["タイムライン"], subhs
     c.check("レーンは装置名入りのボタンと実行一式を持つ", t_lane_layout)
 
     def t_lane_procs_independent():
-        lane(0).locator(".lproc").select_option("素材周回")
-        lane(1).locator(".lproc").select_option("周回で変える")
+        lane_at(page, 0).locator(".lproc").select_option("素材周回")
+        lane_at(page, 1).locator(".lproc").select_option("周回で変える")
         page.wait_for_timeout(1500)
-        assert lane(0).locator(".lproc").input_value() == "素材周回"
-        assert lane(1).locator(".lproc").input_value() == "周回で変える"
+        assert lane_at(page, 0).locator(".lproc").input_value() == "素材周回"
+        assert lane_at(page, 1).locator(".lproc").input_value() == "周回で変える"
         # 見出しは「タイムライン」だけ(手順名はプルダウンで分かる)なので、
         # 図の追従は図そのものの中身で確かめる(ラベルの無い手順もあるため
         # .marks でなく .tl 全体を比べる)
-        tls = [lane(i).locator(".tl").inner_text() for i in (0, 1)]
+        tls = [lane_at(page, i).locator(".tl").inner_text() for i in (0, 1)]
         assert "移動" in tls[0], tls
         assert tls[0] != tls[1], "レーンの図が選んだ手順に追従していない"
     c.check("レーンごとに別の手順を選べて図も追従する", t_lane_procs_independent)
 
     def t_run_2p_only():
-        lane(1).locator(".lloops").fill("50")
-        lane(1).locator("button", has_text="周回実行").click()
-        wait_lane_state(1, "実行中")
-        assert lane_chip(0) == "待機中", "2P の実行が 1P に波及した"
-        assert lane(0).locator("button", has_text="1回実行").is_enabled(), \
+        lane_at(page, 1).locator(".lloops").fill("50")
+        lane_at(page, 1).locator("button", has_text="周回実行").click()
+        wait_lane_state(page, 1, "実行中")
+        assert lane_chip(page, 0) == "待機中", "2P の実行が 1P に波及した"
+        assert lane_at(page, 0).locator("button", has_text="1回実行").is_enabled(), \
             "2P 実行中に 1P の実行が押せない(非干渉が壊れている)"
         page.wait_for_timeout(1500)
-        tp = lane(1).locator(".tlprog").inner_text()
+        tp = lane_at(page, 1).locator(".tlprog").inner_text()
         assert "周" in tp and "フレーム" in tp, f"2P の進捗が出ない: {tp!r}"
-        assert lane(0).locator(".tlprog").inner_text() == "", \
+        assert lane_at(page, 0).locator(".tlprog").inner_text() == "", \
             "1P に進捗が出ている"
-        assert lane(1).locator(".play").is_visible(), "2P の再生位置が出ない"
-        assert not lane(0).locator(".play").is_visible(), "1P に再生位置が出ている"
-        assert lane(1).locator(".lproc").is_disabled(), \
+        assert lane_at(page, 1).locator(".play").is_visible(), "2P の再生位置が出ない"
+        assert not lane_at(page, 0).locator(".play").is_visible(), \
+            "1P に再生位置が出ている"
+        assert lane_at(page, 1).locator(".lproc").is_disabled(), \
             "実行中に手順を変えられる"
     c.check("2P だけ周回実行 → 進捗・再生位置・抑止が 2P だけに出る",
             t_run_2p_only)
 
     def t_both_run_independently():
-        lane(0).locator(".lloops").fill("50")
-        lane(0).locator("button", has_text="周回実行").click()
-        wait_lane_state(0, "実行中")
-        assert lane_chip(1) == "実行中", "1P の開始で 2P が止まった"
-        tps = [lane(i).locator(".tlprog").inner_text() for i in (0, 1)]
+        lane_at(page, 0).locator(".lloops").fill("50")
+        lane_at(page, 0).locator("button", has_text="周回実行").click()
+        wait_lane_state(page, 0, "実行中")
+        assert lane_chip(page, 1) == "実行中", "1P の開始で 2P が止まった"
+        tps = [lane_at(page, i).locator(".tlprog").inner_text() for i in (0, 1)]
         assert all("周" in x for x in tps), tps
     c.check("2台を同時に別の手順で走らせられる", t_both_run_independently)
 
     def t_stopg_armed_per_lane():
-        lane(1).locator("button", has_text="今の周で止める").click()
+        lane_at(page, 1).locator("button", has_text="今の周で止める").click()
         page.wait_for_timeout(600)
-        b2 = lane(1).locator("button", has_text="止める予約を取り消す")
+        b2 = lane_at(page, 1).locator("button", has_text="止める予約を取り消す")
         assert b2.count() == 1, "2P の停止予約が armed 表示にならない"
-        assert lane(0).locator("button", has_text="止める予約を取り消す") \
+        assert lane_at(page, 0).locator("button", has_text="止める予約を取り消す") \
             .count() == 0, "1P まで予約表示になった"
         b2.click()                       # 取り消し
         page.wait_for_timeout(900)
-        assert lane(1).locator("button", has_text="今の周で止める") \
+        assert lane_at(page, 1).locator("button", has_text="今の周で止める") \
             .count() == 1, "予約の取り消しが効かない"
-        assert lane_chip(1) == "実行中", "取り消したのに止まった"
+        assert lane_chip(page, 1) == "実行中", "取り消したのに止まった"
     c.check("停止予約と取り消しはそのレーンだけに効く", t_stopg_armed_per_lane)
 
     def t_stop_2p_keeps_1p():
-        lane(1).locator("button", has_text="今すぐ止める").click()
-        wait_lane_state(1, "待機中")
-        assert lane_chip(0) == "実行中", "2P を止めたら 1P まで止まった"
-        lane(0).locator("button", has_text="今すぐ止める").click()
-        wait_lane_state(0, "待機中")
+        lane_at(page, 1).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(page, 1, "待機中")
+        assert lane_chip(page, 0) == "実行中", "2P を止めたら 1P まで止まった"
+        lane_at(page, 0).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(page, 0, "待機中")
     c.check("今すぐ止めるは押したレーンだけ(相方は継続)", t_stop_2p_keeps_1p)
 
     def t_wait_branch_in_lane():
-        lane(1).locator(".lproc").select_option("選んで進む")
-        lane(1).locator(".lloops").fill("1")
-        lane(1).locator("button", has_text="周回実行").click()
-        wait_lane_state(1, "選択待ち")
-        assert lane_chip(0) == "待機中", "2P の選択待ちが 1P に波及"
-        btns = lane(1).locator(".lawait button").all_inner_texts()
+        lane_at(page, 1).locator(".lproc").select_option("選んで進む")
+        lane_at(page, 1).locator(".lloops").fill("1")
+        lane_at(page, 1).locator("button", has_text="周回実行").click()
+        wait_lane_state(page, 1, "選択待ち")
+        assert lane_chip(page, 0) == "待機中", "2P の選択待ちが 1P に波及"
+        btns = lane_at(page, 1).locator(".lawait button").all_inner_texts()
         assert btns == ["出た(2P へ)", "出ない(2P へ)"], btns
-        lane(1).locator(".lawait button").first.click()
-        wait_lane_state(1, "実行中")
-        wait_lane_state(1, "待機中")     # 1周で完走する
+        lane_at(page, 1).locator(".lawait button").first.click()
+        wait_lane_state(page, 1, "実行中")
+        wait_lane_state(page, 1, "待機中")     # 1周で完走する
     c.check("待機分岐はレーン内で選ぶ(選択肢ボタンに宛先の装置名)",
             t_wait_branch_in_lane)
 
@@ -2818,7 +2887,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         古い開始ラベルのままになる(2026-08-06 に実際に起きたバグ)。タブへ
         戻ったこと自体で読み直す作りになっているかを確かめる。
         """
-        assert lane(0).locator(".lproc").input_value() == "素材周回", \
+        assert lane_at(page, 0).locator(".lproc").input_value() == "素材周回", \
             "検証の前提が崩れた(1P の選択がずれている)"
         page.click(".tab[data-view='flow']")
         page.wait_for_timeout(400)
@@ -2839,7 +2908,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         page.wait_for_function(
             "() => document.querySelectorAll('#lanes .lane').length === 2",
             timeout=8000)
-        assert lane(0).locator(".lproc").input_value() == "素材周回", \
+        assert lane_at(page, 0).locator(".lproc").input_value() == "素材周回", \
             "戻ったら 1P の手順選択が変わった"
         page.wait_for_function(
             "() => { const ln = document.querySelectorAll('#lanes .lane')[0];"
@@ -2871,7 +2940,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             "      .textContent.includes('サブ')", timeout=8000)
         # ボタンの文言に装置名は付かない(見出しに出る)ので、title 属性で
         # 旧名が残っていないことを確認する
-        title = lane(1).locator("button", has_text="今すぐ止める") \
+        title = lane_at(page, 1).locator("button", has_text="今すぐ止める") \
             .get_attribute("title")
         assert "サブ" in (title or ""), \
             f"レーンのボタンの title が旧名のまま: {title!r}"
@@ -2955,15 +3024,15 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
     def t_unreachable_lane_isolated():
         d2.stop()
-        wait_lane_state(1, "未接続", timeout_ms=15000)
+        wait_lane_state(page, 1, "未接続", timeout_ms=15000)
         # 対処(接続先の確認・探す)は装置パネル側にあるので、レーンには
         # 結論(チップ「未接続」)だけが出る(原則 §1)。装置行が自動で
         # 開いて赤くなる導線は t_disconnected が見ている
-        assert lane_chip(1) == "未接続", "レーンのチップが未接続にならない"
-        assert lane(1).locator("button", has_text="1回実行") \
+        assert lane_chip(page, 1) == "未接続", "レーンのチップが未接続にならない"
+        assert lane_at(page, 1).locator("button", has_text="1回実行") \
             .is_disabled(), "未接続なのに実行が押せる"
-        assert lane_chip(0) == "待機中", "2P の未接続が 1P に波及"
-        assert lane(0).locator("button", has_text="1回実行") \
+        assert lane_chip(page, 0) == "待機中", "2P の未接続が 1P に波及"
+        assert lane_at(page, 0).locator("button", has_text="1回実行") \
             .is_enabled(), "2P 未接続で 1P の操作まで塞がった"
     c.check("未接続のレーンだけが赤くなり、相方は無傷",
             t_unreachable_lane_isolated)
@@ -2979,7 +3048,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             timeout=10000)
         assert not page.locator("#manualdevwrap").is_visible(), \
             "1台に戻ったのに対象選択が残る"
-        wait_lane_state(0, "待機中")
+        wait_lane_state(page, 0, "待機中")
     c.check("2台目を外すとレーン1本の画面に戻る", t_remove_returns_to_solo)
 
     m1.stop()
@@ -3007,9 +3076,8 @@ def run_coupling(c: Checker, page, proj: Project,
             {"type": "wait", "frames": 30},
         ],
     }
-    import json as _json
     (proj.root / "procedures" / "選んで進む(遅).flow.json").write_text(
-        _json.dumps(slow, ensure_ascii=False), encoding="utf-8")
+        json.dumps(slow, ensure_ascii=False), encoding="utf-8")
     cfg = proj.load_config()
     cfg["devices"] = [{"id": "", "name": "1P",
                        "host": "127.0.0.1", "port": c1.port},
@@ -3020,30 +3088,6 @@ def run_coupling(c: Checker, page, proj: Project,
     page.wait_for_function(
         "() => document.querySelectorAll('#lanes .lane').length === 2",
         timeout=10000)
-
-    def lane(i: int):
-        return page.locator("#lanes .lane").nth(i)
-
-    def wait_lane_state(i: int, want: str, timeout_ms: int = 15000):
-        page.wait_for_function(
-            "([i, want]) => {"
-            "  const ln = document.querySelectorAll('#lanes .lane')[i];"
-            "  const ch = ln && ln.querySelector('.chip:not(.runchip)');"
-            "  return ch && ch.textContent === want; }",
-            arg=[i, want], timeout=timeout_ms)
-
-    def set_lane_proc(i: int, name: str):
-        page.wait_for_function(
-            f"() => document.querySelectorAll('#lanes .lane .lproc')[{i}]"
-            f" && [...document.querySelectorAll('#lanes .lane .lproc')[{i}]"
-            f".options].some(o => o.value === {name!r})", timeout=8000)
-        lane(i).locator(".lproc").select_option(name)
-
-    def wait_idle(timeout_ms: int = 30000):
-        page.wait_for_function(
-            "() => (state.devices || []).slice(0, 2).every("
-            "  d => !d.error && !d.running && !d.awaiting)",
-            timeout=timeout_ms)
 
     def t_cta_only_before_link():
         # 上部バーは2台以上なら常にある。連結していないときに残るのは
@@ -3121,9 +3165,9 @@ def run_coupling(c: Checker, page, proj: Project,
         # 片方が単独実行中に F10(= ⟳ 周回実行 と同じ、まとめて開始)を押すと
         # 理由付きで断られ、走っている側は無傷であること(coupler.py の
         # 事前検査が既に持つ契約を、実測で確定させる)
-        set_lane_proc(0, "選んで進む")
-        lane(0).locator(".lloops").fill("0")
-        lane(0).locator("button", has_text="周回実行").click()
+        set_lane_proc(page, 0, "選んで進む")
+        lane_at(page, 0).locator(".lloops").fill("0")
+        lane_at(page, 0).locator("button", has_text="周回実行").click()
         page.wait_for_function(
             "() => state.devices[0].running || state.devices[0].awaiting",
             timeout=10000)
@@ -3143,14 +3187,14 @@ def run_coupling(c: Checker, page, proj: Project,
         assert not page.evaluate(
             "state.devices[1].running || state.devices[1].awaiting"), \
             "断られたはずなのに2Pが動き出した"
-        lane(0).locator("button", has_text="今すぐ止める").click()
-        wait_lane_state(0, "待機中")
+        lane_at(page, 0).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(page, 0, "待機中")
     c.check("単独実行中の F10(まとめて開始)は理由付きで断られ、走っている側は無傷",
             t_together_refused_when_solo_busy)
 
     def t_pair_run_and_auto_join():
-        set_lane_proc(0, "選んで進む")
-        set_lane_proc(1, "選んで進む")
+        set_lane_proc(page, 0, "選んで進む")
+        set_lane_proc(page, 1, "選んで進む")
         page.wait_for_timeout(300)
         if not page.is_checked("#cauto"):
             page.click("#cauto")
@@ -3159,7 +3203,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
             "  d => d.running || d.awaiting)", timeout=10000)
-        badges = [lane(i).locator(".runchip").inner_text() for i in (0, 1)]
+        badges = [lane_at(page, i).locator(".runchip").inner_text() for i in (0, 1)]
         assert all("連結して開始" in b for b in badges), badges
         # 成功文は出ない(#chint の「前回の開始ズレ」が実測で更新される)
         assert page.locator("#cactmsg").inner_text().strip() == "", \
@@ -3177,14 +3221,14 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.getElementById('ceta')"
             ".textContent.includes('終了予定')", timeout=8000)
         assert not any("終了予定" in t
-                       for t in lane(0).locator(".hint").all_inner_texts()), \
+                       for t in lane_at(page, 0).locator(".hint").all_inner_texts()), \
             "連結中なのにレーンにも終了予定が出ている"
-        wait_idle()          # 人が選ばなくても自動合流で完走する
+        wait_lanes_idle(page)          # 人が選ばなくても自動合流で完走する
     c.check("まとめて1回実行 → 連結バッジ・開始ズレms・終了予定・自動合流で完走",
             t_pair_run_and_auto_join)
 
     def t_wait_colors():
-        set_lane_proc(1, "選んで進む(遅)")
+        set_lane_proc(page, 1, "選んで進む(遅)")
         page.wait_for_timeout(300)
         page.click("#crun1")
         # 早い 1P が先に駐機 → 青の「相方待ち」(黄や赤ではない)。
@@ -3195,12 +3239,12 @@ def run_coupling(c: Checker, page, proj: Project,
             "  const ch = l1 && l1.querySelector('.chip:not(.runchip)');"
             "  return ch && ch.textContent === '相方待ち'; }",
             timeout=10000)
-        assert lane(0).locator(".lawait .msg.wait").count() == 0, \
+        assert lane_at(page, 0).locator(".lawait .msg.wait").count() == 0, \
             "廃止したはずの毎秒の相方待ち文が残っている"
-        assert lane(0).locator(".lawait .msg.warn").count() == 0, \
+        assert lane_at(page, 0).locator(".lawait .msg.warn").count() == 0, \
             "正常な相方待ちに黄色が使われている"
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
-        assert "だけ進める" in lane(0).locator(".soloadv").inner_text()
+        assert "だけ進める" in lane_at(page, 0).locator(".soloadv").inner_text()
         # そろったら緑「そろって進みました」
         page.wait_for_function(
             "() => {"
@@ -3209,8 +3253,8 @@ def run_coupling(c: Checker, page, proj: Project,
             "    const m = ln.querySelector('.lawait .msg.ok');"
             "    return m && m.textContent.includes('そろって進みました');"
             "  }); }", timeout=15000)
-        wait_idle()
-        set_lane_proc(1, "選んで進む")
+        wait_lanes_idle(page)
+        set_lane_proc(page, 1, "選んで進む")
         page.wait_for_timeout(300)
     c.check("相方待ちは青、そろった直後は緑(黄は使わない)", t_wait_colors)
 
@@ -3239,7 +3283,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => document.getElementById('cokmsg').textContent === ''",
             timeout=8000)
-        wait_idle()
+        wait_lanes_idle(page)
         assert not page.evaluate(
             "document.getElementById('coneshot').classList.contains('armed')"
         ), "人が選んだのにワンショットが解除されない"
@@ -3247,37 +3291,38 @@ def run_coupling(c: Checker, page, proj: Project,
             t_oneshot_manual)
 
     def t_manual_stop_not_coupled():
-        lane(0).locator(".lloops").fill("0")
-        lane(1).locator(".lloops").fill("0")
+        lane_at(page, 0).locator(".lloops").fill("0")
+        lane_at(page, 1).locator(".lloops").fill("0")
         page.click("#crun")
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
             "  d => d.running || d.awaiting)", timeout=10000)
-        lane(1).locator("button", has_text="今すぐ止める").click()
-        wait_lane_state(1, "待機中")
+        lane_at(page, 1).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(page, 1, "待機中")
         page.wait_for_timeout(3000)      # 1P は止まらず(合流もソロで進む)
         assert page.evaluate(
             "state.devices[0].running || state.devices[0].awaiting"), \
             "人為停止が連動してしまった"
         page.keyboard.press("F9")        # 全部止めるホットキー
-        wait_idle()                      # 結果はチップの変化で伝わる(成功文は無い)
+        # 結果はチップの変化で伝わる(成功文は無い)
+        wait_lanes_idle(page)
     c.check("人為停止は連動せず、F9 で全部止められる", t_manual_stop_not_coupled)
 
     def t_solo_restart_after_manual_stop_not_auto_joined():
         # 連結実行中、片方を人為停止 → その装置で単独実行を開始できること。
         # かつ単独実行が駐機に達しても、連結の自動合流が誤発火して勝手に
         # 選択肢を選ばないこと(相方=1P はまだ連結実行中のまま)
-        lane(0).locator(".lloops").fill("0")
-        lane(1).locator(".lloops").fill("0")
+        lane_at(page, 0).locator(".lloops").fill("0")
+        lane_at(page, 1).locator(".lloops").fill("0")
         page.click("#crun")
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
             "  d => d.running || d.awaiting)", timeout=10000)
-        lane(1).locator("button", has_text="今すぐ止める").click()
-        wait_lane_state(1, "待機中")
+        lane_at(page, 1).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(page, 1, "待機中")
         # 人為停止した2Pで単独実行を開始できる
-        lane(1).locator(".lloops").fill("0")
-        lane(1).locator("button", has_text="周回実行").click()
+        lane_at(page, 1).locator(".lloops").fill("0")
+        lane_at(page, 1).locator("button", has_text="周回実行").click()
         page.wait_for_function(
             "() => state.devices[1].running || state.devices[1].awaiting",
             timeout=10000)
@@ -3289,13 +3334,14 @@ def run_coupling(c: Checker, page, proj: Project,
             "単独実行のはずの2Pが勝手に選択されて進んでしまった" \
             "(連結の自動合流が誤発火)"
         page.keyboard.press("F9")        # 全部止めるホットキー
-        wait_idle()                      # 結果はチップの変化で伝わる(成功文は無い)
+        # 結果はチップの変化で伝わる(成功文は無い)
+        wait_lanes_idle(page)
     c.check("人為停止した装置は単独実行を開始でき、連結の自動合流に巻き込まれない",
             t_solo_restart_after_manual_stop_not_auto_joined)
 
     def t_linked_stop_banner():
-        lane(0).locator(".lloops").fill("5")
-        lane(1).locator(".lloops").fill("5")
+        lane_at(page, 0).locator(".lloops").fill("5")
+        lane_at(page, 1).locator(".lloops").fill("5")
         page.click("#crun")
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).every("
@@ -3315,10 +3361,10 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => state.devices[0].running || state.devices[0].awaiting",
             timeout=10000)
-        badge = lane(0).locator(".runchip").inner_text()
+        badge = lane_at(page, 0).locator(".runchip").inner_text()
         assert "単独" in badge, f"ソロ再開なのにバッジが: {badge}"
-        lane(0).locator("button", has_text="今すぐ止める").click()
-        wait_lane_state(0, "待機中")
+        lane_at(page, 0).locator("button", has_text="今すぐ止める").click()
+        wait_lane_state(page, 0, "待機中")
     c.check("異常の連動停止: 理由と再開・片方だけ続けるがその場に出る",
             t_linked_stop_banner)
 
@@ -3330,7 +3376,7 @@ def run_coupling(c: Checker, page, proj: Project,
     cfg2["devices"][1]["host"] = "127.0.0.1"
     cfg2["devices"][1]["port"] = c2b.port
     proj.save_config(cfg2)
-    wait_lane_state(1, "待機中", 20000)
+    wait_lane_state(page, 1, "待機中", 20000)
 
     def t_pc_logs_readable():
         page.wait_for_function(
@@ -3341,18 +3387,16 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "連動停止" in body, "連動停止のログが読める形で出ていない"
         assert "PC_" not in body, "生のログ種別がそのまま画面に出ている"
     c.check("連結のログが日本語で読める", t_pc_logs_readable)
+    run_formations(c, page, prompt_value, proj)
+    c1.stop()
+    c2b.stop()
 
-    def form_row(name: str):
-        return page.locator("#formlist .devrow", has_text=name).first
 
-    def open_form(name: str):
-        """プリセットの中身を開く(既に開いていれば何もしない)。"""
-        row = form_row(name)
-        if "open" not in (row.get_attribute("class") or ""):
-            row.locator(".devtoggle").click()
-            page.wait_for_timeout(250)
-        return row
+def run_formations(c: Checker, page, prompt_value: list, proj: Project):
+    """割り当てのプリセット(保存・上書き・改名・呼び出し・単独での保存)。
 
+    run_coupling の続きとして、2台が待機中で連結できる状態から始める。
+    """
     def t_formation_roundtrip():
         # 保存の作法は上部バーに一本化(原則 §4)。未使用時は #cformsave が
         # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に化ける
@@ -3363,7 +3407,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => document.querySelector('#formlist')"
             ".textContent.includes('いつもの')", timeout=8000)
-        row = form_row("いつもの")
+        row = form_row(page, "いつもの")
         # 使用中の1件は強調され、中身が開いている(いまの運転がどれか)
         assert "sel" in (row.get_attribute("class") or ""), \
             "呼び出し中のプリセットが強調されていない"
@@ -3390,7 +3434,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.querySelector('#cforminfo').textContent"
             " === '保存済み'", timeout=8000)
         # 割り当てを変えると「未保存の変更」バッジに変わる
-        lane(0).locator(".lloops").fill("9")
+        lane_at(page, 0).locator(".lloops").fill("9")
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
@@ -3403,13 +3447,13 @@ def run_coupling(c: Checker, page, proj: Project,
         assert page.locator("#formmsg").inner_text().strip() == "", \
             "上書き保存で文が出ている(バッジで伝えるはず)"
         # 割り当てを再び動かしてから呼び出すと、上書き保存した内容(9)に戻る
-        lane(0).locator(".lloops").fill("5")
+        lane_at(page, 0).locator(".lloops").fill("5")
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
         # 呼び出しはたたんだままでも押せる(一番よく使う操作が開閉の奥に
         # あると面倒。2026-08-08 指摘)
-        crow = form_row("いつもの")
+        crow = form_row(page, "いつもの")
         if "open" in (crow.get_attribute("class") or ""):
             crow.locator(".devtoggle").click()
             page.wait_for_timeout(250)
@@ -3418,12 +3462,13 @@ def run_coupling(c: Checker, page, proj: Project,
         crow.locator("button", has_text="呼び出す").click()
         page.wait_for_timeout(700)
         # 押しても開閉は変わらない(ボタンと開閉は別の機能。2026-08-08 指摘)
-        assert "open" not in (form_row("いつもの").get_attribute("class") or ""), \
+        cls = form_row(page, "いつもの").get_attribute("class") or ""
+        assert "open" not in cls, \
             "呼び出すボタンで詳細が勝手に開いた"
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '保存済み'", timeout=8000)
-        assert lane(0).locator(".lloops").input_value() == "9", \
+        assert lane_at(page, 0).locator(".lloops").input_value() == "9", \
             "呼び出しても上書き保存した割り当てに戻らない"
         # 改名(格納庫の行アイコン ✎)。上部バーの名前チップも追従する
         prompt_value[0] = "いつものB"
@@ -3439,11 +3484,11 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => (state.devices || []).slice(0, 2).some("
             "  d => d.running || d.awaiting)", timeout=10000)
-        open_form("いつものB").locator("button", has_text="呼び出す").click()
+        open_form(page, "いつものB").locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => document.querySelector('#formmsg')"
             ".textContent.includes('実行中')", timeout=8000)
-        wait_idle()
+        wait_lanes_idle(page)
         prompt_value[0] = "自動テスト"
     c.check("プリセット: 保存・上書き保存・改名・呼び出し・実行中ガード",
             t_formation_roundtrip)
@@ -3454,7 +3499,7 @@ def run_coupling(c: Checker, page, proj: Project,
         以前は上書き保存しか道が無く、呼び出したプリセットを土台に別の
         組み合わせを残せなかった。
         """
-        lane(0).locator(".lloops").fill("7")
+        lane_at(page, 0).locator(".lloops").fill("7")
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
@@ -3464,7 +3509,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.querySelector('#formlist')"
             ".textContent.includes('いつものC')", timeout=8000)
         # 元のプリセットは変わらず残る
-        assert form_row("いつものB").count() == 1, "別名で保存すると元が消える"
+        assert form_row(page, "いつものB").count() == 1, "別名で保存すると元が消える"
         # 以後は新しい方を編集している(名前チップが追従し、保存済みに戻る)
         page.wait_for_function(
             "() => document.querySelector('#cformation')"
@@ -3473,7 +3518,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.querySelector('#cforminfo').textContent"
             " === '保存済み'", timeout=8000)
         # 元を呼び出すと、別名で保存する前の値(9)に戻る
-        open_form("いつものB").locator("button", has_text="呼び出す").click()
+        open_form(page, "いつものB").locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => document.querySelectorAll('#lanes .lane .lloops')[0]"
             ".value === '9'", timeout=8000)
@@ -3487,7 +3532,7 @@ def run_coupling(c: Checker, page, proj: Project,
     def t_solo_formation():
         # 前提を確定させる: 連結のプリセットを呼び出している状態から始める
         # (呼び出すと連結が戻ることも、ここで一緒に確かめる)
-        form_row("いつものB").locator("button", has_text="呼び出す").click()
+        form_row(page, "いつものB").locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => document.querySelector('#coupler').classList"
             ".contains('linked')", timeout=8000)
@@ -3503,13 +3548,13 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
-        lane(0).locator(".lloops").fill("4")
+        lane_at(page, 0).locator(".lloops").fill("4")
         prompt_value[0] = "単独で回す"
         page.click("#cformsaveas")   # 元(連結のプリセット)は残したまま作る
         page.wait_for_function(
             "() => document.querySelector('#formlist')"
             ".textContent.includes('単独で回す')", timeout=8000)
-        row = form_row("単独で回す")
+        row = form_row(page, "単独で回す")
         assert "単独" in row.inner_text(), \
             "連結していないのに「連結」として保存されている"
         # 合流は連結してはじめて起きるので、単独のプリセットには出さない
@@ -3521,11 +3566,11 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
         # 呼び出すと、単独で保存したときの状態(連結していない)に戻る
-        form_row("単独で回す").locator("button", has_text="呼び出す").click()
+        form_row(page, "単独で回す").locator("button", has_text="呼び出す").click()
         page.wait_for_function(
             "() => !document.querySelector('#coupler').classList"
             ".contains('linked')", timeout=8000)
-        assert lane(0).locator(".lloops").input_value() == "4", \
+        assert lane_at(page, 0).locator(".lloops").input_value() == "4", \
             "単独のプリセットを呼び出しても割り当てが戻らない"
         # 後片づけ(以後の検査は連結中が前提)
         row_icon(page, "#formlist", "単独で回す", 1).click()
@@ -3547,7 +3592,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "  d => d.running || d.awaiting)", timeout=10000)
         assert page.locator("#cactmsg").inner_text().strip() == "", \
             "まとめて開始の成功文が残っている"
-        wait_idle()
+        wait_lanes_idle(page)
     c.check("F10 で現在の盤面をまとめて開始", t_f10_starts_together)
 
     # あと片づけ: プリセットを消し、1台に戻す(改名後の名前で消す)
@@ -3557,8 +3602,8 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_timeout(600)
     (proj.root / "procedures" / "選んで進む(遅).flow.json").unlink(
         missing_ok=True)
-    c1.stop()
-    c2b.stop()
+
+
 
 
 if __name__ == "__main__":
