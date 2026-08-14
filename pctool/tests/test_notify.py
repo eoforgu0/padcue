@@ -53,7 +53,7 @@ def kinds(w):
 
 # ---- 1台 ----
 
-def test_実行が終わったら知らせる():
+def test_notifies_when_a_run_finishes():
     link = FakeLink("1P", running=True, state="RUNNING")
     w = watcher(FakePool(link))
     w.tick()                       # 最初の1回は基準を作るだけ
@@ -63,7 +63,8 @@ def test_実行が終わったら知らせる():
     assert kinds(w) == ["done"]
 
 
-def test_起動した時点で止まっていても鳴らさない():
+def test_no_notice_when_already_idle_at_startup():
+    """画面を開いた時点で止まっている装置の分を鳴らさないこと。"""
     link = FakeLink("1P", running=False, state="IDLE")
     w = watcher(FakePool(link))
     w.tick()
@@ -71,7 +72,8 @@ def test_起動した時点で止まっていても鳴らさない():
     assert kinds(w) == []
 
 
-def test_異常で終わったときは別の種類():
+def test_error_finish_uses_a_different_kind():
+    """異常で終わったときは done ではなく error で知らせること。"""
     link = FakeLink("1P", running=True, state="RUNNING")
     w = watcher(FakePool(link))
     w.tick()
@@ -80,7 +82,8 @@ def test_異常で終わったときは別の種類():
     assert kinds(w) == ["error"]
 
 
-def test_今すぐ止めるでは知らせない():
+def test_immediate_stop_does_not_notify():
+    """「今すぐ止める」で止めた本人には知らせないこと。"""
     link = FakeLink("1P", running=True, state="RUNNING")
     w = watcher(FakePool(link))
     w.tick()
@@ -90,7 +93,7 @@ def test_今すぐ止めるでは知らせない():
     assert kinds(w) == []
 
 
-def test_止める予約での停止は知らせる():
+def test_graceful_stop_notifies():
     """予約(今の周で止める)は印を付けない。止まるまで待つ操作なので。"""
     link = FakeLink("1P", running=True, state="RUNNING", stop_graceful=True)
     w = watcher(FakePool(link))
@@ -100,7 +103,8 @@ def test_止める予約での停止は知らせる():
     assert kinds(w) == ["done"]
 
 
-def test_人為停止の印は次の実行に持ち越さない():
+def test_manual_stop_mark_does_not_carry_over():
+    """人為停止の印を、次に始まった実行へ持ち越さないこと。"""
     link = FakeLink("1P", running=False, state="IDLE")
     w = watcher(FakePool(link))
     w.tick()
@@ -112,7 +116,7 @@ def test_人為停止の印は次の実行に持ち越さない():
     assert kinds(w) == ["done"]
 
 
-def test_駐機は実行中として数える():
+def test_awaiting_counts_as_running():
     """待機分岐で駐機しただけでは「終わった」ではない。"""
     link = FakeLink("1P", running=False, awaiting=True, state="AWAITING")
     w = watcher(FakePool(link))
@@ -123,7 +127,8 @@ def test_駐機は実行中として数える():
 
 # ---- 操作待ち ----
 
-def test_操作待ちを知らせる():
+def test_notifies_when_waiting_for_a_choice():
+    """人が腕を選ぶまで進まない駐機は知らせること。"""
     link = FakeLink("1P", running=True, state="RUNNING")
     w = watcher(FakePool(link))
     w.tick()
@@ -132,7 +137,8 @@ def test_操作待ちを知らせる():
     assert kinds(w) == ["await"]
 
 
-def test_自動合流が効いている相方待ちでは鳴らさない():
+def test_silent_while_auto_join_handles_the_wait():
+    """自動合流が効いている相方待ちでは鳴らさないこと(人の出番が無い)。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     c = FakeCoupler(on=True, auto_join=True, oneshot_manual=False,
@@ -144,7 +150,8 @@ def test_自動合流が効いている相方待ちでは鳴らさない():
     assert kinds(w) == []
 
 
-def test_自動合流を切っていれば操作待ちを知らせる():
+def test_notifies_the_wait_when_auto_join_is_off():
+    """自動合流を切っていれば、同じ駐機でも人の出番なので知らせること。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     c = FakeCoupler(on=True, auto_join=False, oneshot_manual=False,
@@ -156,7 +163,8 @@ def test_自動合流を切っていれば操作待ちを知らせる():
     assert kinds(w) == ["await"]
 
 
-def test_ワンショット介入の駐機は人が選ぶので知らせる():
+def test_oneshot_manual_wait_is_notified():
+    """「次の合流は自分で選ぶ」の1回も、人が選ぶ場面なので知らせること。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     c = FakeCoupler(on=True, auto_join=True, oneshot_manual=True,
@@ -170,7 +178,8 @@ def test_ワンショット介入の駐機は人が選ぶので知らせる():
 
 # ---- 2台 ----
 
-def test_連結中は両方終わっても知らせは1回():
+def test_coupled_run_notifies_only_once():
+    """連結は1つの仕事。両方が終わっても知らせは1回。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     c = FakeCoupler(on=True, auto_join=True, oneshot_manual=False,
@@ -185,7 +194,8 @@ def test_連結中は両方終わっても知らせは1回():
     assert kinds(w) == ["done"]
 
 
-def test_連結していなければ装置ごとに知らせる():
+def test_uncoupled_devices_notify_separately():
+    """連結していなければ、装置ごとに別々の仕事として知らせること。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     w = watcher(FakePool(a, b), FakeCoupler(on=False))
@@ -198,7 +208,7 @@ def test_連結していなければ装置ごとに知らせる():
     assert [e["dev"] for e in w.since(0)[1]] == ["1P", "2P"]
 
 
-def test_連結中の片方だけの実行も1回():
+def test_solo_run_while_coupled_notifies_once():
     """実行パネルから片方だけ動かした場合(連結中でも単独実行はできる)。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=False, state="IDLE")
@@ -210,7 +220,8 @@ def test_連結中の片方だけの実行も1回():
     assert kinds(w) == ["done"]
 
 
-def test_台帳から消えた装置の控えを残さない():
+def test_removed_device_leaves_no_stale_state():
+    """台帳から外した装置の控えを残さないこと(登録解除は終了ではない)。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     pool = FakePool(a)
     w = watcher(pool)
@@ -244,7 +255,8 @@ def server(tmp_path):
         srv.server_close()
 
 
-def test_配信は繋いだ後の事だけを流す(server):
+def test_stream_delivers_only_events_after_connect(server):
+    """繋いだ後に起きた事は流れてくること。"""
     r = urllib.request.urlopen(server + "/api/events", timeout=10)
     assert r.headers.get("Content-Type").startswith("text/event-stream")
     assert r.readline() == b": open\n"     # 繋がった合図
@@ -259,7 +271,8 @@ def test_配信は繋いだ後の事だけを流す(server):
     r.close()
 
 
-def test_繋ぐ前に起きた事は流さない(server):
+def test_stream_skips_events_from_before_connect(server):
+    """繋ぐ前に起きた事は流さないこと(開き直しで昔の知らせが鳴らない)。"""
     # 先に事象だけ作っておく(画面を開く前に終わった実行に相当)
     w = gui._Handler._watcher()
     w._emit("done", "1P", [])
@@ -271,7 +284,7 @@ def test_繋ぐ前に起きた事は流さない(server):
     r.close()
 
 
-def test_見張りは落ちても止まらず理由を残す(capsys):
+def test_watcher_survives_errors_and_records_why(capsys):
     """tick が例外を投げ続けても、ループは回り続けて理由が残ること。
 
     見張りを死なせない方針は正しいが、黙って捨てると「終了の知らせが
