@@ -282,7 +282,11 @@ function updateLane(lane, d) {
     // 装置カードの✎で同じ対処をしている)
     if (lane.errKey !== 'err') {
       lane.errKey = 'err';
-      showIn(lane.msg, 'err', 'この装置が異常を報告しています');
+      // × は付けない。この知らせは「解除するまで消えない」ものなので、
+      // 押せるのに消えないボタンになる(原則 §5「消える条件が別にある
+      // ものに × を付けない」)。しかも中の解除ボタンごと消えてしまい、
+      // 読み込み直すまで異常を解除できなくなる
+      showIn(lane.msg, 'err', 'この装置が異常を報告しています', false);
       const b = el('button', null, '異常を解除');
       b.onclick = async () => {
         await api('/api/clear_error', 'POST', {dev: lane.name});

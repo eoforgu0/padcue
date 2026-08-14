@@ -258,14 +258,23 @@ def test_transient_error_does_not_end_run(env):
     link2.error = "一過性の模擬エラー"
     time.sleep(1.2)
     assert link2.error, "エラーが消えている(見張りが見る前に上書きされた)"
-    end = time.monotonic() + 4.0
+    # 見るのは猶予(GONE_S)の内側だけ。収集係を止めてあるのでエラーは消えず、
+    # 猶予を過ぎれば連動停止が出るのが**正しい**動き。境目に判定を置くと、
+    # 見張りの位相しだいで落ちる検査になる
+    assert Coupler.GONE_S >= 4.0, "猶予が短くなった。この検査の窓を見直すこと"
+    end = time.monotonic() + 2.0
     while time.monotonic() < end:
         snap = get(base, "/api/state")["coupling"]
         assert snap["run"]["active"] is True, \
             f"一過性エラーで実行が終了扱いになった: {snap['run']}"
         assert not snap["run"].get("linked_stop"), \
-            "一過性エラーで連動停止が誤発した"
-        time.sleep(0.5)
+            "猶予の内側で連動停止が誤発した"
+        time.sleep(0.3)
+    # 猶予を過ぎたら止める(見えない装置を放置しない)。猶予そのものが
+    # 消えた回帰も、こちらが出ないことで捕まる
+    got = wait_until(lambda: get(base, "/api/state")["coupling"]["run"]
+                     .get("linked_stop"), timeout=8.0)
+    assert got, "猶予を過ぎても連動停止が出ない"
     post(base, "/api/stop_both", {"mode": "immediate"})
 
 
