@@ -352,7 +352,18 @@ class _Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return self._json({"error": f"内部エラー: {e}"}, 200)
 
+    # 操作(POST)の受け口。区分ごとに分けて順に当たる。
+    # どの区分も、自分の担当でない path には None を返す
     def _action(self, path: str, body: dict) -> dict:
+        for handle in (self._act_device, self._act_run,
+                       self._act_couple, self._act_edit):
+            done = handle(path, body)
+            if done is not None:
+                return done
+        return {"error": "not found"}
+
+    def _act_device(self, path: str, body: dict) -> dict | None:
+        """装置と本体(接続先・探索・台帳・名前)。"""
         if path == "/api/device":
             host = (body.get("host") or "").strip()
             if not host:
@@ -504,6 +515,10 @@ class _Handler(BaseHTTPRequestHandler):
             cfg["consoles"] = consoles
             self.project.save_config(cfg)
             return {"ok": True}
+        return None
+
+    def _act_run(self, path: str, body: dict) -> dict | None:
+        """手順の転送と実行(押す・走らせる・止める・選ぶ)。"""
         if path == "/api/push":
             name = body.get("name", "")
             r, err = self.project.build_safe(name)
@@ -598,6 +613,10 @@ class _Handler(BaseHTTPRequestHandler):
                     lambda c: (c.passthrough(False), c.status())[1]))
             return {"ok": True}
         # ---- 連結(2台をまとめて動かす。実体は coupler.py) ----
+        return None
+
+    def _act_couple(self, path: str, body: dict) -> dict | None:
+        """連結(2台をまとめて動かす)と編成のプリセット。"""
         if path == "/api/couple":
             return {"ok": True,
                     "coupling": self._coupler().set_coupling(
@@ -644,6 +663,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.project.rename_formation(body.get("old", ""),
                                           body.get("new", ""))
             return {"ok": True}
+        return None
+
+    def _act_edit(self, path: str, body: dict) -> dict | None:
+        """記録・手順と部品の編集(保存・複製・改名・削除)。"""
         if path == "/api/record":
             action = body.get("action")
             if action == "start":
@@ -749,7 +772,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/part/delete":
             self.project.delete_part(body.get("name", ""))
             return {"ok": True}
-        return {"error": "not found"}
+        return None
 
     # ---- 状態 ----
 
