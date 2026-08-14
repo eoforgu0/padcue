@@ -2,9 +2,51 @@
 name = "padcue"
 version = "0.1.0"
 description = "Switch 2 自動操作システムの PC 側ツール"
+readme = "../README.md"
 license = "Apache-2.0"
-license-files = ["../LICENSE", "../NOTICE"]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+# 実行時の依存はゼロ。標準ライブラリ23モジュールだけで動くことがこのツールの
+# 前提で、「Python を入れて padcue.bat をダブルクリックするだけ」を成立させて
+# いる。空リストは省略ではなく主張なので、明示したまま保つこと。
+dependencies = []
+
+[project.optional-dependencies]
+# 開発時だけ必要。pytest は検査、playwright は画面を実際に動かす検査に使う
+# (uicheck.py / runbook_walk.py / shoot.py)。pytest の pythonpath 設定は
+# 7.0 以降の機能なので下限に根拠がある。
+dev = ["pytest>=7.0", "playwright>=1.40"]
+
+[project.scripts]
+padcue = "padcue.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["padcue"]
+
+# pytest の設定はリポジトリ直下の pytest.ini が正本(pythonpath も
+# norecursedirs も、リポジトリルートを基準にしないと書けないため)。
+# ここに書くと `cd pctool` で叩いたときだけ別条件になる。
+
+[tool.ruff]
+line-length = 88
+extend-exclude = ["build"]
+
+[tool.ruff.lint]
+# BLE(握り潰しの検出)は必ず含める。既存の `# noqa: BLE001` は意図して
+# 置いた注釈で、外すと RUF100(不要な noqa)で一斉に消される。
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "RUF"]
+
+ignore = [
+    # 日本語のコメント・文字列・docstring に全角記号を使うのは正当。
+    # この3つは「× と x」「＋ と +」のような見た目の紛らわしさを見る規則で、
+    # 英語圏のコードを前提にしている。日本語主体のこのコードでは105件すべてが
+    # 誤検知だった。なお図の桁が崩れる問題(曖昧幅)とは別物で、そちらは
+    # 文書側で ASCII に統一済み。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]

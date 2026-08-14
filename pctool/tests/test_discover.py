@@ -45,7 +45,7 @@ def test_discover_ignores_unrelated_devices():
         while not stop.is_set():
             try:
                 _data, addr = noise.recvfrom(256)
-            except (socket.timeout, OSError):
+            except (TimeoutError, OSError):
                 continue
             try:
                 noise.sendto(b"I am a printer", addr)
@@ -102,6 +102,7 @@ def test_name_resolution_is_tried_first(monkeypatch):
 def test_default_host_is_the_name():
     """初期状態の接続先が名前になっていること(IP を控えなくて済む)。"""
     import tempfile
+
     from padcue.project import Project
     p = Project(tempfile.mkdtemp())
     assert p.load_config()["host"] == "pademu.local"

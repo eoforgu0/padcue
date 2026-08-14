@@ -10,17 +10,16 @@ from __future__ import annotations
 import json
 import sys
 import threading
-import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from playwright.sync_api import sync_playwright  # noqa: E402
+from playwright.sync_api import sync_playwright
 
-from padcue import gui  # noqa: E402
-from padcue.mockdevice import MockDevice  # noqa: E402
-from padcue.project import Project  # noqa: E402
+from padcue import gui
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 DEMO = {
     "素材周回": {

@@ -1,11 +1,8 @@
 """手順の非表示・フォルダ分け(order.json の hidden/folders)。"""
 import json
-import pathlib
 
-from padcue.project import Project
-
+import pytest
 from test_manage import make
-
 
 # ---------------- 保存と読み込み ----------------
 
@@ -41,23 +38,17 @@ def test_load_proc_org_defaults_when_absent(tmp_path):
 
 def test_save_proc_org_rejects_empty_folder_name(tmp_path):
     p = make(tmp_path, {"A": []})
-    try:
+    with pytest.raises(ValueError):
         p.save_proc_org(folders=[{"name": "  ", "items": ["A"]}], hidden=[])
-        assert False, "例外が飛ぶはず"
-    except ValueError:
-        pass
 
 
 def test_save_proc_org_rejects_duplicate_folder_name(tmp_path):
     p = make(tmp_path, {"A": [], "B": []})
-    try:
+    with pytest.raises(ValueError):
         p.save_proc_org(folders=[
             {"name": "同名", "items": ["A"]},
             {"name": "同名", "items": ["B"]},
         ], hidden=[])
-        assert False, "例外が飛ぶはず"
-    except ValueError:
-        pass
 
 
 def test_save_proc_org_dedupes_item_across_folders(tmp_path):

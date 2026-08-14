@@ -1,0 +1,48 @@
+name: CI
+
+# 1日に数回の push で回す想定。マトリクス(OS x Python 版)は組まない
+# — 実行時の依存がゼロで OS 依存のコードも無く、組んでも同じ結果しか出ない。
+on:
+  push:
+  pull_request:
+
+jobs:
+  pc:
+    name: PC 側(検査と lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # pyproject が宣言している最小版で検証する(最新版は手元で通している)
+          python-version: "3.10"
+
+      - name: 開発用の依存を入れる
+        run: pip install "pytest>=7.0" ruff
+
+      - name: lint
+        run: ruff check pctool
+
+      - name: 検査
+        # runner には gcc が入っている。C 実装と Python 参照実装の送出列一致は
+        # このプロジェクトの中核的な主張なので、gcc が無いときの skip に
+        # 逃げられないよう要求フラグを立てる(手元の Windows では skip 可)。
+        env:
+          PADCUE_REQUIRE_GCC: "1"
+        run: python -m pytest -q
+
+  firmware:
+    name: ファームウェア(ビルド)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # main/ の約2,000行は、他のどの検査でも守られていない。
+      # 「コンパイルが通る」ことの確認だけは代替手段が無いので CI で見る。
+      - name: ESP-IDF でビルド
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5
+          target: esp32s3
+          path: firmware

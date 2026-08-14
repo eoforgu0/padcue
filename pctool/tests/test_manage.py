@@ -550,6 +550,7 @@ def test_gui_button_bits_match_binfmt():
     全ボタンが別ボタンとして送られる(2026-08-01 に実機で発生)。
     """
     import re
+
     from padcue.gui import PAGE
     m = re.search(r"const BTN_BITS = \[(.*?)\];", PAGE, re.S)
     assert m, "BTN_BITS が見つかりません"

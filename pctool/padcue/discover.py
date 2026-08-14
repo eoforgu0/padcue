@@ -89,7 +89,7 @@ def _probe_once(bind_addr: str, port: int, timeout: float) -> list[Found]:
         while remaining > 0:
             try:
                 data, addr = sock.recvfrom(512)
-            except socket.timeout:
+            except TimeoutError:
                 remaining -= 0.25
                 continue
             except OSError:

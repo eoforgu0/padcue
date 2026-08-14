@@ -12,7 +12,6 @@ import os
 import threading
 import time
 import webbrowser
-from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -582,7 +581,7 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     self.project.save_part_table(name, table["header"],
                                                  table["rows"])
-                except Exception as e:
+                except Exception as e:   # noqa: BLE001 (理由は下の save と同じ)
                     return {"error": str(e)}
                 _Handler.recorder = None
                 return {"ok": True, "name": name, "frames": len(table["rows"])}
@@ -644,7 +643,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self.project.save_part_table(body.get("name", ""),
                                              body.get("header", []),
                                              body.get("rows", []))
-            except Exception as e:   # PartError / ValueError / OSError
+            # 保存の失敗はすべて画面に文字で返す。ここで型を絞ると、想定外の
+            # 例外だけがサーバー側で落ちて画面は「押しても無反応」になる
+            except Exception as e:   # noqa: BLE001 (PartError / ValueError / OSError)
                 return {"error": str(e)}
             return {"ok": True}
         if path == "/api/part/new":

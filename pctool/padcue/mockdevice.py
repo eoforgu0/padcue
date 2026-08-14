@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from . import binfmt, engine, proto
 from .client import proc_hash
@@ -171,8 +172,9 @@ class MockDevice:
     # 実機(app_state_set)は状態が変わるたびに STATE ログを残す。
     # 画面のログはこれを頼りに「いつ実行に入ったか」を見せるので、模擬側も
     # 同じ形で残す。番号は firmware/main/app_state.h の並び
-    _STATE_NO = {"BOOT": 0, "WIFI_CONNECTING": 1, "IDLE": 2, "RUNNING": 3,
-                 "AWAITING": 4, "ERROR": 5, "OTA": 6, "PASSTHRU": 2}
+    _STATE_NO: ClassVar[dict[str, int]] = {
+        "BOOT": 0, "WIFI_CONNECTING": 1, "IDLE": 2, "RUNNING": 3,
+        "AWAITING": 4, "ERROR": 5, "OTA": 6, "PASSTHRU": 2}
 
     def _set_state(self, s: str) -> None:
         prev = self._state

@@ -42,7 +42,7 @@ def test_cli_init_and_build(tmp_path, capsys):
 
 
 def test_cli_push_run_status(proj, device, capsys):
-    assert run_cli(proj, "device", f"127.0.0.1") == 0
+    assert run_cli(proj, "device", "127.0.0.1") == 0
     cfg = proj.load_config()
     cfg["port"] = device.port
     proj.save_config(cfg)

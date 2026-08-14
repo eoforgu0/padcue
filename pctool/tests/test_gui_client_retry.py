@@ -9,6 +9,8 @@
  - 接続断(ConnectionError/OSError)は1度だけ繋ぎ直して同じ操作をやり直す
  - 続けて呼んでも接続は1本を使い回す(実機は同時1接続しか受けない)
 """
+from typing import ClassVar
+
 import pytest
 
 from padcue.client import DeviceError
@@ -24,7 +26,7 @@ class _FakeClient:
         self.closed = False
         _FakeClient.made.append(self)
 
-    made: list = []
+    made: ClassVar[list] = []
     fail_first: Exception | None = None   # 1本目の接続で投げる例外
 
     def connect(self):

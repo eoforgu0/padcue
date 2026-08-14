@@ -5,7 +5,6 @@ import pytest
 from padcue import binfmt
 from padcue.binfmt import Djnz, End, Jmp, SetCnt, State
 
-
 ALL_EVENTS = [
     State(0, buttons=0b101, lx=-2048, ly=2047, rx=1, ry=-1,
           gx=-32768, gy=32767, gz=1, ax=-1, ay=0, az=4096),

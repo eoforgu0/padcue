@@ -8,9 +8,9 @@
 試すと自分の接続を横取りして壊すため。収集は毎秒回っているので、人が
 「探す」を押せる時点では必ず判定材料がある。
 """
-import time
 import json
 import threading
+import time
 import urllib.request
 from http.server import ThreadingHTTPServer
 

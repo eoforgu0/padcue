@@ -6,17 +6,16 @@
  - 種別ごとに引数の意味が仕様どおり(完走なら総フレーム、遅延なら回数と最大)
  - PC 側の蓄積(受信時刻の付与・上限での切り捨て・消去)
 """
-import json
 import random
 import time
 
 import pytest
 
-from padcue.mockdevice import MockDevice
-from padcue.client import DeviceClient
-from padcue.project import Project
 from padcue import binfmt
+from padcue.client import DeviceClient
 from padcue.dsl import compile_source
+from padcue.mockdevice import MockDevice
+from padcue.project import Project
 
 
 @pytest.fixture
@@ -126,6 +125,7 @@ def test_log_kinds_are_known_to_the_gui():
     載っていない種別は生の英字のまま出てしまう(読めない)。
     """
     import re
+
     from padcue.gui import PAGE
     m = re.search(r"const LOG_JA = \{(.*?)\n\};", PAGE, re.S)
     assert m, "LOG_JA が見つかりません"

@@ -7,10 +7,10 @@ import time
 
 import pytest
 
-from padcue.mockdevice import MockDevice
-from padcue.client import DeviceClient
 from padcue import binfmt
+from padcue.client import DeviceClient
 from padcue.dsl import compile_source
+from padcue.mockdevice import MockDevice
 
 
 @pytest.fixture

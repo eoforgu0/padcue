@@ -11,8 +11,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .binfmt import (REST_AX, REST_AY, REST_AZ, Await, Djnz, End, Event, Jmp,
-                     SetCnt, State)
+from .binfmt import (
+    REST_AX,
+    REST_AY,
+    REST_AZ,
+    Await,
+    Djnz,
+    End,
+    Event,
+    Jmp,
+    SetCnt,
+    State,
+)
 
 
 class EngineError(Exception):

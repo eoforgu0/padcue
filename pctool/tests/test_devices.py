@@ -11,12 +11,9 @@ import time
 
 import pytest
 
-from padcue import binfmt
 from padcue.client import DeviceClient, DeviceError, connect_verified, proc_hash
-from padcue.dsl import compile_source
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
-
 
 # ---- 設定の移行 ----
 
@@ -128,7 +125,6 @@ WAIT_FLOW = {
 
 
 def _push_wait_flow(tmp_path, c):
-    from padcue.flowfmt import compile_flow
     (tmp_path / "procedures").mkdir(exist_ok=True)
     (tmp_path / "parts").mkdir(exist_ok=True)
     (tmp_path / "procedures" / "分岐.flow.json").write_text(

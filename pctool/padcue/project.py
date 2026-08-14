@@ -513,7 +513,7 @@ class Project:
         header = [h.strip() for h in rows[0] if h.strip() != ""]
         body = []
         for r in rows[1:]:
-            if not r or all(c.strip() == "" for c in r) and len(r) < len(header):
+            if not r or (all(c.strip() == "" for c in r) and len(r) < len(header)):
                 continue
             cells = [c.strip() for c in r][:len(header)]
             cells += [""] * (len(header) - len(cells))

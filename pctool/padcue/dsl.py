@@ -21,8 +21,21 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .binfmt import (BUTTONS, MAX_ARMS, REST_AX, REST_AY, REST_AZ, STICK_MAX,
-                     STICK_MIN, Await, Djnz, End, Event, SetCnt, State)
+from .binfmt import (
+    BUTTONS,
+    MAX_ARMS,
+    REST_AX,
+    REST_AY,
+    REST_AZ,
+    STICK_MAX,
+    STICK_MIN,
+    Await,
+    Djnz,
+    End,
+    Event,
+    SetCnt,
+    State,
+)
 
 # スティックの方向プリセット(符号付き生値 -2048..+2047、中心 0。左と下が負)
 _STICK_PRESETS = {
@@ -69,7 +82,7 @@ class Stmt:
     kind: str
     line: int
     args: tuple = ()
-    body: list["Stmt"] | None = None  # loop のみ
+    body: list[Stmt] | None = None  # loop のみ
     allow: frozenset = frozenset()
 
 
@@ -723,7 +736,10 @@ def _compile_body(
             if frames > 0:
                 _warn_short(ctx, st, "スティック", frames)
 
-            def _set(sx, sy):
+            # side と st は既定引数で束縛する。呼ぶのはこの反復の中だけだが、
+            # ループ変数を暗黙に捕まえた形にしておくと、後で呼び出しを外へ
+            # 動かしたときに黙って壊れる
+            def _set(sx, sy, side=side, st=st):
                 if side == "L":
                     ctx.note_axis("LX", sx, st.line)
                     ctx.note_axis("LY", sy, st.line)

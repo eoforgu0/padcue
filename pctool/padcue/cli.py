@@ -22,9 +22,9 @@ import time
 import urllib.request
 from pathlib import Path
 
+from . import registry
 from .client import DeviceClient, DeviceError, connect_verified
 from .discover import discover
-from . import registry
 from .flowfmt import FlowError
 from .project import Project
 
