@@ -36,7 +36,11 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
             : (r == WIFI_REASON_ASSOC_LEAVE)           ? "ルーター側から切断された"
             : "その他";
         ESP_LOGW(TAG, "WiFi 切断: %s (理由コード %u)。再接続します", why, (unsigned)r);
-        esp_wifi_connect();  // TODO: バックオフ付き再接続(コア0基盤の実装時)
+        // 即時に繋ぎ直す。ここに待ち時間を入れないのは、実行中に
+        // 通信が要るのは「止める」指示を受ける経路だけで、繋がらない
+        // 間も手順の実行は続くため(WiFi はタイミング経路の外)。
+        // 何度も失敗し続ける状況では上の切断理由が毎回ログに出る
+        esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = data;
         ESP_LOGI(TAG, "IP取得: " IPSTR, IP2STR(&e->ip_info.ip));

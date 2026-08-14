@@ -98,6 +98,6 @@ const uint8_t pademu_procon_hid_report_desc[PADEMU_PROCON_HID_DESC_LEN] = {
     0x95, 0x3F,        //   Report Count (63)
     0x91, 0x83,        //   Output (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Volatile)
     0xC0,              // End Collection
-    
+
     // 203 bytes
 };
