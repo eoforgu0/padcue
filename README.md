@@ -3,12 +3,27 @@
 PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコントローラーとして
 高い時間精度で実行します。長時間の周回作業の代行と、フレーム単位の精密な挙動検証が目的です。
 
-**現在の状態**: v0.2.0。1台運用に加えて **2台同時運用**(装置ごとのレーン画面、
-「連結」でのまとめて開始・自動合流・連動停止、編成の保存、どの Switch に
-つながっているかの自動表示)まで実機検証済み。初代 Switch でも動作します。
+**PC 側は Python の標準ライブラリだけで動きます**(外部パッケージの導入は不要)。
+**2台同時運用**まで実機で検証済みです — 装置ごとのレーン画面、「連結」でのまとめて
+開始・自動合流・連動停止、割り当てのプリセット保存、どの Switch につながっているかの
+自動表示。初代 Switch でも動作します。
+
 **セットアップは [docs/runbook.md](docs/runbook.md)**(2台目の追加は §8、連結の使い方は §9)。
 
 > 固有用語は [docs/glossary.md](docs/glossary.md) にまとまっています。
+
+---
+
+## 要るもの
+
+| | |
+|---|---|
+| PC | Windows。Python 3.10 以上と、ブラウザ(Chrome / Edge など) |
+| マイコン | M5Stack AtomS3 Lite を1台(2台同時運用なら2台) |
+| ケーブル | データ通信できる USB-C ケーブル。最初の書き込みだけに使い、以後は無線 |
+| Switch | 本体と純正ドック。本体設定の「Pro コントローラーの有線通信」を ON にする |
+
+**実機が無くても、模擬デバイス付きの練習モードで全機能を試せます。**
 
 ---
 
@@ -17,12 +32,18 @@ PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコ�
 **`padcue.bat` をダブルクリック**すると操作画面が開きます。
 実機が無いうちは **`padcue-練習.bat`**(模擬デバイス付き)で全機能を試せます。
 
+はじめて開いたときは手順がまだ1つもありません。雛形を作ると、画面の一覧に出ます:
+
+```bash
+set PYTHONPATH=pctool
+python -m padcue init         # サンプルの手順と部品を作る
+```
+
 手順は `procedures/`、部品は `parts/` に保存されます(バッチと同じ場所)。
 
 コマンドから使う場合:
 
 ```bash
-set PYTHONPATH=pctool
 python -m padcue gui          # 操作画面
 python -m padcue mock         # 模擬デバイス(別の端末で)
 ```
@@ -119,20 +140,29 @@ pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デ
 
 ## 開発
 
+道具立て(利用者には不要。開発するときだけ):
+
+```bash
+pip install -e ./pctool[dev]     # pytest と playwright
+playwright install chromium      # 画面を実際に動かす検査に使う
+```
+
+以下はすべてリポジトリ直下で実行します。
+
 ```bash
 # PC 側のテスト(実機不要。C 実装の検証も含む)
 python -m pytest -q
 
 # GUI を実際にブラウザで操作して想定と突き合わせる
-cd pctool && python tools/uicheck.py <出力先>
+python pctool/tools/uicheck.py <出力先>
 
 # 手順書(docs/runbook.md)のとおりになぞって、ずれていないか確認する
-cd pctool && python tools/runbook_walk.py <出力先>
+python pctool/tools/runbook_walk.py <出力先>
 
 # 画面の見た目を確認(明暗テーマのスクリーンショット)
-cd pctool && python tools/shoot.py <出力先> [--dark]
+python pctool/tools/shoot.py <出力先> [--dark]
 
-# マイコン側のビルド(Windows は PowerShell から)
+# マイコン側のビルド(ESP-IDF 5.5 以上。Windows は PowerShell から)
 cd firmware && idf.py build
 
 # 実機への無線更新(2回目以降。ケーブル不要)

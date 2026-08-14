@@ -1,6 +1,6 @@
 """GUI のスクリーンショットを撮る(見た目の点検用)。
 
-    python tools/shoot.py <出力フォルダ> [--dark]
+    python pctool/tools/shoot.py <出力フォルダ> [--dark]
 
 模擬デバイスと GUI を自前で立ち上げ、主要な画面・状態を撮る。
 実機がなくても、実際に人が見る画面をそのまま確認できる。
@@ -20,6 +20,8 @@ from playwright.sync_api import sync_playwright
 from padcue import gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
+
+from _localonly import lock_to_mock
 
 DEMO = {
     "素材周回": {
@@ -89,7 +91,11 @@ def build_demo(root: Path) -> Project:
 
 
 def main() -> int:
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "shots")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if not args:
+        print(__doc__.strip())
+        return 2
+    out = Path(args[0])
     out.mkdir(parents=True, exist_ok=True)
     dark = "--dark" in sys.argv
 
@@ -100,6 +106,9 @@ def main() -> int:
     cfg = proj.load_config()
     cfg["host"], cfg["port"] = "127.0.0.1", dev.port
     proj.save_config(cfg)
+    # 【重要】実機に触れないよう固定する(理由は tools/_localonly.py)。
+    # 接続先を loopback に書いた上での二段目の歯止め
+    lock_to_mock(dev.port)
 
     gui._Handler.project = proj
     gui._Handler.recorder = None

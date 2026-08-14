@@ -1,6 +1,6 @@
 """GUI を実際にブラウザで操作して、想定どおりかを確かめる。
 
-    python tools/uicheck.py [出力フォルダ]
+    python pctool/tools/uicheck.py <出力フォルダ>
 
 各項目を「こうしたらこうなるはず」で照合し、合否を並べる。
 失敗した項目はスクリーンショットを残す。
@@ -190,7 +190,11 @@ def open_dev_row(page, name: str = "1P"):
 
 
 def main() -> int:
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "uicheck")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if not args:
+        print(__doc__.strip())
+        return 2
+    out = Path(args[0])
     out.mkdir(parents=True, exist_ok=True)
     proj = build_project(out / "_proj")
     # 実機と同じく全アダプタで待つ(探索で見つかった自分の IP へ繋げるように)

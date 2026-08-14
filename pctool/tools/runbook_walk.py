@@ -1,6 +1,6 @@
 """docs/runbook.md の手順を、初めて使う人のつもりでそのままなぞる。
 
-    python tools/runbook_walk.py [出力フォルダ]
+    python pctool/tools/runbook_walk.py <出力フォルダ>
 
 手順書のとおりに操作し、**書いてあるのに違うこと**と
 **書かれていないと分からないこと**を「▲」で並べる。手順書が実装から
@@ -67,6 +67,9 @@ def open_dev_row(page, name="1P"):
 
 
 def main():
+    if len(sys.argv) < 2:
+        print(__doc__.strip())
+        return 2
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)

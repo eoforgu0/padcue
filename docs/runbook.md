@@ -51,6 +51,16 @@ python -m pytest -q
 
 つづけて、マイコンをつながずに操作画面を試します。
 
+手に入れた直後は手順が1つもないので、先に雛形を作ります。
+
+```
+set PYTHONPATH=pctool
+python -m padcue init
+```
+
+**確認**: `雛形を作成しました` と出て、`procedures/サンプル.flow.json` と
+`parts/サンプル部品.csv` ができます。
+
 **`padcue-練習.bat` をダブルクリック**してください。
 模擬デバイスが立ち上がり、ブラウザで操作画面が開きます。
 (実機を使うときは `padcue.bat` の方です)

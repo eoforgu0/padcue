@@ -2,7 +2,7 @@
 
     padcue init                    プロジェクトの雛形を作る
     padcue build <名前>            フローをコンパイル(警告も表示)
-    padcue push <名前>             コンパイル → 転送 → 保存
+    padcue push <名前>             コンパイル -> 転送 -> 保存
     padcue run <名前> [-n 回数]    実行(転送済みの手順)
     padcue stop [--graceful]       停止
     padcue status                  状態表示
@@ -12,6 +12,13 @@
     padcue discover                LAN 内のマイコンを探す
     padcue mock                    模擬デバイスを起動(実機なしの動作確認)
     padcue gui                     操作画面を開く
+
+  マイコンの保守(操作画面を開いている間と、実行中は受け付けません):
+
+    padcue ota [ファイル]          ファームウェアを無線で更新する
+    padcue mode procon|hidpad      転送方式を切り替える(再列挙が要る)
+    padcue config <キー> <値>      不揮発設定を書く(frame_period_ns など)
+    padcue clear-error             異常状態(赤 LED)を解除する
 """
 from __future__ import annotations
 
