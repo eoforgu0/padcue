@@ -223,7 +223,8 @@ class _Project:
             return  # 循環は compile_procs の検証で行番号つきで報告される
         p = self.root / "procedures" / f"{name}.flow.json"
         if not p.is_file():
-            raise FlowError(f"procedures/{name}.flow.json", "", "ファイルが見つかりません")
+            raise FlowError(f"procedures/{name}.flow.json", "",
+                            "ファイルが見つかりません")
         file = f"procedures/{name}.flow.json"
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
@@ -240,7 +241,8 @@ class _Project:
         if doc.get("schema") != FLOW_SCHEMA:
             raise _err(file, "schema", f"未対応の schema: {doc.get('schema')!r}")
         if doc.get("name") != name:
-            raise _err(file, "name", f"name とファイル名が一致しません: {doc.get('name')!r}")
+            raise _err(file, "name",
+                       f"name とファイル名が一致しません: {doc.get('name')!r}")
         body = doc.get("body")
         if not isinstance(body, list):
             raise _err(file, "body", "body はノードの配列です")
@@ -267,4 +269,5 @@ def compile_flow(project_dir: str | Path, name: str) -> Compiled:
     try:
         return compile_procs(project.procs, name)
     except CompileError as e:
-        raise FlowError(f"procedures/{name}.flow.json", f"ノード#{e.line}", e.msg) from None
+        raise FlowError(f"procedures/{name}.flow.json",
+                        f"ノード#{e.line}", e.msg) from None

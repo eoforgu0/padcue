@@ -424,7 +424,8 @@ stick L neutral
 end
 """
     c = compile_source(src)
-    assert not any("衝突" in w.msg for w in c.warnings),         [w.msg for w in c.warnings]
+    assert not any("衝突" in w.msg for w in c.warnings), \
+        [w.msg for w in c.warnings]
 
 
 def test_lint_no_collision_with_margin():

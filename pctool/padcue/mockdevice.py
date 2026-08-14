@@ -433,7 +433,8 @@ class MockDevice:
                 if not (0 <= arm < r["await_arms"]):
                     return self._err("BAD_ARG", "腕の番号が範囲外です")
                 # 世代照合(実機と同じ): 別の駐機に宛てた古い選択を拒否する
-                if isinstance(o.get("gen"), (int, float))                         and int(o["gen"]) != self._await_gen:
+                if (isinstance(o.get("gen"), (int, float))
+                        and int(o["gen"]) != self._await_gen):
                     return self._err("STALE_SELECT",
                                      "その選択は前の駐機に宛てたものです"
                                      "(状態を取り直してください)")

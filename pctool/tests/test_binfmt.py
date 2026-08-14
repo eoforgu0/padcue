@@ -89,5 +89,6 @@ def test_zero_time_cycles_rejected_on_decode():
     with pytest.raises(binfmt.DecodeError, match="時間を進めない"):
         binfmt.decode(blob)
     # 時間が進む後方 DJNZ は正当
-    blob = binfmt.encode("p", [SetCnt(0, 5), State(0), Djnz(0, target=1, advance=3), End()], 3)
+    blob = binfmt.encode(
+        "p", [SetCnt(0, 5), State(0), Djnz(0, target=1, advance=3), End()], 3)
     binfmt.decode(blob)

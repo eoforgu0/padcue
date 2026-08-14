@@ -733,7 +733,8 @@ class _Handler(BaseHTTPRequestHandler):
                 # で付け替えられる
                 d["host_info"] = link.host_info
             if link.error:
-                d["error"] = _why(link.error_exc, d["host"]) if link.error_exc                     else link.error
+                d["error"] = (_why(link.error_exc, d["host"])
+                              if link.error_exc else link.error)
             elif link.info is not None:
                 d.update({
                     "fw": link.info.fw_version, "mode": link.info.transport_mode,
@@ -776,7 +777,8 @@ class _Handler(BaseHTTPRequestHandler):
                 out["device"] = {k: v for k, v in first.items()
                                  if k not in ("name", "id", "at")}
                 for p in procs:
-                    p["on_device"] = link0.listing.get(p["name"])                         == p.get("hash")
+                    p["on_device"] = (link0.listing.get(p["name"])
+                                      == p.get("hash"))
         else:
             out["device_error"] = "装置が登録されていません"
         return out

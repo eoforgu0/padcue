@@ -104,7 +104,8 @@ def load_part(name: str, text: str) -> Part:
             try:
                 f_val = int(rec["F"])
             except ValueError:
-                raise PartError(f"F 列が整数ではありません: {rec['F']!r}", lineno) from None
+                raise PartError(
+                    f"F 列が整数ではありません: {rec['F']!r}", lineno) from None
             if f_val != csv_rowno:
                 raise PartError(
                     f"F 列が連番ではありません: {f_val}(期待 {csv_rowno}。"
@@ -118,7 +119,8 @@ def load_part(name: str, text: str) -> Part:
             try:
                 rep = int(rec["rep"])
             except ValueError:
-                raise PartError(f"rep 列が整数ではありません: {rec['rep']!r}", lineno) from None
+                raise PartError(
+                    f"rep 列が整数ではありません: {rec['rep']!r}", lineno) from None
             if rep < 1:
                 raise PartError(f"rep は 1 以上です: {rep}", lineno)
         values = {c: _parse_cell(c, rec[c], lineno) for c in data_cols}

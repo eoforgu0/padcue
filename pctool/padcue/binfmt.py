@@ -144,7 +144,8 @@ def _check_u32(value: int, what: str) -> None:
 def _check_stick(value: int, what: str) -> None:
     if not (STICK_MIN <= value <= STICK_MAX):
         raise ValueError(
-            f"{what} がスティック生値の範囲外です: {value} (許容 {STICK_MIN}..{STICK_MAX})"
+            f"{what} がスティック生値の範囲外です: "
+            f"{value} (許容 {STICK_MIN}..{STICK_MAX})"
         )
 
 
@@ -245,7 +246,8 @@ def decode(data: bytes) -> tuple[str, list[Event], int]:
     """バイナリを (name, events, total_frames) に復元する。CRC・整合性を検証する。"""
     if len(data) < HEADER_SIZE:
         raise DecodeError("データがヘッダより短い")
-    magic, schema, name_b, count, total_frames, crc = struct.unpack_from(HEADER_FMT, data)
+    (magic, schema, name_b, count, total_frames,
+     crc) = struct.unpack_from(HEADER_FMT, data)
     if magic != MAGIC:
         raise DecodeError(f"magic 不一致: {magic!r}")
     if schema != SCHEMA_VERSION:
@@ -268,7 +270,8 @@ def decode(data: bytes) -> tuple[str, list[Event], int]:
                     raise DecodeError(f"イベント{i}: 待機分岐は前方へのみ進めます")
             continue
         if isinstance(ev, (Djnz, Jmp)) and not (0 <= ev.target < count):
-            raise DecodeError(f"イベント{i}: ジャンプ先が範囲外です: {ev.target} / {count}")
+            raise DecodeError(
+                f"イベント{i}: ジャンプ先が範囲外です: {ev.target} / {count}")
         # 時間非消費の閉路防止(ISR 無限ループの第1層防御、firmware-architecture §2)
         if isinstance(ev, Jmp) and ev.target <= i:
             raise DecodeError(f"イベント{i}: 後方 JMP は禁止です: target={ev.target}")

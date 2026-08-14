@@ -1477,11 +1477,13 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.click("[data-view=flow]")
         page.wait_for_timeout(600)
         # 並びを元に戻す(この後の検査は一覧の順番(nth)で手順を選ぶため)
-        g2 = page.locator("#flowlist .proc", has_text=before[0])                  .locator(".grab")
+        g2 = (page.locator("#flowlist .proc", has_text=before[0])
+              .locator(".grab"))
         top = page.locator("#flowlist .proc").first.bounding_box()
         drag(page, g2.bounding_box(), top["x"] + 40, top["y"] + 2)
         page.wait_for_timeout(600)
-        assert page.locator("#flowlist .proc b").all_inner_texts() == before,             page.locator("#flowlist .proc b").all_inner_texts()
+        assert page.locator("#flowlist .proc b").all_inner_texts() == before, \
+            page.locator("#flowlist .proc b").all_inner_texts()
     c.check("一覧の並べ替えが保存され両画面で共有される", t_list_reorder_shared)
 
     def t_proc_row_frames():
@@ -1575,7 +1577,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert after == before - 1, f"×で消えない: {before} -> {after}"
         page.keyboard.press("Control+z")
         page.wait_for_timeout(300)
-        assert page.locator("#flowbody .blk").count() == before,             "×の削除が Ctrl+Z で戻らない"
+        assert page.locator("#flowbody .blk").count() == before, \
+            "×の削除が Ctrl+Z で戻らない"
     c.check("ブロック右端の×で削除できる(戻せる)", t_block_delete_button)
 
     def t_move_at_edge_is_noop():
@@ -1615,7 +1618,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         blk = page.locator("#flowbody .blk", has_text="待つ 120F").first
         blk.locator(".en input").uncheck()
         page.wait_for_timeout(300)
-        assert "off" in (blk.get_attribute("class") or ""),             "無効にしたのに見た目が変わらない"
+        assert "off" in (blk.get_attribute("class") or ""), \
+            "無効にしたのに見た目が変わらない"
         page.click("#saveflow")
         page.wait_for_timeout(1000)
         after = total_frames()
@@ -1937,7 +1941,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         """ボタンはクリックだけで切り替わり、押した所だけが目に入ること。"""
         # 最後の行は何も押していない(サンプル部品の作り)
         cell = page.locator("#parttable tr").last.locator("td.b .tg").first
-        assert cell.inner_text() == "", f"押していないのに文字がある: {cell.inner_text()!r}"
+        assert cell.inner_text() == "", \
+            f"押していないのに文字がある: {cell.inner_text()!r}"
         cell.click()
         page.wait_for_timeout(200)
         assert cell.inner_text() == "ON", "クリックで ON にならない"
@@ -2103,7 +2108,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         cb.uncheck()
         page.wait_for_timeout(300)
         fn = page.locator("#parttable tr").nth(3).locator("td.fn").first
-        assert fn.inner_text().strip() == "—",             f"飛ばした行がフレームを消費している: {fn.inner_text()!r}"
+        assert fn.inner_text().strip() == "—", \
+            f"飛ばした行がフレームを消費している: {fn.inner_text()!r}"
         page.click("#savepart")
         page.wait_for_timeout(900)
         tbl = proj.load_part_table("コンボ")

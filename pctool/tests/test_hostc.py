@@ -89,11 +89,15 @@ def _random_body(rng, depth, lines):
     for _ in range(n):
         kind = rng.randint(0, 5)
         if kind == 0:
-            lines.append(f"press {rng.choice(['A','B','X','ZL','DU'])} {rng.randint(3, 20)}")
+            lines.append(
+                f"press {rng.choice(['A','B','X','ZL','DU'])} "
+                f"{rng.randint(3, 20)}")
         elif kind == 1:
             lines.append(f"wait {rng.randint(3, 30)}")
         elif kind == 2:
-            lines.append(f"stick {rng.choice(['L','R'])} {rng.randint(-2048, 2047)} {rng.randint(-2048, 2047)}")
+            lines.append(
+                f"stick {rng.choice(['L','R'])} "
+                f"{rng.randint(-2048, 2047)} {rng.randint(-2048, 2047)}")
         elif kind == 3:
             lines.append(f"hold {rng.choice(['ZR','L'])}")
         elif kind == 4:

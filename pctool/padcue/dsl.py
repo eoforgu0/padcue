@@ -244,8 +244,10 @@ def parse(text: str) -> dict[str, Proc]:
                 x, y = _STICK_PRESETS[tok[2]]
             elif len(tok) in (4, 5):
                 side = tok[1]
-                x = _parse_int(tok[2], lineno, "スティックX(生値)", STICK_MIN, STICK_MAX)
-                y = _parse_int(tok[3], lineno, "スティックY(生値)", STICK_MIN, STICK_MAX)
+                x = _parse_int(tok[2], lineno, "スティックX(生値)",
+                               STICK_MIN, STICK_MAX)
+                y = _parse_int(tok[3], lineno, "スティックY(生値)",
+                               STICK_MIN, STICK_MAX)
                 if len(tok) == 5:
                     frames = _parse_int(tok[4], lineno, "長さ(フレーム)", 0, 10**9)
             else:
@@ -306,7 +308,8 @@ def _validate_call_graph(procs: dict[str, Proc]) -> None:
 
     def visit(name: str, line: int, path: tuple[str, ...]) -> None:
         if state.get(name) == 1:
-            raise CompileError(line, f"call が循環しています: {' -> '.join((*path, name))}")
+            raise CompileError(
+                line, f"call が循環しています: {' -> '.join((*path, name))}")
         if state.get(name) == 2:
             return
         state[name] = 1
@@ -479,7 +482,8 @@ class _Ctx:
         rel = self.abs_frame - self.base
         assert rel >= 0, "内部エラー: 相対フレームが負"
         if rel > _MAX_U32:
-            raise CompileError(self.cur_line, f"フレーム番号が上限(u32)を超えます: {rel}")
+            raise CompileError(
+                self.cur_line, f"フレーム番号が上限(u32)を超えます: {rel}")
         st = State(rel, self.buttons, self.lx, self.ly, self.rx, self.ry,
                    self.gx, self.gy, self.gz, self.ax, self.ay, self.az)
         if self.last_state_index is not None and self.last_state_abs == self.abs_frame:
@@ -525,7 +529,8 @@ def compile_procs(procs: dict[str, Proc], proc_name: str | None = None) -> Compi
 
     total = ctx.abs_frame
     if total > _MAX_U32:
-        raise CompileError(ctx.cur_line, f"手順の総フレーム数が上限(u32)を超えます: {total}")
+        raise CompileError(
+            ctx.cur_line, f"手順の総フレーム数が上限(u32)を超えます: {total}")
     # 「末尾の入力変化が終端フレームちょうど」は警告しない。
     # 周回すると最後の変化が次の周の先頭に上書きされる(例: press A 3 だけの
     # 手順を2周すると 6F 押しっぱなしになる)が、これは押しっぱなしを次の
@@ -759,7 +764,8 @@ def _compile_body(
             (callee,) = st.args
             if callee in call_stack:
                 raise CompileError(
-                    st.line, f"call が循環しています: {' -> '.join((*call_stack, callee))}"
+                    st.line,
+                    f"call が循環しています: {' -> '.join((*call_stack, callee))}"
                 )
             _compile_body(procs[callee].body, ctx, procs, (*call_stack, callee))
         elif st.kind == "loop":

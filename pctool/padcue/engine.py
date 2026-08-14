@@ -122,7 +122,9 @@ def run(
         if steps > max_steps:
             raise EngineError("ステップ上限超過(無限ループの疑い)")
         if idx < 0 or idx >= len(events):
-            raise EngineError(f"イベント index が範囲外(END なし終端または不正ジャンプ): idx={idx}")
+            raise EngineError(
+                f"イベント index が範囲外"
+                f"(END なし終端または不正ジャンプ): idx={idx}")
         ev = events[idx]
         if isinstance(ev, State):
             frame = base + ev.frame + shift - skip

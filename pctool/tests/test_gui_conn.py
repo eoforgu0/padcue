@@ -73,7 +73,8 @@ def wait_until(fn, timeout=8.0):
 
 def test_connection_is_reused(env):
     _proj, _dev, base = env
-    assert wait_until(lambda: get(base, "/api/state").get("device")),         "装置が見えない"
+    assert wait_until(lambda: get(base, "/api/state").get("device")), \
+        "装置が見えない"
     link = gui._Handler.pool.links()[0]
     cl = link.client
     assert cl is not None, "接続が使い回されていない"
@@ -89,7 +90,8 @@ def test_reconnects_after_device_restart(env):
     port = dev.port
     dev.stop()
     assert wait_until(
-        lambda: get(base, "/api/state").get("device") is None),         "切断が画面に伝わらない"
+        lambda: get(base, "/api/state").get("device") is None), \
+        "切断が画面に伝わらない"
     dev2 = MockDevice(speed=2000.0, port=port)
     for _ in range(50):                 # 排他 bind は TIME_WAIT で少し待つ
         try:
@@ -122,6 +124,7 @@ def test_host_change_drops_old_connection(env):
     assert wait_until(lambda: get(base, "/api/state").get("device"))
     post(base, "/api/device", {"host": "10.255.255.1"})
     assert wait_until(
-        lambda: get(base, "/api/state").get("device") is None),         "接続先を変えたのに古い接続を使っている"
+        lambda: get(base, "/api/state").get("device") is None), \
+        "接続先を変えたのに古い接続を使っている"
     post(base, "/api/device", {"host": "127.0.0.1"})
     assert wait_until(lambda: get(base, "/api/state").get("device"))

@@ -417,7 +417,8 @@ def cmd_status(args) -> int:
         _print_pairing(st)
         if st.get("running"):
             print(f"実行中     : {st.get('proc', '')} "
-                  f"{st.get('session_loop')} 周目 / {st.get('frames_elapsed')} フレーム")
+                  f"{st.get('session_loop')} 周目 / "
+                  f"{st.get('frames_elapsed')} フレーム")
         # ずれの実測は 0 でも出す。出ていないのが「遅れていない」のか
         # 「測っていない」のか分からないと、計器として意味を成さない
         if "max_late_us" in st:
@@ -689,7 +690,8 @@ def cmd_device(args) -> int:
 def cmd_discover(args) -> int:
     found = discover(timeout=args.timeout)
     if not found:
-        print("見つかりません。電源・WiFi・PC が同じネットワークにあるか確認してください")
+        print("見つかりません。電源・WiFi・PC が同じネットワークに"
+              "あるか確認してください")
         return 1
     for f in found:
         print(f)
