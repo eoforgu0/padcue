@@ -1282,6 +1282,10 @@ def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
         # レーンは1台ぶんが自己完結する(原則 §2)ので、1台のときも
         # 選択肢に宛先の装置名が付く(2台のレーンと同じ形。原則 §5)
         assert btns == ["出た(1P へ)", "出ない(1P へ)"], btns
+        # 連結していないときは、押す物がこのレーンにある。だから光るのも
+        # このレーン(連結中は上部バーへ移る。run_coupling 側で見ている)
+        assert page.locator("#lanes .lane.needs").count() == 1, \
+            "単独の選択待ちでレーンが光っていない"
         ln.locator(".lawait button").first.click()
         page.wait_for_timeout(900)
         assert "選択待ち" not in chip_text(page), chip_text(page)
@@ -3276,6 +3280,12 @@ def run_coupling(c: Checker, page, proj: Project,
             "(state.devices || []).slice(0, 2).every(d => d.awaiting)"), \
             "ワンショット中なのに自動で選ばれた"
         assert "両方そろいました" in page.locator("#cmsg").inner_text()
+        # 光らせる場所と押す場所を一致させる(2026-08-15 指摘)。連結中の
+        # 選択は上部バーで行うので、レーンには黄色の枠を出さない
+        assert page.locator("#lanes .lane.needs").count() == 0, \
+            "連結中の選択待ちでレーンが光っている(押す物はバーにある)"
+        cls_both = page.locator("#cbotharms").get_attribute("class") or ""
+        assert "needs" in cls_both, "選択肢のまわりが光っていない"
         # 人を待っている唯一のボタンなので、レーンの選択肢と同じ姿
         # (注意色で塗る・同じ大きさ)。名前に「(両方へ)」は付けない
         # ——すぐ左の見出しが「選択肢を両方へ同時に送る」(2026-08-15 指摘)

@@ -258,6 +258,12 @@ header { position:relative; }
    実行中には出さない——数時間ずっと光ることになり、平常時に色を使い切ると
    異常が浮かばなくなる(ISA-101 の「平常はグレー基調」) */
 .lane.needs { box-shadow:0 0 0 3px var(--warn); }
+/* 連結中の「両方へ同時に送る」。人が選ぶ場面だけ、押す物のまわりを
+   同じ形(黄のリング)で囲む。レーンを光らせると、押す物が無い場所へ
+   目を向けさせることになる(2026-08-15 指摘)。内側に余白を置くのは、
+   ボタン自身も注意色で塗られていて、詰めるとリングと溶けるため */
+#cbotharms.needs { box-shadow:0 0 0 3px var(--warn); border-radius:8px;
+  padding:4px 7px; }
 .lane.faulted { box-shadow:0 0 0 3px var(--err); }
 /* レーン内の小見出し(1台時のカード見出しに相当) */
 .subh { font-size:var(--fs-sub); letter-spacing:.1em; color:var(--muted);

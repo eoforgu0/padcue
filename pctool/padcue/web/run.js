@@ -243,8 +243,22 @@ function updateLane(lane, d) {
   const awaiting = !!d.awaiting;
   const runName = (running || awaiting) ? (d.proc || '') : '';
   // 外周のリング。人の操作を待っている(黄)・装置が異常を報告している(赤)
-  // ときだけ出す。つながっていないだけでは出さない(C-2 と同じ理由)
-  lane.card.classList.toggle('needs', !d.error && !!d.awaiting);
+  // ときだけ出す。つながっていないだけでは出さない(C-2 と同じ理由)。
+  //
+  // **連結して走っている間は、レーンには出さない**(2026-08-15 指摘)。
+  // そのときの選択は上部バーの「選択肢を両方へ同時に送る」で行うので、
+  // レーンを光らせると、押す物が無い場所へ目を向けさせることになる。
+  // ただし相方が来ないときだけは、そのレーンの「だけ進める…」を人が
+  // 判断する場面なので出す(状態チップ「選択待ち/相方待ち」は常に出る)
+  const inCoupledRun = !!(state.coupling && state.coupling.run
+                          && state.coupling.run.active
+                          && (state.coupling.run.members || [])
+                             .includes(lane.name));
+  const lateHere = !!(state.coupling && state.coupling.run
+                      && state.coupling.run.late
+                      && state.coupling.run.late.dev === lane.name);
+  lane.card.classList.toggle('needs',
+    !d.error && !!d.awaiting && (!inCoupledRun || lateHere));
   lane.card.classList.toggle('faulted', !d.error && d.state === 'ERROR');
   if (d.error) {
     // つながっていない。これは異常ではない(2台目を外して1台で回すのは
@@ -1007,6 +1021,10 @@ function renderCoupling() {
   // 選択肢を両方へ同時に送る(両方が選択待ちのときだけ押せる。ボタンは消さない)
   const both = document.getElementById('cbotharms');
   const ready = devs.slice(0, 2).every(d => !d.error && d.awaiting);
+  // 人が選ぶ場面(自動合流が働かない)だけ、この一角を光らせる。
+  // 光らせる場所と押す場所を一致させる(2026-08-15 指摘)
+  both.classList.toggle('needs',
+    ready && !(c.auto_join && !c.oneshot_manual));
   const bKey = armKey + '|' + ready;
   if (both.dataset.key !== bKey) {
     both.dataset.key = bKey;
