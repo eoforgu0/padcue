@@ -64,6 +64,9 @@ class BuildResult:
 class Project:
     def __init__(self, root: str | Path):
         self.root = Path(root)
+        # 前回の整理からの追記行数。上限ぶん溜まったときだけ整理する
+        # (最初の1回は必ず通して、再起動をまたいだ溜まりを片づける)
+        self._since_trim = self.LOG_KEEP
 
     # ---- 設定 ----
 
@@ -198,7 +201,14 @@ class Project:
         with self._log_write_lock:
             with self.log_path().open("a", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
-            self._trim_logs()
+            # 毎回 _trim_logs を呼ぶと、保持上限に達したあとは**追記のたびに
+            # 5000〜10000 行(約1MB)を読んでは捨てる**ことになる。しかもこれは
+            # 書き込みの錠の内側なので、装置2台の収集スレッドがその全読みで
+            # 直列化する。上限ぶん溜まったときだけ整理する
+            self._since_trim += len(lines)
+            if self._since_trim >= self.LOG_KEEP:
+                self._since_trim = 0
+                self._trim_logs()
 
     def _trim_logs(self) -> None:
         p = self.log_path()
