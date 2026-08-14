@@ -2,6 +2,8 @@
 //
 // 画面の資産は index.html が読み込む順に依存する(前のファイルで定義したものを使う)。
 
+'use strict';
+
 // ============ 手順を編集 ============
 function resolve(path) {
   let arr = flowDoc.body, i = 0;

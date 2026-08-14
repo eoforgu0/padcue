@@ -2,6 +2,8 @@
 //
 // 画面の資産は index.html が読み込む順に依存する(前のファイルで定義したものを使う)。
 
+'use strict';
+
 // ============ 部品を編集 ============
 async function loadPartList() {
   const r = await api('/api/parts');
