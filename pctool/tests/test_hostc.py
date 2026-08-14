@@ -11,23 +11,7 @@ import pytest
 
 from padcue import binfmt, engine
 from padcue.dsl import compile_source
-
-
-def run_c(host_exe, blob: bytes, tmp_path, session_loops=1, max_steps=1_000_000):
-    p = tmp_path / "proc.bin"
-    p.write_bytes(blob)
-    res = subprocess.run(
-        [str(host_exe), str(p), str(session_loops), str(max_steps)],
-        capture_output=True, text=True)
-    assert res.returncode == 0, f"C 実行失敗: {res.stdout} {res.stderr}"
-    lines = res.stdout.strip().splitlines()
-    assert lines[-1] == "DONE"
-    out = []
-    for ln in lines[:-1]:
-        vals = [int(x) for x in ln.split()]
-        assert len(vals) == 12
-        out.append(tuple(vals))
-    return out
+from tests.helpers import run_c
 
 
 def py_emissions(events, total, session_loops=1):

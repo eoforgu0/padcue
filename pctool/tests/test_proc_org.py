@@ -2,7 +2,8 @@
 import json
 
 import pytest
-from test_manage import make
+
+from tests.helpers import make_project as make
 
 # ---------------- 保存と読み込み ----------------
 

@@ -3,31 +3,12 @@
 静止姿勢の既定値、「長さ」指定での自動停止、ゼロ点自動較正よけのゆらぎ、
 定常送りっぱなしの警告、帯グラフへの出方までをまとめて確かめる。
 """
-import json
-import pathlib
-
 import pytest
 
 from padcue import binfmt
 from padcue.dsl import compile_source
 from padcue.flowfmt import compile_flow
-from padcue.project import Project
-
-
-def make(tmp_path, flows: dict, parts: dict | None = None) -> Project:
-    tmp_path = pathlib.Path(tmp_path)
-    tmp_path.mkdir(parents=True, exist_ok=True)
-    p = Project(tmp_path)
-    (tmp_path / "procedures").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "parts").mkdir(parents=True, exist_ok=True)
-    for name, body in flows.items():
-        (tmp_path / "procedures" / f"{name}.flow.json").write_text(
-            json.dumps({"schema": 1, "name": name, "body": body},
-                       ensure_ascii=False), encoding="utf-8")
-    for name, text in (parts or {}).items():
-        (tmp_path / "parts" / f"{name}.csv").write_text(text, encoding="utf-8")
-    return p
-
+from tests.helpers import make_project as make
 
 # ---------------- ジャイロ ----------------
 

@@ -1,9 +1,10 @@
-"""検査で共有する下ごしらえ。
+"""検査で共有する下ごしらえ(fixture)。
 
-fixture はここに置く。pytest の作法(テストモジュール同士を import しない)に
-従うため。以前は test_procon / test_resume / test_wait_branch /
-test_integration の4ファイルが test_hostc から fixture を借りていて、
-gcc ビルドの手順・skip の条件・出力先が一箇所で読めなかった。
+pytest の作法として、検査モジュールは互いに import しない。共有するものは
+**fixture はここ、ただの関数とクラスは helpers.py** に置く。以前は
+test_procon / test_resume / test_wait_branch / test_integration が
+test_hostc から借りていて、gcc ビルドの手順・skip の条件・出力先が
+一箇所で読めなかった。
 """
 from __future__ import annotations
 
@@ -77,7 +78,9 @@ def _build_host(gcc: str, name: str, sources: list[str]) -> Path:
     """
     out = REPO / ".hosttest" / name
     out.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
+    # 警告の厳しさはファーム本体(firmware/main/CMakeLists.txt)に合わせる。
+    # ここだけ緩いと、実機のビルドで初めて止まる
+    cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Wextra", "-Werror",
            "-I", str(CORE / "include")]
     cmd += [str(CORE / s) for s in sources]
     cmd += ["-o", str(out)]
