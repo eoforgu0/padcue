@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import binfmt, engine, registry
-from .client import DeviceClient, DeviceError
+from .client import DeviceClient, DeviceError, is_mock
 from .coupler import Coupler
 from .devicepool import DevicePool
 from .discover import discover
@@ -410,12 +410,12 @@ class _Handler(BaseHTTPRequestHandler):
             # IP 順で先頭に来がち)。mock への切替は明示操作
             # (padcue-練習.bat / device 127.0.0.1)だけで行う
             ordered = sorted(found,
-                             key=lambda f: f.device_id.startswith("mock"))
+                             key=lambda f: is_mock(f.device_id))
             for f in ordered:
                 if want_id:
                     if f.device_id != want_id:
                         continue
-                elif f.device_id.startswith("mock"):
+                elif is_mock(f.device_id):
                     continue
                 if not self._reachable(f.host, f.port):
                     continue
@@ -445,7 +445,7 @@ class _Handler(BaseHTTPRequestHandler):
             cand = [{"host": f.host, "port": f.port, "id": f.device_id,
                      "fw": f.fw}
                     for f in found
-                    if f.device_id and not f.device_id.startswith("mock")
+                    if f.device_id and not is_mock(f.device_id)
                     and f.device_id not in known]
             return {"ok": True, "found": cand}
         if path == "/api/device_add":

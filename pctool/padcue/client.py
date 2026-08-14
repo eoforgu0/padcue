@@ -249,6 +249,17 @@ class DeviceClient:
 # HELLO の個体ID(MAC)を登録簿と突き合わせ、意図しない実機への操作
 # (取り違え誤爆)を構造的に防ぐ(2026-08-04 2台化 P1)。
 
+def is_mock(device_id: str) -> bool:
+    """その個体IDが模擬デバイスのものか。
+
+    実機と模擬を取り違えると「実機で動いた」という偽の成功になる。判定を
+    文字列リテラルのまま散らすと、1箇所でも綴りを外した時点で防波堤が
+    崩れるので、ここに集約する(模擬デバイスは mock で始まる ID を名乗る。
+    mockdevice.MockDevice の既定)。
+    """
+    return device_id.startswith("mock")
+
+
 def connect_verified(dev: dict, timeout: float = 3.0,
                      client_cls=None) -> tuple[DeviceClient, DeviceInfo]:
     """装置台帳のエントリ {id, name, host, port} へ接続し、個体IDを照合する。
@@ -267,7 +278,7 @@ def connect_verified(dev: dict, timeout: float = 3.0,
         c.close()
         raise
     want = dev.get("id", "")
-    if not want and info.device_id.startswith("mock"):
+    if not want and is_mock(info.device_id):
         # 模擬デバイスは、IDを控えていない(=練習に向けた)ときだけ許す。
         # 学習もしない。控えがあるのに相手が mock なら下で拒否する —
         # 黙って mock を操作して「実機で動いた」と誤認する偽成功の方が、
@@ -276,7 +287,7 @@ def connect_verified(dev: dict, timeout: float = 3.0,
     if want and info.device_id != want:
         c.close()
         name = dev.get("name", "?")
-        if info.device_id.startswith("mock"):
+        if is_mock(info.device_id):
             raise DeviceError(
                 "DEVICE_MISMATCH",
                 f"{dev.get('host')} にいるのは練習用の模擬デバイスです"

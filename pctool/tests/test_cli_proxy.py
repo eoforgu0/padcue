@@ -62,6 +62,32 @@ def _args(tmp_path, **kw):
     return SimpleNamespace(**base)
 
 
+def _labels(out: str) -> list[str]:
+    """状態表示の行から、コロンの前のラベルだけを取り出す。"""
+    return [ln.split(":")[0].strip() for ln in out.splitlines()
+            if ":" in ln and not ln.startswith("(")]
+
+
+def test_status_shows_the_same_rows_through_both_paths(env, capsys):
+    """同じ status が、画面経由でも直結でも同じ項目を出すこと。
+
+    以前は経路ごとに表示を書き分けていたため、直結のときだけ出る行が3つ
+    あった(記録落ち・送出失敗・ロールバック)。操作画面を開いているかどうかで
+    計器の見え方が変わるのは、それ自体が不具合。
+    """
+    _proj, _dev, tmp = env
+    assert cli.cmd_status(_args(tmp)) == 0
+    via_gui = _labels(capsys.readouterr().out)
+
+    # 稼働マーカーを外して直結にする
+    (tmp / "gui_server.json").unlink()
+    assert cli.cmd_status(_args(tmp)) == 0
+    direct = _labels(capsys.readouterr().out)
+
+    assert via_gui == direct, f"\n画面経由: {via_gui}\n直結    : {direct}"
+    assert "ファーム" in via_gui and "状態" in via_gui
+
+
 def test_status_and_run_go_through_gui(env, capsys):
     proj, _dev, tmp = env
     assert cli.cmd_status(_args(tmp)) == 0

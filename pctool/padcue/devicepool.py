@@ -17,7 +17,7 @@ from __future__ import annotations
 import threading
 import time
 
-from .client import DeviceClient, DeviceError, connect_verified
+from .client import DeviceClient, DeviceError, connect_verified, is_mock
 
 
 def host_mac(a, b) -> str:
@@ -84,7 +84,7 @@ class DeviceLink:
     def _learn(self, info) -> None:
         """初回接続で個体IDを台帳へ控える(mock は控えない)。"""
         if self.cfg.get("id") or not info.device_id \
-                or info.device_id.startswith("mock"):
+                or is_mock(info.device_id):
             return
         cfg = self.project.load_config()
         for i, d in enumerate(cfg.get("devices", [])):

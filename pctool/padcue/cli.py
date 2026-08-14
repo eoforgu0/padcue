@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 from . import registry
-from .client import DeviceClient, DeviceError, connect_verified
+from .client import DeviceClient, DeviceError, connect_verified, is_mock
 from .discover import discover
 from .flowfmt import FlowError
 from .project import Project
@@ -117,7 +117,7 @@ def _learn_id(p, cfg: dict, dev: dict, info) -> None:
     模擬デバイス(mock〜)は覚えない。練習で mock に繋いだだけで台帳が
     mock のIDで埋まると、実機へ戻れなくなるため。
     """
-    if info.device_id.startswith("mock"):
+    if is_mock(info.device_id):
         return
     if not dev.get("id") and info.device_id:
         p.update_device(cfg, cfg["devices"].index(dev), id=info.device_id)
@@ -179,7 +179,7 @@ def _client(args) -> DeviceClient:
     want_id = dev.get("id", "")
     candidates = [f for f in found
                   if (f.device_id == want_id if want_id
-                      else not f.device_id.startswith("mock"))]
+                      else not is_mock(f.device_id))]
     connected = []
     for target in candidates:
         probe = dict(dev, host=target.host, port=target.port)
@@ -376,6 +376,54 @@ def _print_pairing(st: dict) -> None:
         print("ペアリング : 要求なし(本体からまだ届いていません)")
 
 
+def _print_status(d: dict) -> None:
+    """状態を表示する。画面経由でも直結でも、同じ項目を同じ順で出す。
+
+    以前は経路ごとに書き分けていたため、直結のときだけ出る行が3つあった
+    (記録落ち・送出失敗・ロールバック)。同じ `padcue status` の出力が、
+    操作画面を開いているかどうかで変わるのは、計器として壊れている。
+
+    ラベルはコロンの前を11セルで揃える。印(⚠)は値の側に置く — 端末や
+    フォントによって幅が変わる文字を、桁を担う位置に置かないため。
+    """
+    if is_mock(d.get("id", "")):
+        print("⚠ 練習用の模擬デバイスに接続中です(実機は動きません)")
+    print(f"ファーム   : {d.get('fw')} ({d.get('partition')})")
+    print(f"転送方式   : {d.get('mode')} / bInterval={d.get('binterval')}")
+    print(f"状態       : {d.get('state')}")
+    print(f"USB        : {'接続' if d.get('usb_mounted') else '未接続'}"
+          f" / 到達段階 0x{d.get('breadcrumb', 0):03x}")
+    if "imu_enabled" in d:
+        print("ジャイロ   : "
+              + ("本体が有効化済み" if d["imu_enabled"]
+                 else "本体からの有効化なし(値を送っても読まれません)"))
+    _print_pairing(d)
+    if d.get("running"):
+        print(f"実行中     : {d.get('proc', '')} "
+              f"{d.get('session_loop')} 周目 / "
+              f"{d.get('frames_elapsed')} フレーム")
+    # ずれの実測は 0 でも出す。出ていないのが「遅れていない」のか
+    # 「測っていない」のか分からないと、計器として意味を成さない
+    if "max_late_us" in d:
+        line = f"ずれ最大   : フレームの刻み {d['max_late_us']}µs"
+        if "deliver_max_us" in d:
+            line += f" / 読み取り待ち {d['deliver_max_us']}µs"
+        over = d.get("late_events", 0) + d.get("deliver_late", 0)
+        if over:
+            line += f"  ⚠ 超過 {over} 回"
+        print(line)
+    if d.get("log_dropped"):
+        print(f"記録落ち   : ⚠ {d['log_dropped']} 件"
+              "(この間の記録は残っていません)")
+    lost_reply = (d.get("dropped_replies", 0) + d.get("failed_replies", 0)
+                  + d.get("bad_reports", 0))
+    if lost_reply or d.get("dropped_inputs"):
+        print(f"送出失敗   : ⚠ 応答 {lost_reply} 件 "
+              f"/ 通常入力 {d.get('dropped_inputs', 0)} 件")
+    if d.get("rolled_back"):
+        print("更新       : ⚠ 前回の更新はロールバックされました")
+
+
 def cmd_status(args) -> int:
     base = _gui_base(_project(args))
     if base:
@@ -387,65 +435,18 @@ def cmd_status(args) -> int:
         if d.get("error"):
             print(f"未接続     : {d['error']}")
             return 1
-        print(f"ファーム   : {d.get('fw')} ({d.get('partition')})")
-        print(f"転送方式   : {d.get('mode')} / bInterval={d.get('binterval')}")
-        print(f"状態       : {d.get('state')}")
-        print(f"USB        : {'接続' if d.get('usb_mounted') else '未接続'}"
-              f" / 到達段階 0x{d.get('breadcrumb', 0):03x}")
-        if "imu_enabled" in d:
-            print("ジャイロ   : "
-                  + ("本体が有効化済み" if d["imu_enabled"]
-                     else "本体からの有効化なし(値を送っても読まれません)"))
-        _print_pairing(d)
-        if d.get("running"):
-            print(f"実行中     : {d.get('proc', '')} "
-                  f"{d.get('session_loop')} 周目 / "
-                  f"{d.get('frames_elapsed')} フレーム")
-        if "max_late_us" in d:
-            v = f"フレームの刻み {d['max_late_us']}µs"
-            if "deliver_max_us" in d:
-                v += f" / 読み取り待ち {d['deliver_max_us']}µs"
-            print(f"ずれ最大   : {v}")
+        _print_status(d)
         return 0
     with _client(args) as c:
         info = c.hello()
-        st = c.status()
-        if info.device_id.startswith("mock"):
-            print("⚠ 練習用の模擬デバイスに接続中です(実機は動きません)")
-        print(f"ファーム   : {info.fw_version} ({info.partition})")
-        print(f"転送方式   : {info.transport_mode} / bInterval={info.binterval}")
-        print(f"状態       : {st.get('state')}")
-        print(f"USB        : {'接続' if st.get('usb_mounted') else '未接続'}"
-              f" / 到達段階 0x{st.get('breadcrumb', 0):03x}")
-        if "imu_enabled" in st:
-            print("ジャイロ   : "
-                  + ("本体が有効化済み" if st["imu_enabled"]
-                     else "本体からの有効化なし(値を送っても読まれません)"))
-        _print_pairing(st)
-        if st.get("running"):
-            print(f"実行中     : {st.get('proc', '')} "
-                  f"{st.get('session_loop')} 周目 / "
-                  f"{st.get('frames_elapsed')} フレーム")
-        # ずれの実測は 0 でも出す。出ていないのが「遅れていない」のか
-        # 「測っていない」のか分からないと、計器として意味を成さない
-        if "max_late_us" in st:
-            line = f"ずれ最大   : フレームの刻み {st['max_late_us']}µs"
-            if "deliver_max_us" in st:
-                line += f" / 読み取り待ち {st['deliver_max_us']}µs"
-            over = st.get("late_events", 0) + st.get("deliver_late", 0)
-            if over:
-                line += f"  ⚠ 超過 {over} 回"
-            print(line)
-        if st.get("log_dropped"):
-            print(f"⚠ 記録落ち : {st['log_dropped']} 件"
-                  "(この間の記録は残っていません)")
-        lost_reply = (st.get("dropped_replies", 0) + st.get("failed_replies", 0)
-                      + st.get("bad_reports", 0))
-        if lost_reply or st.get("dropped_inputs"):
-            print(f"⚠ 送出失敗 : 応答 {lost_reply} 件 "
-                  f"/ 通常入力 {st.get('dropped_inputs', 0)} 件")
-        if info.rolled_back:
-            print("⚠ 前回の更新はロールバックされました")
+        # 直結で取った情報を、画面経由(/api/state の装置エントリ)と同じ
+        # 形に揃えてから渡す。表示側が経路を意識しなくて済む
+        _print_status({**c.status(),
+                       "fw": info.fw_version, "partition": info.partition,
+                       "mode": info.transport_mode,
+                       "binterval": info.binterval,
+                       "rolled_back": info.rolled_back,
+                       "id": info.device_id})
     return 0
 
 
@@ -683,7 +684,7 @@ def cmd_device(args) -> int:
         probe = DeviceClient(addr, int(cfg.get("port", 5555)), timeout=1.5)
         info = probe.connect()
         probe.close()
-        if info.device_id.startswith("mock") and dev.get("id"):
+        if is_mock(info.device_id) and dev.get("id"):
             fields["id"] = ""
             print("相手は練習用の模擬デバイスです。IDの控えを解除して向けます"
                   "(実機へ戻るときは「探す」か device auto で学習し直します)")
