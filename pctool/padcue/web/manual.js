@@ -11,7 +11,7 @@
 // 【重要】ビット割り当ては表示順(BUTTONS)ではなく、送信データの
 // ビット順(binfmt.BUTTONS)に一致させること。以前は表示順から作っていた
 // ため、DU が PLUS に、HOME が DU に…とビット 8 以降の全ボタンが
-// 別のボタンとして送られていた(tests/test_manage.py が両者の一致を検査)
+// 別のボタンとして送られていた(tests/test_web_assets.py が一致を検査)
 const BTN_BITS = ['A','B','X','Y','L','R','ZL','ZR',
                   'PLUS','MINUS','HOME','CAPTURE','LS','RS',
                   'DU','DD','DL','DR'];

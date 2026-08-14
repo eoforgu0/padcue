@@ -294,10 +294,11 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 > 1. **3-1 の 1(有線通信 ON)を再確認** ← ほぼこれです
 > 2. Joy-Con を全部切ったか確認
 > 3. USB の問い合わせ間隔を実在のコントローラーと同じにして再試行します:
->    ```
->    idf.py menuconfig      # pademu → bInterval を 8 にする
+>    ```powershell
+>    idf.py menuconfig      # pademu -> bInterval を 8 にする
 >    idf.py build
->    cd ..\pctool && python -m padcue ota
+>    cd ..\pctool
+>    python -m padcue ota
 >    ```
 >    これで動けば原因は「1ms 間隔が受理されない」ことです。
 >    精度は少し落ちますが動きます。
@@ -309,7 +310,7 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 > 単純な有線コントローラー(ホリパッド相当)として名乗る方式に切り替えます。
 > **無線で切り替えられます。書き込み直しは不要です。**
 >
-> ```
+> ```powershell
 > python -m padcue mode hidpad
 > ```
 > 切り替えたら USB を一度抜き挿しします。戻すときは `python -m padcue mode procon`。

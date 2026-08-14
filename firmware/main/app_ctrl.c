@@ -58,7 +58,6 @@ static const char *TAG = "ctrl";
 static uint8_t *s_rx;      // 受信パケット組み立て用
 static uint8_t *s_tx;      // 送信パケット組み立て用
 
-// ---- CRC32(zlib 互換)----
 
 static int send_all(int sock, const uint8_t *p, size_t n) {
     size_t sent = 0;

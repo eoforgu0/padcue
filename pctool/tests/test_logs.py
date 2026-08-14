@@ -130,10 +130,16 @@ def test_log_kinds_are_known_to_the_gui():
     m = re.search(r"const LOG_JA = \{(.*?)\n\};", js, re.S)
     assert m, "LOG_JA が見つかりません"
     ja = set(re.findall(r"^\s{2}([A-Z_]+):", m.group(1), re.M))
-    # firmware/main/app_log.c の KIND_NAMES と一致させる
-    fw = {"BOOT", "RUN_START", "RUN_DONE", "RUN_ABORT", "ENGINE_FAULT",
-          "LATE_EVENT", "USB_MOUNT", "USB_UMOUNT", "USB_SUSPEND",
-          "REPLY_DROPPED", "WIFI_LOST", "WIFI_UP", "STATE", "OTA"}
+    # 種別はファームウェアが増やす。ここに書き写すと、増えた種別が
+    # 「書き写した表にも無い」ので黙って検査を素通りする(実際 TX_LATE /
+    # TX_LOST / AWAIT_TIMEOUT / HOST_INFO の4種がそうなっていた)。
+    # 正本(app_log.c の KIND_NAMES)から読む
+    from tests.conftest import REPO
+    src = (REPO / "firmware" / "main" / "app_log.c").read_text(encoding="utf-8")
+    body = re.search(r"KIND_NAMES\[APP_LOG_KIND_MAX\] = \{(.*?)\};", src, re.S)
+    assert body, "app_log.c の KIND_NAMES が見つかりません"
+    fw = set(re.findall(r'"([A-Z_]+)"', body.group(1)))
+    assert len(fw) >= 18, f"種別が読み取れていません: {sorted(fw)}"
     assert fw <= ja, f"日本語化されていない種別: {sorted(fw - ja)}"
 
 

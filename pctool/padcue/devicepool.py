@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
 
 from . import proto
 from .client import DeviceClient, DeviceError, connect_verified, is_mock
@@ -52,6 +53,8 @@ class DeviceLink:
         self.listing: dict = {}          # 手順名 -> ハッシュ(直近の LIST)
         self.error: str = ""             # 直近の収集エラー(空 = 健康)
         self.error_exc: Exception | None = None   # 同・例外そのもの(表示整形用)
+        # 直近の想定外の例外。同じ理由の traceback を毎秒出さないための控え
+        self._last_unexpected: Exception | None = None
         self.host_info: str = ""         # つながっている本体の識別子(MAC 12桁hex)
         self.at: float = 0.0             # キャッシュ時刻(UNIX 秒)
         self.run_started_at: float = 0.0  # 実行中ならその開始時刻(0 = 実行なし)
@@ -202,6 +205,16 @@ class DeviceLink:
             except (DeviceError, ConnectionError, OSError) as e:
                 self.error = str(e) or type(e).__name__
                 self.error_exc = e
+            except Exception as e:   # noqa: BLE001
+                # 想定外の例外(壊れた応答での KeyError など)でこの輪が
+                # 終わると、収集だけが黙って止まる。画面は最後に取れた値を
+                # 出し続け、error も空のままなので誰も気づけない。
+                # 理由を控えて輪は回し続ける(notify.py・coupler.py と同じ扱い)
+                self.error = f"収集で想定外の異常: {type(e).__name__}: {e}"
+                self.error_exc = e
+                if type(e) is not type(self._last_unexpected):
+                    traceback.print_exc()
+                self._last_unexpected = e
             self.at = time.time()
             # 1秒周期(処理時間ぶんは差し引く)。停止指示には早めに気づく
             wait = max(0.1, self.POLL_S - (time.monotonic() - t0))

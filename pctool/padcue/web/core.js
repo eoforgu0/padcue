@@ -36,7 +36,7 @@ function visibleProcs() { return orderedProcs().filter(p => !p.hidden); }
 
 // ボタンの一覧は、画面に並べる組(BTN_GROUPS)を正本にして、そこから作る。
 // 一覧と組を別々に書くと、ボタンを足したときに片方だけ直して食い違う
-// (対応は tests/test_manage.py が binfmt.BUTTONS と突き合わせて検査)
+// (対応は tests/test_web_assets.py が binfmt.BUTTONS と突き合わせて検査)
 const BTN_GROUPS = [['A','B','X','Y'], ['L','R','ZL','ZR'],
                     ['DU','DD','DL','DR'],
                     ['PLUS','MINUS','HOME','CAPTURE','LS','RS']];
