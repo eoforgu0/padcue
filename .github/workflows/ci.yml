@@ -46,3 +46,18 @@ jobs:
           esp_idf_version: v5.5
           target: esp32s3
           path: firmware
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # 割り込み経路の関数が1つでもフラッシュに残ると、フラッシュ操作と
+      # 重なった瞬間だけ落ちる(2026-08-02 に実行の3%がこれで落ちた)。
+      # ビルド結果(map)から配置を確かめる。手元では map が無ければ skip
+      # されるので、CI では要求フラグを立てる
+      - name: 割り込み経路が IRAM に載っていることを確かめる
+        env:
+          PADCUE_REQUIRE_FIRMWARE: "1"
+        run: |
+          pip install "pytest>=7.0"
+          python -m pytest -q pctool/tests/test_firmware_iram.py
