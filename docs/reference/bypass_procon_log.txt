@@ -6,7 +6,9 @@
 # 用途: docs/design/procon-protocol.md の「実測」の根拠。初期化シーケンス
 #       の順序と、各サブコマンドへの応答バイト列を、この記録から起こした。
 #       pctool/padcue/switchsim.py はこの列を再生して実装を検証する。
-# 注意: 本体とコントローラーの Bluetooth MAC が含まれる。
+# 断り: 本体とコントローラーの Bluetooth MAC、および鍵とみられる
+#       末尾7バイトは、文書用に予約された値(00-00-5E)とゼロへ
+#       置き換えてある。並び・長さ・それ以外のバイトは実測のまま。
 
 pi@raspberrypi:~ $ sudo python3 bypass_procon.py | grep -v '<<< 30'
 >>> 0000
