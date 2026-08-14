@@ -140,8 +140,8 @@ def test_c_engine_matches_on_resume_before_loop(proj, host_exe, tmp_path):
         [str(host_exe), str(p), "2", "100000", str(pt["index"]), str(pt["base"])],
         capture_output=True, text=True)
     assert res.returncode == 0, res.stdout + res.stderr
-    got = [(int(l.split()[0]), int(l.split()[1]))
-           for l in res.stdout.strip().splitlines()[:-1]]
+    got = [(int(line.split()[0]), int(line.split()[1]))
+           for line in res.stdout.strip().splitlines()[:-1]]
     assert got == expected
 
 
@@ -161,8 +161,8 @@ def test_c_engine_matches_on_resume(proj, host_exe, tmp_path):
          str(pt["index"]), str(pt["base"])],
         capture_output=True, text=True)
     assert res.returncode == 0, res.stdout + res.stderr
-    got = [(int(l.split()[0]), int(l.split()[1]))
-           for l in res.stdout.strip().splitlines()[:-1]]
+    got = [(int(line.split()[0]), int(line.split()[1]))
+           for line in res.stdout.strip().splitlines()[:-1]]
     assert got == expected
 
 

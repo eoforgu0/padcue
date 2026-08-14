@@ -56,14 +56,14 @@ def test_clear_error(env, capsys):
 
 
 def test_bad_mode_is_rejected(env):
-    root, dev = env
+    root, _dev = env
     with pytest.raises(SystemExit):
         run(root, "mode", "でたらめ")
 
 
 def test_status_shows_pairing_ok(env, capsys):
     """登録済み(既知経路 0x04)なら受理済みと出ること。"""
-    root, dev = env
+    root, _dev = env
     assert run(root, "status") == 0
     out = capsys.readouterr().out
     assert "ペアリング" in out

@@ -77,7 +77,7 @@ def handshake_sequence(mac: bytes) -> list[Expectation]:
             f"0x10 SPI {addr:#06x}+{size}",
             _sub(n, 0x10, _u32le(addr) + bytes([size])),
             ack=0x90, subcmd=0x10,
-            checks=[(15, _u32le(addr) + bytes([size]))] + list(checks))
+            checks=[(15, _u32le(addr) + bytes([size])), *list(checks)])
 
     def sub(name: str, subcmd: int, args: bytes = b"", ack: int = 0x80,
             checks=()) -> Expectation:

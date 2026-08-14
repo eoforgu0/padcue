@@ -386,9 +386,9 @@ class _Handler(BaseHTTPRequestHandler):
             name = body.get("name") or ""
             # 実行中の装置を外すと、実機は動き続けるのに止める手段が画面から
             # 消える。先に停止してもらう(未接続・異常の装置は外せる)
-            for l in self._pool().links():
-                if l.cfg.get("name") == name and not l.error \
-                        and l.status.get("state") in ("RUNNING", "AWAITING"):
+            for link in self._pool().links():
+                if link.cfg.get("name") == name and not link.error \
+                        and link.status.get("state") in ("RUNNING", "AWAITING"):
                     return {"error": f"{name} は実行中です。"
                                      "先に停止してから外してください"}
             ok, msg = registry.remove_device(self.project, name)
@@ -528,7 +528,7 @@ class _Handler(BaseHTTPRequestHandler):
             mode = body.get("mode", "graceful")
             if mode == "immediate":
                 self._watcher().note_manual_stop(
-                    [l.cfg.get("name", "") for l in self._coupler().members()])
+                    [link.cfg.get("name", "") for link in self._coupler().members()])
             return self._coupler().stop_both(mode)
         if path == "/api/select_both":
             return self._coupler().select_both(int(body.get("arm", 0)))
@@ -724,31 +724,31 @@ class _Handler(BaseHTTPRequestHandler):
         links = self._pool().links()
         self._wait_first_collect(links)
         devices = []
-        for l in links:
-            d = {"name": l.cfg.get("name", ""), "id": l.cfg.get("id", ""),
-                 "host": l.cfg.get("host", ""),
-                 "port": int(l.cfg.get("port", 5555)), "at": l.at}
-            if l.host_info:
+        for link in links:
+            d = {"name": link.cfg.get("name", ""), "id": link.cfg.get("id", ""),
+                 "host": link.cfg.get("host", ""),
+                 "port": int(link.cfg.get("port", 5555)), "at": link.at}
+            if link.host_info:
                 # つながっている本体(Switch)の識別子。名前は台帳(consoles)
                 # で付け替えられる
-                d["host_info"] = l.host_info
-            if l.error:
-                d["error"] = _why(l.error_exc, d["host"]) if l.error_exc                     else l.error
-            elif l.info is not None:
+                d["host_info"] = link.host_info
+            if link.error:
+                d["error"] = _why(link.error_exc, d["host"]) if link.error_exc                     else link.error
+            elif link.info is not None:
                 d.update({
-                    "fw": l.info.fw_version, "mode": l.info.transport_mode,
-                    "binterval": l.info.binterval,
-                    "partition": l.info.partition,
-                    "rolled_back": l.info.rolled_back,
-                    "frame_period_ns": l.info.frame_period_ns,
+                    "fw": link.info.fw_version, "mode": link.info.transport_mode,
+                    "binterval": link.info.binterval,
+                    "partition": link.info.partition,
+                    "rolled_back": link.info.rolled_back,
+                    "frame_period_ns": link.info.frame_period_ns,
                     # 手順名→ハッシュ(この装置に転送済みの版)。実行中の
                     # 手順が転送後に編集された警告(nowplaying)の判定に使う
-                    "listing": dict(l.listing),
-                    **l.status,
+                    "listing": dict(link.listing),
+                    **link.status,
                 })
                 # 実行中なら、その実行を始めた時刻(画面の「終了予定」の起点)
-                if l.run_started_at:
-                    d["run_started_at"] = l.run_started_at
+                if link.run_started_at:
+                    d["run_started_at"] = link.run_started_at
                 if d.get("awaiting"):
                     r, _e = self.project.build_safe(d.get("proc") or "")
                     if r and r.wait_branch_arms:
@@ -789,7 +789,7 @@ class _Handler(BaseHTTPRequestHandler):
         (従来はこの経路が同期接続だったので起きなかった)。
         """
         end = time.monotonic() + timeout
-        while (any(l.at == 0 for l in links)
+        while (any(link.at == 0 for link in links)
                and time.monotonic() < end):
             time.sleep(0.05)
 
@@ -3327,9 +3327,9 @@ function renderTimelineInto(box, tl) {
   // 自分で付けたラベル(区切りの名前)を帯の上に出す。どこが何の区間か分かる
   if ((tl.labels || []).length) {
     const marks = el('div', 'marks');
-    for (const l of tl.labels) {
-      const m = el('span', null, l.text);
-      const pct = Math.min(100, 100 * l.frame / total);
+    for (const lb of tl.labels) {
+      const m = el('span', null, lb.text);
+      const pct = Math.min(100, 100 * lb.frame / total);
       m.style.left = pct + '%';
       // 右端付近は文字を左向きに(85% は「短いラベル名なら収まる」目安。
       // 文字幅の実測はここでは DOM 未接続でできない)
@@ -4921,9 +4921,9 @@ function renderBlocks(arr, prefix, parent) {
   return box;
 }
 function field(label, input) {
-  const l = el('label', 'f');
-  l.append(el('span', null, label), input);
-  return l;
+  const wrap = el('label', 'f');
+  wrap.append(el('span', null, label), input);
+  return wrap;
 }
 function renderProps() {
   const box = document.getElementById('props');
@@ -5122,8 +5122,8 @@ function renderProps() {
         const labels = t.value.split(',').map(s => s.trim()).filter(Boolean);
         const old = n.arms || {};
         const next = {};
-        labels.slice(0, 4).forEach((l, i) => {
-          next[l] = old[l] || Object.values(old)[i] || [];
+        labels.slice(0, 4).forEach((name, i) => {
+          next[name] = old[name] || Object.values(old)[i] || [];
         });
         n.arms = next;
       });
@@ -5135,8 +5135,8 @@ function renderProps() {
       // 上限に達したときの動き(0=中断、1..n=その選択肢へ)。放置運転の保険
       const ot = document.createElement('select');
       ot.append(new Option('中断する', '0'));
-      Object.keys(n.arms || {}).forEach((l, i) =>
-        ot.append(new Option(`「${l}」へ自動で進む`, String(i + 1))));
+      Object.keys(n.arms || {}).forEach((name, i) =>
+        ot.append(new Option(`「${name}」へ自動で進む`, String(i + 1))));
       ot.value = String(n.on_timeout || 0);
       if (![...ot.options].some(o => o.value === ot.value)) ot.value = '0';
       bindChange(ot, () => { n.on_timeout = parseInt(ot.value, 10) || 0; });

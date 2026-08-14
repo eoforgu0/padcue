@@ -116,7 +116,7 @@ def wait_ready(base):
 
 
 def test_couple_run_starts_both_and_measures_skew(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     r = post(base, "/api/couple_run", {"plan": plan(loops=0, name="サンプル")})
     assert r.get("ok"), r
@@ -133,7 +133,7 @@ def test_couple_run_starts_both_and_measures_skew(env):
 
 
 def test_couple_run_refuses_when_one_busy(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     assert post(base, "/api/push", {"name": "サンプル", "dev": "2P"}).get("ok")
     assert post(base, "/api/run", {"name": "サンプル", "loops": 100000,
@@ -145,7 +145,7 @@ def test_couple_run_refuses_when_one_busy(env):
 
 
 def test_select_both_requires_both_parked(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     # 1P だけ駐機させる → 断られる
     assert post(base, "/api/push", {"name": "合流", "dev": "1P"}).get("ok")
@@ -167,7 +167,7 @@ def test_select_both_requires_both_parked(env):
 
 
 def test_auto_join_advances_both_without_human(env):
-    proj, d1, d2, base = env
+    proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     r = post(base, "/api/couple_run", {"plan": plan(loops=2)})
@@ -183,7 +183,7 @@ def test_auto_join_advances_both_without_human(env):
 
 
 def test_manual_stop_does_not_couple_and_solo_continues(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     r = post(base, "/api/couple_run", {"plan": plan(loops=100000)})
@@ -213,7 +213,7 @@ def test_manual_restart_solo_not_auto_joined(env):
     人為停止後にソロ再開した装置の駐機まで『2台そろった』と誤認し、独立の
     ソロ実行へ勝手に SELECT を送ってしまう。
     """
-    proj, d1, d2, base = env
+    proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     # 1P は毎周駐機する連結実行を続ける(相方を待つ状況を作る)
@@ -251,7 +251,7 @@ def test_transient_error_does_not_end_run(env):
     以前は busy 判定に猶予がなく、1回の失敗で「相方は完走した」と誤認して
     駐機側を止めていた(2026-08-06 レビューで確定した実バグ)。
     """
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     assert post(base, "/api/couple_run", {"plan": plan(loops=0)}).get("ok")
@@ -280,7 +280,7 @@ def test_solo_progress_ignores_oneshot(env):
     には合流が無い。保留すると解除経路(両方へ同時に選ぶ = 両方の駐機が必要)
     も無く、恒久停止になる(2026-08-06 レビュー)。
     """
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0,
                                "oneshot_manual": True})
@@ -299,7 +299,7 @@ def test_solo_progress_ignores_oneshot(env):
 
 
 def test_anomaly_stops_partner_and_records_resume(env):
-    proj, d1, d2, base = env
+    proj, _d1, d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     r = post(base, "/api/couple_run", {"plan": plan(loops=50)})
@@ -342,7 +342,7 @@ def test_anomaly_stops_partner_and_records_resume(env):
 
 
 def test_formations(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     assert post(base, "/api/couple_run",

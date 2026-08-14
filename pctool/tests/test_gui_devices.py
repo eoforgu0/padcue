@@ -73,7 +73,7 @@ def wait_until(fn, timeout=8.0):
 
 def test_scan_hides_mocks_and_registered(env):
     """候補 = 台帳にいない実機だけ。mock と登録済みは何台いても出ない。"""
-    proj, d1, base = env
+    _proj, _d1, base = env
     d2 = MockDevice(speed=2000.0)          # id は既定の mock00000000
     d2.start()
     try:
@@ -88,7 +88,7 @@ def test_scan_hides_mocks_and_registered(env):
 
 
 def test_add_rename_remove_roundtrip(env):
-    proj, d1, base = env
+    _proj, _d1, base = env
     d2 = MockDevice(speed=2000.0, device_id="bbbb00000002")
     d2.start()
     try:
@@ -125,7 +125,7 @@ def test_add_rename_remove_roundtrip(env):
 
 def test_remove_refuses_while_running(env):
     """実行中の装置を外すと止める手段が画面から消えるので拒否する。"""
-    proj, d1, base = env
+    _proj, _d1, base = env
     assert post(base, "/api/push", {"name": "サンプル"}).get("ok")
     assert post(base, "/api/run",
                 {"name": "サンプル", "loops": 100000}).get("ok")
@@ -163,7 +163,7 @@ def test_device_endpoint_targets_named_device(env):
 
 def test_logs_clear_per_device(env):
     """絞り込み中の「ログを消す」= その装置の行だけ消す(dev=個体ID)。"""
-    proj, d1, base = env
+    proj, _d1, base = env
     proj.append_logs([{"kind": "BOOT"}], dev="aaaa00000001")
     proj.append_logs([{"kind": "BOOT"}], dev="bbbb00000002")
     assert post(base, "/api/logs/clear",
@@ -183,7 +183,7 @@ def test_host_info_shown_and_console_named(env):
     a=0x0100005e b=0x0053013c から取れるのは 00005e005301 で、先頭の
     フェーズ番号 01 と末尾の 3c は入らない(2026-08-12)。
     """
-    proj, d1, base = env
+    proj, _d1, base = env
     proj.append_logs([{"kind": "HOST_INFO",
                        "a": 16777310, "b": 5439804}],
                      dev="aaaa00000001")

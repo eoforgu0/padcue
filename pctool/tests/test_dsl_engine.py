@@ -456,7 +456,7 @@ end
 """
     c = compile_source(src)
     blob = binfmt.encode(c.name, c.events, c.total_frames)
-    name, events, total = binfmt.decode(blob)
+    _name, events, total = binfmt.decode(blob)
     assert engine.run(events, total, 2) == engine.run(c.events, c.total_frames, 2)
 
 

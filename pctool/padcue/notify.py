@@ -118,15 +118,15 @@ class RunWatcher:
         if c.get("on") and len(links) >= 2:
             groups = {_PAIR: links[:2]}
         else:
-            groups = {l.cfg.get("name", ""): [l] for l in links}
+            groups = {link.cfg.get("name", ""): [link] for link in links}
         run = c.get("run") or {}
         # 自動合流が効いているあいだの駐機は勝手に進むので「操作待ち」ではない
         auto_live = bool(run.get("active") and c.get("auto_join")
                          and not c.get("oneshot_manual"))
         for key, members in groups.items():
-            busy = any(_busy(l) for l in members)
-            waiting = (not auto_live) and any(_awaiting(l) for l in members)
-            bad = any((l.status or {}).get("state") == "ERROR" for l in members)
+            busy = any(_busy(link) for link in members)
+            waiting = (not auto_live) and any(_awaiting(link) for link in members)
+            bad = any((link.status or {}).get("state") == "ERROR" for link in members)
             prev = self._prev.get(key)
             self._prev[key] = {"busy": busy, "waiting": waiting}
             if prev is None:
@@ -146,7 +146,7 @@ class RunWatcher:
     # ---- 「今すぐ止める」の印 ----
 
     def _names(self, members) -> list[str]:
-        return [l.cfg.get("name", "") for l in members]
+        return [link.cfg.get("name", "") for link in members]
 
     def _take_manual(self, members) -> bool:
         """この停止が人の「今すぐ止める」によるものなら True(印を使い切る)。"""

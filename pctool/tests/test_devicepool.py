@@ -78,7 +78,7 @@ def wait_until(fn, timeout=8.0):
 
 
 def test_state_lists_both_devices(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     st = wait_until(lambda: (lambda s: s if len(s.get("devices", [])) == 2
                              and all("fw" in d for d in s["devices"]) else None
                              )(get(base, "/api/state")))
@@ -93,7 +93,7 @@ def test_state_lists_both_devices(env):
 
 def test_dev_param_targets_the_named_device(env):
     """装置系 API の dev=名前 が、その装置だけに効くこと。"""
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     assert post(base, "/api/push", {"name": "サンプル", "dev": "2P"}).get("ok")
     assert post(base, "/api/run",
                 {"name": "サンプル", "loops": 100000, "dev": "2P"}).get("ok")
@@ -112,7 +112,7 @@ def test_one_dead_device_does_not_block_the_other(env):
     タイムアウト(3〜6秒)が毎秒の状態取得ごとに発生して、健康な装置の
     停止ボタンまで数秒待たされた。
     """
-    proj, d1, d2, base = env
+    _proj, _d1, d2, base = env
     wait_until(lambda: len(get(base, "/api/state").get("devices", [])) == 2
                and all("fw" in d for d in get(base, "/api/state")["devices"]))
     d2.stop()                            # 2P を無応答にする
@@ -132,6 +132,6 @@ def test_one_dead_device_does_not_block_the_other(env):
 
 
 def test_unknown_dev_name_is_a_clear_error(env):
-    proj, d1, d2, base = env
+    _proj, _d1, _d2, base = env
     r = post(base, "/api/stop", {"mode": "immediate", "dev": "3P"})
     assert "登録されていません" in str(r.get("error", "")), r

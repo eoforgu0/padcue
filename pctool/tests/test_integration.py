@@ -71,7 +71,7 @@ def test_full_chain_from_flow_to_usb_reports(project, host_exe, procon_exe, tmp_
     assert r.warnings == []
     # 構え10 + (4+12)×3 + 解除後30 = 88 フレーム
     assert r.total_frames == 88
-    assert [l["text"] for l in r.labels] == ["構え", "連続攻撃", "解除"]
+    assert [lb["text"] for lb in r.labels] == ["構え", "連続攻撃", "解除"]
 
     # --- 2. 転送(模擬デバイス経由。実機と同じプロトコル) ---
     with MockDevice() as dev, DeviceClient("127.0.0.1", dev.port) as cli:

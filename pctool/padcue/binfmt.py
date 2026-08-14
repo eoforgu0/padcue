@@ -19,7 +19,6 @@ from __future__ import annotations
 import struct
 import zlib
 from dataclasses import dataclass
-from typing import Union
 
 MAGIC = b"PDT0"
 SCHEMA_VERSION = 2  # v2: スティック12bit生値化+モーション(i16×6)追加、レコード32B
@@ -130,7 +129,7 @@ class End:
     pass
 
 
-Event = Union[State, SetCnt, Djnz, Jmp, Await, End]
+Event = State | SetCnt | Djnz | Jmp | Await | End
 
 
 class DecodeError(Exception):

@@ -42,11 +42,11 @@ class Recorder:
         return self.samples[-1][0] - self.samples[0][0]
 
     def _quantize(self, t: float) -> int:
-        return int(round((t - self.samples[0][0]) / (self.frame_period_ns / 1e9)))
+        return round((t - self.samples[0][0]) / (self.frame_period_ns / 1e9))
 
     def _clean(self, st: dict) -> dict:
         out = {"buttons": int(st.get("buttons", 0))}
-        for col, key in _AXES:
+        for _col, key in _AXES:
             v = int(st.get(key, 0))
             out[key] = 0 if abs(v) < self.deadzone else v
         return out
@@ -73,7 +73,7 @@ class Recorder:
         if len(self.samples) < 2:
             return {"header": ["A"], "rows": []}
         buttons, axis_cols = self.used_columns()
-        header = ["F"] + buttons + axis_cols
+        header = ["F", *buttons, *axis_cols]
 
         total = self._quantize(self.samples[-1][0]) + 1
         # 各フレームに、その時刻以前で最も新しいサンプルを割り当てる

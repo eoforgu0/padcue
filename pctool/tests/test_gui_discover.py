@@ -72,7 +72,7 @@ def _wait_device(base, timeout=8.0):
 
 def test_keeps_a_working_connection(env):
     """つながっているときに押しても、接続先を変えないこと。"""
-    proj, dev, base = env
+    proj, _dev, base = env
     assert _wait_device(base)          # 画面を開いた状態
     r = post(base, "/api/discover")
     assert r.get("ok"), r
@@ -83,7 +83,7 @@ def test_keeps_a_working_connection(env):
 
 def test_kept_answer_is_immediate(env):
     """つながっているときは探索そのものを行わない(待たせない)こと。"""
-    proj, dev, base = env
+    _proj, _dev, base = env
     assert _wait_device(base)
     t0 = time.monotonic()
     r = post(base, "/api/discover")
@@ -113,7 +113,7 @@ def test_does_not_adopt_an_unreachable_candidate(env, monkeypatch):
 
 def test_state_still_works_after_pressing_find(env):
     """「探す」のあとも、ふつうに状態を取れること(接続を持ち回すため)。"""
-    proj, dev, base = env
+    _proj, _dev, base = env
     assert _wait_device(base)
     assert post(base, "/api/discover").get("ok")
     assert _wait_device(base), get(base, "/api/state").get("device_error")

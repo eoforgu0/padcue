@@ -159,24 +159,24 @@ def walk(page, proj, dev, prompt):
 
     # ---------------- runbook 4: サンプルを1回動かす ----------------
     step("4. サンプルを1回動かす")
-    l = lane(page)
-    names = l.locator(".lproc option").all_inner_texts()
+    ln = lane(page)
+    names = ln.locator(".lproc option").all_inner_texts()
     print("     手順の一覧:", names)
     if names != ["サンプル"]:
         note(f"init 直後の一覧が「サンプル」だけではない: {names}")
     page.wait_for_timeout(700)
-    rows = l.locator(".ltl .tlrow .nm").all_inner_texts()
+    rows = ln.locator(".ltl .tlrow .nm").all_inner_texts()
     print("     タイムラインの行:", rows)
     if not rows:
         note("サンプルのタイムラインが空(runbook 4-2 で確認できない)")
-    l.locator("button", has_text="1回実行").click()   # runbook 4: 周回欄に関係なく1回
+    ln.locator("button", has_text="1回実行").click()   # runbook 4: 周回欄に関係なく1回
     page.wait_for_timeout(1200)
     if "実行中" not in chip_text(page):
         note("サンプルの実行が始まらない: " + chip_text(page)
              + " / " + txt(page, "#lanes .lane .lactmsg"))
     else:
         ok("サンプルが実行された")
-    l.locator("button", has_text="今すぐ止める").click()
+    ln.locator("button", has_text="今すぐ止める").click()
     page.wait_for_timeout(1500)
 
     # ---------------- runbook 5-2: 自分の手順を作る ----------------
@@ -242,12 +242,12 @@ def walk(page, proj, dev, prompt):
     step("5-3(後半) 実行・監視のタイムラインで確かめる")
     page.click("[data-view=home]")
     page.wait_for_timeout(900)
-    l = lane(page)
-    sel_before = l.locator(".lproc").input_value()
+    ln = lane(page)
+    sel_before = ln.locator(".lproc").input_value()
     print("     いま選ばれている手順:", sel_before)
-    l.locator(".lproc").select_option("テスト周回")
+    ln.locator(".lproc").select_option("テスト周回")
     page.wait_for_timeout(1500)
-    marks = l.locator(".ltl .marks span").all_inner_texts()
+    marks = ln.locator(".ltl .marks span").all_inner_texts()
     print("     タイムラインのラベル:", marks)
     if marks != ["移動", "戦闘"]:
         note(f"付けたラベルがタイムラインに出ない: {marks}")
@@ -256,13 +256,13 @@ def walk(page, proj, dev, prompt):
 
     # ---------------- runbook 5-4: 途中から試す ----------------
     step("5-4. 途中(戦闘)から試す")
-    opts = l.locator(".lresume option").all_inner_texts()
+    opts = ln.locator(".lresume option").all_inner_texts()
     print("     開始位置の選択肢:", opts)
     if "戦闘" not in opts:
         note(f"開始位置にラベルが出ない: {opts}")
     else:
-        l.locator(".lresume").select_option("戦闘")
-        l.locator("button", has_text="1回実行").click()      # runbook 5-4
+        ln.locator(".lresume").select_option("戦闘")
+        ln.locator("button", has_text="1回実行").click()      # runbook 5-4
         # 戦闘からの残りは約70フレーム(約1.2秒)しかない。待ちすぎると
         # 「実行中」を見る前に完走してしまうので、始まったことを早めに確かめる
         page.wait_for_timeout(400)
@@ -271,11 +271,11 @@ def walk(page, proj, dev, prompt):
         else:
             ok("戦闘から実行できた")
         # 後始末: まだ動いていれば止める(短い手順は既に終わっていることがある)
-        stopi = l.locator("button", has_text="今すぐ止める")
+        stopi = ln.locator("button", has_text="今すぐ止める")
         if stopi.is_enabled():
             stopi.click()
         page.wait_for_timeout(1200)
-        l.locator(".lresume").select_option("先頭")
+        ln.locator(".lresume").select_option("先頭")
 
     # ---------------- runbook 5-6: 部品を作る ----------------
     step("5-6. 「部品を編集」で新しい部品を作る")
@@ -350,18 +350,18 @@ def walk(page, proj, dev, prompt):
     step("6. 放置運転(周回数を上げる)")
     page.click("[data-view=home]")
     page.wait_for_timeout(900)
-    l = lane(page)
-    l.locator(".lproc").select_option("テスト周回")
+    ln = lane(page)
+    ln.locator(".lproc").select_option("テスト周回")
     page.wait_for_timeout(700)
-    l.locator(".lloops").fill("3")
-    l.locator("button", has_text="周回実行").click()
+    ln.locator(".lloops").fill("3")
+    ln.locator("button", has_text="周回実行").click()
     page.wait_for_timeout(1500)
     prog = txt(page, "#lanes .lane .tlprog")
     if "周" not in prog:
         note("放置運転中に「n / N 周」が出ない")
     else:
         ok("周回の進みが見える: " + prog)
-    l.locator("button", has_text="今の周で止める").click()
+    ln.locator("button", has_text="今の周で止める").click()
     page.wait_for_timeout(4000)
     if chip_text(page) != "待機中":
         note("「今の周で止める」で止まらない: " + chip_text(page))

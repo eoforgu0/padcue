@@ -109,7 +109,7 @@ class Coupler:
         members = self.members()
         if len(members) < 2:
             return {"error": "連結には装置が2台必要です"}
-        order = [l.cfg.get("name") for l in members]
+        order = [link.cfg.get("name") for link in members]
         plan = sorted(plan, key=lambda p: order.index(p["dev"]))
         if [p["dev"] for p in plan] != order:
             return {"error": "開始の計画が装置台帳と一致しません"}
@@ -117,7 +117,7 @@ class Coupler:
         builds = {}
         # 1. 事前検査(全員ぶん揃ってから初めて装置に触る)
         fws = set()
-        for p, link in zip(plan, members):
+        for p, link in zip(plan, members, strict=True):
             if link.error:
                 return {"error": f"{p['dev']} が見えません({link.error})。"
                                  "そろってから開始してください"}
@@ -156,7 +156,7 @@ class Coupler:
         # 本体識別子が両方取れていて同じ = 2台とも同じ Switch に挿さって
         # いる。1台の本体で2コントローラーという使い方もあり得るので
         # 止めはしないが、挿し間違いの典型なので知らせる
-        his = [getattr(l, "host_info", "") for l in members]
+        his = [getattr(link, "host_info", "") for link in members]
         if his[0] and his[0] == his[1]:
             warnings.append("2台とも同じ本体につながっています"
                             "(意図した構成でなければ、挿し先を確認して"
@@ -170,7 +170,7 @@ class Coupler:
         if prev and prev.get("active"):
             self._finish_run(prev, members)
         # 2. 転送(ハッシュが違う装置だけ。全装置が終わるまで開始しない)
-        for p, link in zip(plan, members):
+        for p, link in zip(plan, members, strict=True):
             r = builds[p["dev"]]
             if link.listing.get(p["name"]) != r.hash:
                 def _push(c, r=r):
@@ -181,7 +181,7 @@ class Coupler:
         # 3. 開始(台帳順に連発。応答喪失は STATUS で確定してから判断)
         started: list[str] = []
         t_done: list[float] = []
-        for p, link in zip(plan, members):
+        for p, link in zip(plan, members, strict=True):
             r = builds[p["dev"]]
             loops = max(0, int(p.get("loops", 0)))
             try:
@@ -222,7 +222,7 @@ class Coupler:
                 if really is None:
                     # 確認しきれない = 不確定。走っているかもしれない装置を
                     # 放置しないよう、全員へ停止を送ってから知らせる
-                    self._rollback_started(started + [p["dev"]])
+                    self._rollback_started([*started, p["dev"]])
                     return {"error": f"{p['dev']} の開始結果を確認できません"
                                      "でした。安全のため両方へ停止を送りました。"
                                      "装置の状態を確かめてからやり直して"
@@ -232,13 +232,13 @@ class Coupler:
                 return {"error": f"{p['dev']} の開始に失敗しました({e})。"
                                  + (f"先に開始した {'/'.join(started)} は今の"
                                     "周で止めます" if started else "")}
-        skew_ms = int(round((t_done[1] - t_done[0]) * 1000)) \
+        skew_ms = round((t_done[1] - t_done[0]) * 1000) \
             if len(t_done) == 2 else None
         with self._lock:
             self._state["run"] = {
                 "active": True,
                 "members": order,
-                "ids": [l.cfg.get("id", "") for l in members],
+                "ids": [link.cfg.get("id", "") for link in members],
                 "plan": [{k: v for k, v in p.items()
                           if not k.startswith("_")} for p in plan],
                 "offsets": {p["dev"]: p.get("_offset", 0) for p in plan},
@@ -253,7 +253,7 @@ class Coupler:
         self._parked_since.clear()
         self._parked_gen.clear()
         self._late_warned.clear()
-        for p, link in zip(plan, members):
+        for p, link in zip(plan, members, strict=True):
             self._log(link, "PC_SET_START",
                       a=max(0, int(p.get("loops", 0))),
                       name=p["name"],
@@ -344,7 +344,7 @@ class Coupler:
                                  f"しました({e})。"
                                  + ("届いていなければ自動で送り直します"
                                     if t else "もう一度お試しください")}
-        skew = int(round((t[1] - t[0]) * 1000)) if len(t) == 2 else None
+        skew = round((t[1] - t[0]) * 1000) if len(t) == 2 else None
         self._record_join(members, skew, auto=False, arm=arm)
         # ワンショット(次の合流は自分で選ぶ)は、人が選んだら自動へ戻す
         if self.coupling().get("oneshot_manual"):
@@ -446,7 +446,7 @@ class Coupler:
                         self._save_runstate()
         if not active or len(members) < 2:
             return
-        by_name = {l.cfg.get("name"): l for l in members}
+        by_name = {link.cfg.get("name"): link for link in members}
         if set(run["members"]) != set(by_name):
             return                        # 台帳が変わった(外した等)
         links = [by_name[n] for n in run["members"]]
@@ -531,12 +531,12 @@ class Coupler:
         self._idle_since = None
         # 片方だけ駐機している場合の扱い
         cfgc = self.coupling()
-        parked = [l for l in links if self._parked_gen.get(l.cfg.get("name"))
+        parked = [link for link in links if self._parked_gen.get(link.cfg.get("name"))
                   is not None]
         if len(parked) == 1:
             link = parked[0]
             name = link.cfg.get("name")
-            other = next(l for l in links if l is not link)
+            other = next(m for m in links if m is not link)
             oname = other.cfg.get("name")
             if not busy[oname]:
                 if oname in run["manual"]:
@@ -590,7 +590,7 @@ class Coupler:
             self._parked_since.pop(name, None)
         if not ok_links:
             return
-        skew = int(round((t[1] - t[0]) * 1000)) if len(t) == 2 else None
+        skew = round((t[1] - t[0]) * 1000) if len(t) == 2 else None
         self._record_join(
             ok_links, skew, auto=True, arm=arm, solo=solo,
             waited=waited if len(ok_links) == len(parked) else None,
@@ -681,14 +681,14 @@ class Coupler:
     def _linked_stop(self, run, links, cause_dev: str, why: str,
                      only: str = "") -> None:
         """連動停止。cause_dev = 原因の装置、only = 止める対象を1台に限る。"""
-        targets = [l for l in links
-                   if l.cfg.get("name") != cause_dev
-                   and l.cfg.get("name") not in run["manual"]
-                   and (not only or l.cfg.get("name") == only)]
+        targets = [link for link in links
+                   if link.cfg.get("name") != cause_dev
+                   and link.cfg.get("name") not in run["manual"]
+                   and (not only or link.cfg.get("name") == only)]
         # 止め方: 走行中は今の周で(graceful)、駐機中は即時(§2c)
-        modes = {l.cfg.get("name"):
-                 ("immediate" if l.status.get("awaiting") else "graceful")
-                 for l in targets}
+        modes = {link.cfg.get("name"):
+                 ("immediate" if link.status.get("awaiting") else "graceful")
+                 for link in targets}
         remain = {}
         for link in links:
             name = link.cfg.get("name")

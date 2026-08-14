@@ -99,7 +99,7 @@ def load_part(name: str, text: str) -> Part:
             raise PartError(
                 f"列数がヘッダと一致しません: {len(cells)} / {len(header)}", lineno)
         csv_rowno += 1
-        rec = dict(zip(header, cells))
+        rec = dict(zip(header, cells, strict=True))
         if "F" in rec and rec["F"].strip() != "":
             try:
                 f_val = int(rec["F"])

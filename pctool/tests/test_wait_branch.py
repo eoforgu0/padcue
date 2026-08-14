@@ -114,8 +114,8 @@ def test_c_engine_matches_python(proj, host_exe, tmp_path):
         res = subprocess.run([str(host_exe), str(p), "1", "100000"],
                              capture_output=True, text=True, env=env)
         assert res.returncode == 0, res.stdout + res.stderr
-        got = [(int(l.split()[0]), int(l.split()[1]))
-               for l in res.stdout.strip().splitlines()[:-1]]
+        got = [(int(line.split()[0]), int(line.split()[1]))
+               for line in res.stdout.strip().splitlines()[:-1]]
         assert got == expected, f"腕 {choice}"
 
 

@@ -72,7 +72,7 @@ def wait_until(fn, timeout=8.0):
 
 
 def test_connection_is_reused(env):
-    proj, dev, base = env
+    _proj, _dev, base = env
     assert wait_until(lambda: get(base, "/api/state").get("device")),         "装置が見えない"
     link = gui._Handler.pool.links()[0]
     cl = link.client
@@ -84,7 +84,7 @@ def test_connection_is_reused(env):
 
 def test_reconnects_after_device_restart(env):
     """実機が切れて戻ってきても、次の操作で自動的に繋ぎ直すこと。"""
-    proj, dev, base = env
+    _proj, dev, base = env
     assert wait_until(lambda: get(base, "/api/state").get("device"))
     port = dev.port
     dev.stop()
@@ -106,7 +106,7 @@ def test_reconnects_after_device_restart(env):
 
 def test_passthrough_burst_is_served(env):
     """手動操作の連射(毎秒30回相当)でも取りこぼさないこと。"""
-    proj, dev, base = env
+    _proj, dev, base = env
     assert post(base, "/api/passthrough", {"enable": True}).get("ok")
     for i in range(40):
         r = post(base, "/api/passthrough",
@@ -118,7 +118,7 @@ def test_passthrough_burst_is_served(env):
 
 
 def test_host_change_drops_old_connection(env):
-    proj, dev, base = env
+    _proj, _dev, base = env
     assert wait_until(lambda: get(base, "/api/state").get("device"))
     post(base, "/api/device", {"host": "10.255.255.1"})
     assert wait_until(

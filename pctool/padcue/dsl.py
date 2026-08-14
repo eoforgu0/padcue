@@ -306,12 +306,12 @@ def _validate_call_graph(procs: dict[str, Proc]) -> None:
 
     def visit(name: str, line: int, path: tuple[str, ...]) -> None:
         if state.get(name) == 1:
-            raise CompileError(line, f"call が循環しています: {' -> '.join(path + (name,))}")
+            raise CompileError(line, f"call が循環しています: {' -> '.join((*path, name))}")
         if state.get(name) == 2:
             return
         state[name] = 1
         for st in _iter_calls(procs[name].body):
-            visit(st.args[0], st.line, path + (name,))
+            visit(st.args[0], st.line, (*path, name))
         state[name] = 2
 
     for name, proc in procs.items():
@@ -588,8 +588,8 @@ def _emit_gyro_sway(ctx: _Ctx, st: Stmt, vec: tuple, frames: int,
             d.append(min(sway, v + 32768))    # i16 下限を超えない範囲で
         else:
             d.append(0)
-    plus = tuple(v + dd for v, dd in zip(vec, d))
-    minus = tuple(v - dd for v, dd in zip(vec, d))
+    plus = tuple(v + dd for v, dd in zip(vec, d, strict=True))
+    minus = tuple(v - dd for v, dd in zip(vec, d, strict=True))
 
     def seg(values: tuple, length: int) -> None:
         _gyro_set(ctx, st, *values)
@@ -759,9 +759,9 @@ def _compile_body(
             (callee,) = st.args
             if callee in call_stack:
                 raise CompileError(
-                    st.line, f"call が循環しています: {' -> '.join(call_stack + (callee,))}"
+                    st.line, f"call が循環しています: {' -> '.join((*call_stack, callee))}"
                 )
-            _compile_body(procs[callee].body, ctx, procs, call_stack + (callee,))
+            _compile_body(procs[callee].body, ctx, procs, (*call_stack, callee))
         elif st.kind == "loop":
             ctx.depth += 1
             _compile_loop(st, ctx, procs, call_stack)

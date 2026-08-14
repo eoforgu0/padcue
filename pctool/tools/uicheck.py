@@ -293,23 +293,23 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         乗る(新設)。
         """
         assert page.locator("#lanes .lane").count() == 1, "レーンが1本出ていない"
-        l = lane(page)
-        assert "1P" in l.locator("h2").inner_text(), "レーンの見出しに装置名が無い"
+        ln = lane(page)
+        assert "1P" in ln.locator("h2").inner_text(), "レーンの見出しに装置名が無い"
         assert chip_text() == "待機中", chip_text()
-        names = l.locator(".lproc option").all_inner_texts()
+        names = ln.locator(".lproc option").all_inner_texts()
         assert names == ["周回で変える", "素材周回", "選んで進む"], names
-        assert l.locator(".lloops").input_value() == "0", \
-            f"周回の既定が 0 でない: {l.locator('.lloops').input_value()!r}"
-        assert l.locator("button", has_text="今の周で止める").is_disabled(), \
+        assert ln.locator(".lloops").input_value() == "0", \
+            f"周回の既定が 0 でない: {ln.locator('.lloops').input_value()!r}"
+        assert ln.locator("button", has_text="今の周で止める").is_disabled(), \
             "停止中に区切り停止が押せる"
-        assert l.locator("button", has_text="今すぐ止める").is_disabled(), \
+        assert ln.locator("button", has_text="今すぐ止める").is_disabled(), \
             "停止中に即時停止が押せる"
-        assert l.locator("button", has_text="周回実行").is_enabled(), \
+        assert ln.locator("button", has_text="周回実行").is_enabled(), \
             "待機中に実行が押せない"
         # 実行・停止も従来どおり働くこと(開始ラベルは後続の検査で個別に見る)
-        l.locator("button", has_text="1回実行").click()
+        ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
     c.check("1台構成でもレーンが1本出て、実行・停止・開始ラベルが従来どおり働く(新設)",
             t_lane_smoke)
@@ -369,27 +369,27 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_lane_eta():
         """実行中のレーンに、開始時刻と終了予定(周回が有限なら)が出ること。"""
-        l = lane(page)
-        l.locator(".lloops").fill("2")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("2")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         page.wait_for_function(
             "() => [...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
-        eta = l.locator(".hint .stat")
+        eta = ln.locator(".hint .stat")
         # 項目名と値は別の席(単色の1行に連ねない。2026-08-08 指摘)
         assert eta.count() == 2, eta.all_inner_texts()
         assert "残り" in eta.nth(1).inner_text(), eta.nth(1).inner_text()
         # 値の中の「(残り …)」の手前は詰めない
         assert " (残り" in eta.nth(1).locator(".statv").inner_text(), \
             eta.nth(1).inner_text()
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         # 実行していない間は行ごと消える(空の行が余白を食わない)
         page.wait_for_function(
             "() => ![...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
-        l.locator(".lloops").fill("0")
+        ln.locator(".lloops").fill("0")
     c.check("実行中は開始時刻と終了予定が出る(新設)", t_lane_eta)
 
     def t_pairing_warning():
@@ -528,77 +528,77 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         フレームそのものを見る(uicheck の追従)。「移動」は手順の先頭
         (フレーム0)と区別が付かないため、頭出しの効く「戦闘」で見る
         """
-        l = lane(page)
-        l.locator(".lresume").select_option(label="戦闘")
-        l.locator("button", has_text="1回実行").click()
+        ln = lane(page)
+        ln.locator(".lresume").select_option(label="戦闘")
+        ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
         off = page.evaluate(
-            "() => { const l = [...laneMap.values()][0]; return l && l.runOffset; }")
+            "() => { const ln = [...laneMap.values()][0]; return ln && ln.runOffset; }")
         assert off and off > 0, \
             f"開始ラベルの起点フレームが0のまま(先頭と区別できない): {off!r}"
         page.wait_for_timeout(2600)      # 状態更新が2回以上走る間、位置が動かないこと
         off2 = page.evaluate(
-            "() => { const l = [...laneMap.values()][0]; return l && l.runOffset; }")
+            "() => { const ln = [...laneMap.values()][0]; return ln && ln.runOffset; }")
         assert off2 == off, "起点フレームが状態更新のたびに変わってしまう"
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        l.locator(".lresume").select_option(label="―(先頭から)")
+        ln.locator(".lresume").select_option(label="―(先頭から)")
     c.check("開始ラベルどおりの起点から再生され、状態更新でも変わらない",
             t_resume_starts_from_label)
 
     def t_run_and_monitor():
-        l = lane(page)
-        l.locator(".lloops").fill("50")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("50")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
-        assert l.locator(".play").is_visible(), "実行中に再生位置が出ない"
-        assert l.locator("button", has_text="周回実行").is_disabled(), \
+        assert ln.locator(".play").is_visible(), "実行中に再生位置が出ない"
+        assert ln.locator("button", has_text="周回実行").is_disabled(), \
             "実行中に実行が押せる"
         assert page.locator("#manual").is_disabled(), "実行中に手動操作が押せる"
-        assert l.locator("button", has_text="今すぐ止める").is_enabled(), \
+        assert ln.locator("button", has_text="今すぐ止める").is_enabled(), \
             "実行中に即時停止が押せない"
         page.wait_for_timeout(1200)
         assert "実行中" in chip_text(), chip_text()
         # 進み具合はレーンの見出しに出る
-        tp = l.locator(".tlprog").inner_text()
+        tp = ln.locator(".tlprog").inner_text()
         assert "周" in tp and "フレーム" in tp, f"進み具合が出ていない: {tp!r}"
-        assert l.locator(".play").is_visible(), "再生位置が出ていない"
+        assert ln.locator(".play").is_visible(), "再生位置が出ていない"
     c.check("実行 → 状態/進み具合/ボタン/再生位置", t_run_and_monitor)
 
     def t_stop_immediate():
-        l = lane(page)
-        l.locator("button", has_text="今すぐ止める").click()
+        ln = lane(page)
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        assert l.locator(".play").is_hidden(), "停止後も再生位置が残る"
+        assert ln.locator(".play").is_hidden(), "停止後も再生位置が残る"
     c.check("今すぐ止める → 待機中に戻る", t_stop_immediate)
 
     def t_run_once_ignores_loops():
         """「1回実行」は周回欄に何が残っていても1回だけ実行する。"""
-        l = lane(page)
+        ln = lane(page)
         page.wait_for_timeout(400)
-        l.locator(".lloops").fill("50")     # 前の手順の周回数が残っている想定
-        l.locator("button", has_text="1回実行").click()
+        ln.locator(".lloops").fill("50")     # 前の手順の周回数が残っている想定
+        ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
         page.wait_for_timeout(600)
-        tp = l.locator(".tlprog").inner_text()
+        tp = ln.locator(".tlprog").inner_text()
         assert "/ 1 周" in tp, f"1回になっていない: {tp!r}"
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        l.locator(".lloops").fill("1")
+        ln.locator(".lloops").fill("1")
         page.wait_for_timeout(400)
     c.check("「1回実行」は周回欄を無視して1回だけ", t_run_once_ignores_loops)
 
     def t_loop_zero_runs_until_stopped():
         """周回 0 は「止めるまでくり返す」。表示は「N 周目(止めるまで)」。"""
-        l = lane(page)
-        l.locator(".lloops").fill("0")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("0")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         page.wait_for_timeout(900)
-        tp = l.locator(".tlprog").inner_text()
+        tp = ln.locator(".tlprog").inner_text()
         assert "止めるまで" in tp, f"無限実行の表示になっていない: {tp!r}"
         assert "/" not in tp.split("フレーム")[0], f"周回の分母が出ている: {tp!r}"
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
     c.check("周回 0 = 止めるまでくり返す", t_loop_zero_runs_until_stopped)
 
@@ -613,25 +613,25 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         disabled で選び直せない)ため、「他の手順を選んで進行が重なる」
         という事態自体が起こり得ない。ここでは、その固定と抑止だけを見る。
         """
-        l = lane(page)
-        l.locator(".lproc").select_option("素材周回")
+        ln = lane(page)
+        ln.locator(".lproc").select_option("素材周回")
         page.wait_for_timeout(300)
-        l.locator(".lloops").fill("50")
-        l.locator("button", has_text="周回実行").click()
+        ln.locator(".lloops").fill("50")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         page.wait_for_timeout(500)
-        assert l.locator(".lproc").input_value() == "素材周回", \
+        assert ln.locator(".lproc").input_value() == "素材周回", \
             "実行中の手順に選択が同期していない"
-        assert l.locator(".lproc").is_disabled(), "実行中でも手順選択が押せる"
-        l.locator("button", has_text="今すぐ止める").click()
+        assert ln.locator(".lproc").is_disabled(), "実行中でも手順選択が押せる"
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        l.locator(".lloops").fill("1")
+        ln.locator(".lloops").fill("1")
         page.wait_for_timeout(400)
     c.check("実行中は手順選択が動いている手順に固定される", t_running_proc_pinned)
 
     def t_logs_panel():
         """ログが日時つきで溜まり、注意すべき行に色が付き、消せること。"""
-        l = lane(page)
+        ln = lane(page)
         page.wait_for_timeout(1200)
         lines = page.locator("#logs .logline")
         n0 = lines.count()
@@ -645,9 +645,9 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert days.count() >= 1, "日付の見出しが出ていない"
         assert "/" in days.first.inner_text(), \
             f"日付の見出しが日付になっていない: {days.first.inner_text()!r}"
-        l.locator("button", has_text="1回実行").click()
+        ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         page.wait_for_function(
             f"() => document.querySelectorAll('#logs .logline').length > {n0}",
@@ -701,11 +701,11 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         以前は select に選択肢を並べた時点で先頭が選ばれてしまい、控え
         (localStorage)を読む段に到達していなかった。
         """
-        l = lane(page)
-        before = l.locator(".lproc").input_value()
+        ln = lane(page)
+        before = ln.locator(".lproc").input_value()
         # 一覧の先頭(周回で変える)以外を選ばないと、戻ったのか残ったのかが
         # 区別できない
-        l.locator(".lproc").select_option("選んで進む")
+        ln.locator(".lproc").select_option("選んで進む")
         page.wait_for_timeout(400)
         page.reload()
         page.wait_for_timeout(1400)
@@ -800,8 +800,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.evaluate("() => stopBlink()")
-        l = lane(page)
-        l.locator("button", has_text="1回実行").click()
+        ln = lane(page)
+        ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
         wait_state(page, "待機中", timeout_ms=20000)
         page.wait_for_function("() => document.title !== 'pademu'",
@@ -840,16 +840,16 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         """「今すぐ止める」で止めたときは通知しない(押した本人が見ている)。"""
         # 直前の検査で「終了 = タブ名の点滅」にしてあるので、そのまま使う
         page.evaluate("() => stopBlink()")
-        l = lane(page)
-        l.locator(".lloops").fill("0")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("0")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         page.wait_for_timeout(2500)      # 見張りの周期を十分に跨ぐ
         assert page.title() == "pademu", \
             f"自分で止めたのに知らせが出た: {page.title()!r}"
-        l.locator(".lloops").fill("1")
+        ln.locator(".lloops").fill("1")
         # 既定(音で知らせる)へ戻す
         page.click("#setbtn")
         page.wait_for_timeout(200)
@@ -861,40 +861,40 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_stopg_armed():
         """「今の周で止める」を押すと、予約中だと分かる見た目になること。"""
-        l = lane(page)
-        l.locator(".lloops").fill("50")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("50")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         page.wait_for_timeout(400)
-        l.locator("button", has_text="今の周で止める").click()
+        ln.locator("button", has_text="今の周で止める").click()
         page.wait_for_timeout(1400)
-        assert l.locator("button", has_text="止める予約を取り消す").count() == 1, \
+        assert ln.locator("button", has_text="止める予約を取り消す").count() == 1, \
             "予約したのに見た目が変わらない"
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        l.locator(".lloops").fill("1")
+        ln.locator(".lloops").fill("1")
         page.wait_for_timeout(300)
     c.check("「今の周で止める」の予約が見て分かる", t_stopg_armed)
 
     def t_stopg_cancel():
         """予約中に同じボタンをもう一度押すと、予約を取り消せること。"""
-        l = lane(page)
-        l.locator(".lloops").fill("50")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("50")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         page.wait_for_timeout(400)
-        l.locator("button", has_text="今の周で止める").click()   # 予約
-        assert l.locator("button", has_text="止める予約を取り消す").count() == 1, \
+        ln.locator("button", has_text="今の周で止める").click()   # 予約
+        assert ln.locator("button", has_text="止める予約を取り消す").count() == 1, \
             "押した直後に予約中の見た目にならない"
-        l.locator("button", has_text="止める予約を取り消す").click()   # 取り消し
+        ln.locator("button", has_text="止める予約を取り消す").click()   # 取り消し
         page.wait_for_timeout(1400)
-        assert l.locator("button", has_text="今の周で止める").count() == 1, \
+        assert ln.locator("button", has_text="今の周で止める").count() == 1, \
             "取り消したのに予約中のまま"
         assert chip_text() == "実行中", \
             f"取り消しただけなのに実行が止まった: {chip_text()}"
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        l.locator(".lloops").fill("1")
+        ln.locator(".lloops").fill("1")
         page.wait_for_timeout(300)
     c.check("止める予約を、もう一度押して取り消せる", t_stopg_cancel)
 
@@ -902,17 +902,17 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         # 終了は文字で知らせない(ボタンの復帰と再生位置の消滅で分かる)。
         # ここでは「全周待たずに止まる」ことと、終了後に古い知らせが
         # 残っていないことを見る
-        l = lane(page)
-        l.locator(".lloops").fill("50")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lloops").fill("50")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
-        l.locator("button", has_text="今の周で止める").click()
+        ln.locator("button", has_text="今の周で止める").click()
         wait_state(page, "待機中", timeout_ms=15000)
         page.wait_for_timeout(400)
         tlmsg = text(page, "#lanes .lane .ltlmsg")
         assert "終わりました" not in tlmsg and "予約どおり" not in tlmsg, \
             f"終了メッセージは廃止したはずが出ている: {tlmsg!r}"
-        assert not l.locator("button", has_text="周回実行").is_disabled(), \
+        assert not ln.locator("button", has_text="周回実行").is_disabled(), \
             "終了したのに実行ボタンが戻らない"
         # ログに「どの手順を何周指定で始め、何周で終えたか」が残ること
         page.wait_for_timeout(1500)      # ログ取得(毎秒)を1回待つ
@@ -929,12 +929,12 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_manual_auto_off_on_run():
         """手動操作したまま実行を押したら、自動で手動操作を終えてから実行する。"""
-        l = lane(page)
+        ln = lane(page)
         page.click("#manual")
         page.wait_for_timeout(600)
         assert "操作中" in text(page, "#manualchip"), "手動操作が始まらない"
-        l.locator(".lloops").fill("1")
-        l.locator("button", has_text="1回実行").click()
+        ln.locator(".lloops").fill("1")
+        ln.locator("button", has_text="1回実行").click()
         page.wait_for_timeout(900)
         assert "停止中" in text(page, "#manualchip"), \
             f"実行時に手動操作が終わっていない: {text(page, '#manualchip')!r}"
@@ -971,12 +971,12 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_prenote_above_buttons():
         """前提条件は実行ボタンより上に出る(押す前に読むものなので)。"""
-        l = lane(page)
-        pre = l.locator(".prenote")
+        ln = lane(page)
+        pre = ln.locator(".prenote")
         assert pre.is_visible(), "前提条件が出ていない"
         assert "実行前に" in pre.inner_text()
         boxes = (pre.bounding_box(),
-                 l.locator("button", has_text="1回実行").bounding_box())
+                 ln.locator("button", has_text="1回実行").bounding_box())
         assert boxes[0]["y"] < boxes[1]["y"], "前提条件が実行ボタンより下にある"
         assert "前提条件" not in text(page, "#lanes .lane .ltlmsg"), \
             "タイムライン下にも前提条件が残っている"
@@ -987,16 +987,16 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         欄名が「開始ラベル」なので、無効=ラベルが無い、は名前から察せる)。
         図の追従は毎秒の状態取得に乗るので、固定待ちでなく出るまで待つ。
         """
-        l = lane(page)
-        sel = l.locator(".lresume")
+        ln = lane(page)
+        sel = ln.locator(".lresume")
         # 「周回で変える」はラベルを持たない手順(「選んで進む」はラベル
         # 「確認」を持つので、無効化を確かめる材料にならない)
-        l.locator(".lproc").select_option("周回で変える")
+        ln.locator(".lproc").select_option("周回で変える")
         page.wait_for_function(
             "() => { const s = document.querySelector('#lanes .lane .lresume');"
             "  return s && s.options.length === 1; }", timeout=4000)
         assert sel.is_disabled(), "選べないのに押せる状態のままになっている"
-        l.locator(".lproc").select_option("素材周回")
+        ln.locator(".lproc").select_option("素材周回")
         page.wait_for_function(
             "() => { const s = document.querySelector('#lanes .lane .lresume');"
             "  return s && s.options.length > 1; }", timeout=4000)
@@ -1008,25 +1008,25 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         # 受理の文言は削ったので、予定量(total_frames)が手順全体(309F、
         # 次の検査のコメント参照)より短いこと(=先頭からではなく戦闘から
         # 始まっていること)で受理を確認する(uicheck の追従)
-        l = lane(page)
-        l.locator(".lresume").select_option("戦闘")
-        l.locator(".lloops").fill("1")
-        l.locator("button", has_text="周回実行").click()
+        ln = lane(page)
+        ln.locator(".lresume").select_option("戦闘")
+        ln.locator(".lloops").fill("1")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         total = page.evaluate("() => state.devices[0].total_frames")
         assert total and total < 309, \
             f"予定量が手順全体のまま(先頭から実行している疑い): {total}"
-        l.locator("button", has_text="今すぐ止める").click()
+        ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
     c.check("くり返し直前のラベルから実行できる", t_resume_from)
 
     def t_resume_starts_immediately():
         """途中から実行したら、飛ばした前半ぶんを待たずに終わること。"""
-        l = lane(page)
-        l.locator(".lresume").select_option("回収")
-        l.locator(".lloops").fill("1")
+        ln = lane(page)
+        ln.locator(".lresume").select_option("回収")
+        ln.locator(".lloops").fill("1")
         started = time.time()
-        l.locator("button", has_text="周回実行").click()
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "実行中")
         # 予定量: 手順全体(309F ≒ 5.2秒)ではなく後半だけ(95F ≒ 1.6秒)
         total = page.evaluate("() => state.devices[0].total_frames")
@@ -1035,7 +1035,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         wait_state(page, "待機中", timeout_ms=8000)
         took = time.time() - started
         assert took < 3.5, f"前半ぶん空走している疑い: 完了まで {took:.1f} 秒"
-        l.locator(".lresume").select_option("先頭")
+        ln.locator(".lresume").select_option("先頭")
     c.check("部分実行はすぐ動き出す(前半ぶん待たされない)",
             t_resume_starts_immediately)
 
@@ -1165,17 +1165,17 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("手動操作を記録 → 部品として保存される", t_record)
 
     def t_wait_branch():
-        l = lane(page)
-        l.locator(".lproc").select_option("選んで進む")
+        ln = lane(page)
+        ln.locator(".lproc").select_option("選んで進む")
         page.wait_for_timeout(500)
-        l.locator(".lloops").fill("1")
-        l.locator("button", has_text="周回実行").click()
+        ln.locator(".lloops").fill("1")
+        ln.locator("button", has_text="周回実行").click()
         wait_state(page, "選択待ち", timeout_ms=12000)
-        btns = l.locator(".lawait button").all_inner_texts()
+        btns = ln.locator(".lawait button").all_inner_texts()
         # レーンは1台ぶんが自己完結する(原則 §2)ので、1台のときも
         # 選択肢に宛先の装置名が付く(2台のレーンと同じ形。原則 §5)
         assert btns == ["出た(1P へ)", "出ない(1P へ)"], btns
-        l.locator(".lawait button").first.click()
+        ln.locator(".lawait button").first.click()
         page.wait_for_timeout(900)
         assert "選択待ち" not in chip_text(), chip_text()
     c.check("待機分岐: 選択待ち → 選択肢を選んで続行", t_wait_branch)
@@ -1191,19 +1191,19 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
 
     def t_branch_timeline():
         """分岐を含む手順でもタイムラインが描ける(空にならない)。"""
-        l = lane(page)
+        ln = lane(page)
         for name in ("選んで進む", "周回で変える"):
-            l.locator(".lproc").select_option(name)
+            ln.locator(".lproc").select_option(name)
             # 図の追従は毎秒の状態取得に乗るので、出るまで待つ(固定待ちは
             # 取りこぼす。2026-08-06 実測)
             page.wait_for_function(
                 "() => document.querySelectorAll("
                 "  '#lanes .lane .ltl .tlrow .nm').length > 0", timeout=4000)
-            rows = l.locator(".ltl .tlrow .nm").all_inner_texts()
+            rows = ln.locator(".ltl .tlrow .nm").all_inner_texts()
             assert rows, f"{name} のタイムラインが空"
             tlmsg = text(page, "#lanes .lane .ltlmsg")
             assert tlmsg == "" or "エラー" not in tlmsg, f"{name}: {tlmsg}"
-        l.locator(".lproc").select_option("素材周回")
+        ln.locator(".lproc").select_option("素材周回")
         page.wait_for_timeout(700)
     c.check("分岐入りの手順もタイムラインが出る", t_branch_timeline)
 
@@ -1369,8 +1369,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
              inner["y"] + inner["height"] - 2)
         after = shape()
         assert len(after) == len(before) - 1, f"{before} -> {after}"
-        assert "label]" in after[[i for i, x in enumerate(after)
-                                 if x.startswith("loop[")][0]], after
+        assert "label]" in after[next(i for i, x in enumerate(after)
+                                 if x.startswith("loop["))], after
         page.keyboard.press("Control+z")
         page.wait_for_timeout(300)
         assert shape() == before, f"Ctrl+Z で戻らない: {shape()}"
@@ -1417,7 +1417,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             third = blks.nth(2).bounding_box()
             drag(page, blks.first.locator(".bgrab").bounding_box(),
                  third["x"] + 60, third["y"] + third["height"] - 2)
-            want = before[1:3] + [before[0]] + before[3:]
+            want = [*before[1:3], before[0], *before[3:]]
             assert flow_shape() == want, f"{before} -> {flow_shape()} (期待 {want})"
             page.keyboard.press("Control+z")
             page.wait_for_timeout(300)
@@ -1425,7 +1425,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             last = page.locator("#flowbody > .blocks > .blk").last.bounding_box()
             drag(page, blks.first.locator(".bgrab").bounding_box(),
                  last["x"] + 60, last["y"] + last["height"] + 6)
-            want = before[1:] + [before[0]]
+            want = [*before[1:], before[0]]
             assert flow_shape() == want, \
                 f"末尾へ入らない: {flow_shape()} (期待 {want})"
         finally:
@@ -1440,13 +1440,13 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         入れ子の直後へは置けなかった。
         """
         before = flow_shape()
-        i = [n for n, x in enumerate(before) if x.startswith("loop[")][0]
+        i = next(n for n, x in enumerate(before) if x.startswith("loop["))
         try:
             nest = page.locator("#flowbody > .blocks > .nest").first.bounding_box()
             g = page.locator("#flowbody > .blocks > .blk").first.locator(".bgrab")
             drag(page, g.bounding_box(), nest["x"] + 60,
                  nest["y"] + nest["height"] - 3)
-            want = before[1:i + 1] + [before[0]] + before[i + 1:]
+            want = [*before[1:i + 1], before[0], *before[i + 1:]]
             assert flow_shape() == want, f"{flow_shape()} (期待 {want})"
             sel = page.evaluate(
                 "() => { const n = nodeAt(flowSel); return n ? n.type : null; }")
@@ -1908,7 +1908,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             assert page.evaluate("() => flowName") == opened, \
                 "ドラッグしただけで別の手順が開いた"
             after = page.locator("#flowlist .proc b").all_inner_texts()
-            assert after == [before[-1]] + before[:-1], f"{before} -> {after}"
+            assert after == [before[-1], *before[:-1]], f"{before} -> {after}"
         finally:
             order_restore(before)
         assert page.locator("#flowlist .proc b").all_inner_texts() == before
@@ -2183,7 +2183,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         # フィルハンドル: 最終行から3つ上へ向けて引く
         base = rows - 5
         c0 = cell(base)
-        c0.click(); c0.fill("-1200")
+        c0.click()
+        c0.fill("-1200")
         page.wait_for_timeout(200)
         td = page.locator(f'#parttable tr:nth-child({base + 3}) '
                           f'td[data-ci="{col}"]')
@@ -2201,7 +2202,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert values()[base + 4] == "-1200", values()
         # Alt+ドラッグ: 起点の値で縦に塗る
         c = cell(base)
-        c.click(); c.fill("777")
+        c.click()
+        c.fill("777")
         page.wait_for_timeout(150)
         b0 = c.bounding_box()
         b2 = cell(base + 2).bounding_box()
@@ -2246,7 +2248,8 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         rows = len(values())
         base = rows - 5
         c0 = cell(base)
-        c0.click(); c0.fill("-500")
+        c0.click()
+        c0.fill("-500")
         page.wait_for_timeout(200)
         td = page.locator(f'#parttable tr:nth-child({base + 3}) '
                           f'td[data-ci="{col}"]')
@@ -2519,10 +2522,10 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
             "つながっていないだけで装置行が赤くなっている(異常ではない)"
         assert "open" in (row.get_attribute("class") or ""), \
             "未接続なのに装置行が自動で開かない"
-        l = lane(page)
-        assert l.locator("button", has_text="周回実行").is_disabled(), \
+        ln = lane(page)
+        assert ln.locator("button", has_text="周回実行").is_disabled(), \
             "未接続でも実行が押せる"
-        assert l.locator("button", has_text="今すぐ止める").is_disabled(), \
+        assert ln.locator("button", has_text="今すぐ止める").is_disabled(), \
             "未接続でも停止が押せる"
         assert not text(page, "#lanes .lane .lmsg"), \
             "未接続の理由がレーンに残っている(装置カードへ移したはず)"
@@ -2539,7 +2542,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         assert "open" not in (row.get_attribute("class") or ""), \
             "手動で閉じたのに同じ異常で再度開いた"
         # チップをクリックすると、対処の場所(装置行)へ飛ぶ(強制的に開く)
-        l.locator(".chip:not(.runchip)").click()
+        ln.locator(".chip:not(.runchip)").click()
         page.wait_for_timeout(300)
         assert "open" in (row.get_attribute("class") or ""), \
             "チップをクリックしても装置行が開かない"
@@ -2576,8 +2579,8 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     def wait_lane_state(i: int, want: str, timeout_ms: int = 12000):
         page.wait_for_function(
             "([i, want]) => {"
-            "  const l = document.querySelectorAll('#lanes .lane')[i];"
-            "  const ch = l && l.querySelector('.chip:not(.runchip)');"
+            "  const ln = document.querySelectorAll('#lanes .lane')[i];"
+            "  const ch = ln && ln.querySelector('.chip:not(.runchip)');"
             "  return ch && ch.textContent === want; }",
             arg=[i, want], timeout=timeout_ms)
 
@@ -2781,8 +2784,8 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         assert lane(0).locator(".lproc").input_value() == "素材周回", \
             "戻ったら 1P の手順選択が変わった"
         page.wait_for_function(
-            "() => { const l = document.querySelectorAll('#lanes .lane')[0];"
-            "  const opts = [...l.querySelectorAll('.lresume option')]"
+            "() => { const ln = document.querySelectorAll('#lanes .lane')[0];"
+            "  const opts = [...ln.querySelectorAll('.lresume option')]"
             "    .map(o => o.value); return opts.includes('拠点'); }",
             timeout=8000)
         # 後始末: 足したラベルを消して元の手順に戻す
@@ -2966,8 +2969,8 @@ def run_coupling(c: Checker, page, proj: Project,
     def wait_lane_state(i: int, want: str, timeout_ms: int = 15000):
         page.wait_for_function(
             "([i, want]) => {"
-            "  const l = document.querySelectorAll('#lanes .lane')[i];"
-            "  const ch = l && l.querySelector('.chip:not(.runchip)');"
+            "  const ln = document.querySelectorAll('#lanes .lane')[i];"
+            "  const ch = ln && ln.querySelector('.chip:not(.runchip)');"
             "  return ch && ch.textContent === want; }",
             arg=[i, want], timeout=timeout_ms)
 
@@ -3144,8 +3147,8 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => {"
             "  const ls = document.querySelectorAll('#lanes .lane');"
-            "  return [...ls].some(l => {"
-            "    const m = l.querySelector('.lawait .msg.ok');"
+            "  return [...ls].some(ln => {"
+            "    const m = ln.querySelector('.lawait .msg.ok');"
             "    return m && m.textContent.includes('そろって進みました');"
             "  }); }", timeout=15000)
         wait_idle()

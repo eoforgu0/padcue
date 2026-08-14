@@ -203,7 +203,7 @@ def test_finish_logs_record_loop_counts(dev):
     c は上位16bit=完了周、下位16bit=指定周(0=無限)。
     """
     c = _client(dev)
-    h, total = _push(c, "短い手順", "press A 2\nwait 30")
+    h, _total = _push(c, "短い手順", "press A 2\nwait 30")
     c.logs()
     # 完走: 3周指定 → 3/3
     c.run("短い手順", h, loop_n=3)

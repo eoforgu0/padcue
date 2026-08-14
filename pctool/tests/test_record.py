@@ -92,7 +92,9 @@ def server(tmp_path):
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_port}", proj
-    srv.shutdown(); srv.server_close(); dev.stop()
+    srv.shutdown()
+    srv.server_close()
+    dev.stop()
 
 
 def post(url, obj):

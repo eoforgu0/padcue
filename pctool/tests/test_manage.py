@@ -347,7 +347,7 @@ def _integral(events, axis: str, upto: int) -> int:
     states = [(e.frame, getattr(e, axis)) for e in events
               if isinstance(e, binfmt.State)]
     total = 0
-    for (f, v), (nf, _v2) in zip(states, states[1:] + [(upto, 0)]):
+    for (f, v), (nf, _v2) in zip(states, [*states[1:], (upto, 0)], strict=True):
         total += v * (nf - f)
     return total
 
@@ -491,7 +491,7 @@ def _segments(events, axis, upto):
     states = [(e.frame, getattr(e, axis)) for e in events
               if isinstance(e, binfmt.State)]
     return [(v, nf - f) for (f, v), (nf, _v) in
-            zip(states, states[1:] + [(upto, 0)])]
+            zip(states, [*states[1:], (upto, 0)], strict=True)]
 
 
 def test_gyro_sway_intermittent_structure(tmp_path):

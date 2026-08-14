@@ -38,7 +38,7 @@ def _push(c, name, src):
 def test_loop_zero_keeps_running(dev):
     """1周ぶんの何倍もの時間が過ぎても走り続け、周回番号が進み続けること。"""
     c = _client(dev)
-    h, total = _push(c, "無限周回", "press A 2\nwait 30")   # 1周 32F
+    h, _total = _push(c, "無限周回", "press A 2\nwait 30")   # 1周 32F
     c.run("無限周回", h, loop_n=0)
     time.sleep(0.5)                       # 200倍速 ≒ 100周ぶん
     st1 = c.status()
@@ -80,7 +80,7 @@ def test_loop_zero_graceful_stop(dev):
 def test_loop_one_still_finite(dev):
     """周回 0 対応の副作用で、有限の周回が壊れていないこと。"""
     c = _client(dev)
-    h, total = _push(c, "有限", "press A 2\nwait 30")
+    h, _total = _push(c, "有限", "press A 2\nwait 30")
     c.run("有限", h, loop_n=2)
     for _ in range(60):
         time.sleep(0.05)

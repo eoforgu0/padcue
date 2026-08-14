@@ -206,7 +206,7 @@ def test_await_gen_is_monotonic_across_runs(tmp_path):
 
 def _cli(tmp_path, *args):
     from padcue import cli
-    return cli.main(["--project", str(tmp_path)] + list(args))
+    return cli.main(["--project", str(tmp_path), *list(args)])
 
 
 def test_cli_device_add_list_rename(tmp_path, capsys):

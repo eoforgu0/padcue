@@ -63,7 +63,7 @@ def _args(tmp_path, **kw):
 
 
 def test_status_and_run_go_through_gui(env, capsys):
-    proj, dev, tmp = env
+    proj, _dev, tmp = env
     assert cli.cmd_status(_args(tmp)) == 0
     out = capsys.readouterr().out
     assert "操作画面のサーバ経由" in out and "IDLE" in out
@@ -85,7 +85,7 @@ def test_status_and_run_go_through_gui(env, capsys):
 
 
 def test_exclusive_ops_are_refused_while_gui(env, capsys):
-    proj, dev, tmp = env
+    _proj, _dev, tmp = env
     assert cli.cmd_config(_args(tmp, key="frame_period_ns",
                                 value="16666667")) == 1
     assert "画面を閉じてから" in capsys.readouterr().out
@@ -94,7 +94,7 @@ def test_exclusive_ops_are_refused_while_gui(env, capsys):
 
 
 def test_stale_marker_falls_back_to_direct(env, capsys):
-    proj, dev, tmp = env
+    _proj, _dev, tmp = env
     # 死んだポートを指す残骸マーカー → 直結で動く(従来どおり)
     (tmp / "gui_server.json").write_text(
         json.dumps({"port": 1, "pid": 0}), encoding="utf-8")

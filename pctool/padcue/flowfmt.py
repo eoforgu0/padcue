@@ -174,7 +174,7 @@ def _node_to_stmt(node, file: str, path: str, project: _Project) -> Stmt:
             raise _err(file, path,
                        'arms は {"腕の名前": [ノード…]} のオブジェクトです')
         names, bodies = [], []
-        for i, (label, arm) in enumerate(arms.items()):
+        for label, arm in arms.items():
             if not isinstance(arm, list):
                 raise _err(file, f"{path}.arms[{label}]", "腕はノードの配列です")
             names.append(str(label))

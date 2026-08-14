@@ -289,10 +289,10 @@ class DevicePool:
         """その宛先を健康な登録済みリンクが使用中か(探索の到達確認が
         自分の接続を横取りして壊すのを防ぐ)。"""
         with self._lock:
-            return any(l.client is not None and not l.error
-                       and (l.cfg.get("host"), int(l.cfg.get("port", 5555)))
+            return any(link.client is not None and not link.error
+                       and (link.cfg.get("host"), int(link.cfg.get("port", 5555)))
                        == (host, int(port))
-                       for l in self._links.values())
+                       for link in self._links.values())
 
     def close(self) -> None:
         with self._lock:

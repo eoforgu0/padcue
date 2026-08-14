@@ -181,8 +181,8 @@ def test_editor_page_contains_editing_ui(server):
 def test_timeline_labels_are_available_for_display(server):
     """自分で付けたラベルがタイムラインに出せること(区間の意味が読める)。"""
     tl = get(f"{server}/api/timeline?name=" + q("サンプル"))
-    assert [l["text"] for l in tl["labels"]] == ["開始", "終了"]
-    assert all("frame" in l for l in tl["labels"])
+    assert [lb["text"] for lb in tl["labels"]] == ["開始", "終了"]
+    assert all("frame" in lb for lb in tl["labels"])
 
 
 def test_page_has_no_duplicate_ids(server):
