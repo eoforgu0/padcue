@@ -123,11 +123,6 @@ pademu_err_t pademu_decode(const uint8_t *data, size_t len, pademu_proc_t *out) 
     return PADEMU_OK;
 }
 
-pademu_err_t pademu_engine_init(pademu_engine_t *e, const pademu_proc_t *p,
-                                uint32_t session_loops) {
-    return pademu_engine_init_at(e, p, session_loops, 0, 0);
-}
-
 pademu_err_t pademu_engine_init_at(pademu_engine_t *e, const pademu_proc_t *p,
                                    uint32_t session_loops, uint32_t start_index,
                                    uint64_t start_base) {

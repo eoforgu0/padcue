@@ -459,10 +459,6 @@ class _Ctx:
         self.chg_clear_mask &= ~mask
         self.chg_set_mask |= mask
 
-    def note_button_set(self, mask: int) -> None:
-        self._fresh_frame()
-        self.chg_set_mask |= mask
-
     def note_button_clear(self, mask: int, line: int) -> None:
         self._fresh_frame()
         cancelled = mask & self.chg_set_mask

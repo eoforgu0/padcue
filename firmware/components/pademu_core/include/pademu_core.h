@@ -100,12 +100,10 @@ uint32_t pademu_crc32(const uint8_t *p, size_t n, uint32_t crc);
 // バイナリ全体(ヘッダ+レコード)を検証して out を埋める。data は保持されること
 pademu_err_t pademu_decode(const uint8_t *data, size_t len, pademu_proc_t *out);
 
-pademu_err_t pademu_engine_init(pademu_engine_t *e, const pademu_proc_t *p,
-                                uint32_t session_loops);
-
-// 途中から実行する(部分実行)。start_index から最初に到達する時間消費イベントが
-// STATE(全状態スナップショット)であること。カウンタ初期化(SETCNT)が手前に
-// 挟まるのは正常(くり返しの直前にラベルを置いた場合に必ずそうなる)。
+// 実行の準備。start_index = 0 が手順の先頭から、それ以外が部分実行。
+// start_index から最初に到達する時間消費イベントが STATE(全状態スナップ
+// ショット)であること。カウンタ初期化(SETCNT)が手前に挟まるのは正常
+// (くり返しの直前にラベルを置いた場合に必ずそうなる)。
 // 再開点は時刻 0 に寄せられる(飛ばした前半ぶん待たされない)。
 pademu_err_t pademu_engine_init_at(pademu_engine_t *e, const pademu_proc_t *p,
                                    uint32_t session_loops, uint32_t start_index,

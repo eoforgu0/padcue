@@ -41,7 +41,6 @@ const BTN_GROUPS = [['A','B','X','Y'], ['L','R','ZL','ZR'],
                     ['DU','DD','DL','DR'],
                     ['PLUS','MINUS','HOME','CAPTURE','LS','RS']];
 const BUTTONS = [].concat(...BTN_GROUPS);
-const AXIS_COLS = ['LX','LY','RX','RY','GP','GY','GR','AX','AY','AZ'];
 // 部品の列。**常に全部を保存する**(書かない列があると「直前のまま」という
 // 見えない状態が混ざるため)。表示だけは、いま使えないジャイロ/加速度を既定で畳む
 const STICK_COLS = ['LX','LY','RX','RY'];

@@ -196,15 +196,6 @@ class _Handler(BaseHTTPRequestHandler):
                 cls.watcher = RunWatcher(pool, coupler)
             return cls.watcher
 
-    def _call(self, fn, dev: str = ""):
-        """装置への操作。dev = 装置の名前(省略時は台帳の1台目)。
-
-        収集スレッドと同じ接続・同じ lock を通る(実機は同時1接続・後着横取り
-        のため、別接続を作ると奪い合いになる)。接続断は1度だけ繋ぎ直し、
-        TimeoutError は二重実行防止のため繋ぎ直さない(規則は DeviceLink.call)。
-        """
-        return self._pool().get(dev).call(fn)
-
     def _reachable(self, host: str, port: int) -> bool:
         """その住所で本当に pademu が応答するか(短い待ちで確かめる)。
 

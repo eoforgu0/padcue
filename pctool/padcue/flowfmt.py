@@ -71,11 +71,6 @@ def _is_off(node) -> bool:
     return isinstance(node, dict) and bool(node.get("off"))
 
 
-def _live(nodes):
-    """無効なものを除いたブロックの並び。"""
-    return [n for n in (nodes or []) if not _is_off(n)]
-
-
 def _node_to_stmt(node, file: str, path: str, project: _Project) -> Stmt:
     if not isinstance(node, dict) or "type" not in node:
         raise _err(file, path, "ノードは {'type': ...} のオブジェクトです")

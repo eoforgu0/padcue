@@ -35,12 +35,6 @@ class Recorder:
     def clear(self) -> None:
         self.samples.clear()
 
-    @property
-    def duration(self) -> float:
-        if len(self.samples) < 2:
-            return 0.0
-        return self.samples[-1][0] - self.samples[0][0]
-
     def _quantize(self, t: float) -> int:
         return round((t - self.samples[0][0]) / (self.frame_period_ns / 1e9))
 
