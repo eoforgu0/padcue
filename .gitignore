@@ -25,12 +25,13 @@ uicheck/
 runbook_walk/
 
 # 利用者の個人データ(連結実行の編成)。ソフトウェア本体ではない
-/sets/
+sets/
 
 # 利用者の個人データ(作った手順・部品・並び順)。ソフトウェア本体ではない
-/procedures/
-/parts/
-/order.json
+# どの階層をプロジェクトフォルダにしても効くよう、位置を固定しない
+procedures/
+parts/
+order.json
 
-# ローカル専用の作業記録(docs/notes/README.md 参照)
+# 作者ローカルの作業記録(引き継ぎメモ・内部の検討記録)。公開物ではない
 /docs/notes/
