@@ -1,42 +1,25 @@
 """Pro コン互換プロトコル(C 実装)を模擬 Switch から駆動する検証。
 
 実機キャプチャで観測された初期化シーケンスを再生し、応答を仕様に照合する。
-gcc が無い環境では skip。
+C のビルドと gcc が無いときの扱いは conftest.py の procon_exe / gcc fixture。
 """
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from padcue import binfmt, switchsim
+from padcue import binfmt
 from padcue.switchsim import (
-    PAIRING_PAYLOAD, ProtocolViolation, handshake_sequence,
-    parse_input_report, unpack_stick_calibration, verify_reply,
+    PAIRING_PAYLOAD,
+    ProtocolViolation,
+    handshake_sequence,
+    parse_input_report,
+    unpack_stick_calibration,
+    verify_reply,
 )
-from tests.test_hostc import CORE, find_gcc
+from tests.conftest import CORE
 
 MAC = bytes([0x04, 0x03, 0xD6, 0x00, 0x00, 0x01])
-
-
-@pytest.fixture(scope="session")
-def procon_exe(tmp_path_factory):
-    gcc = find_gcc()
-    if gcc is None:
-        pytest.skip("gcc が見つかりません")
-    del tmp_path_factory
-    # リポジトリ内に置く理由は test_hostc.host_exe と同じ(誤検知対策)
-    out = CORE.parents[2] / "build" / "hosttest" / "procon_host.exe"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
-           "-I", str(CORE / "include"),
-           str(CORE / "pademu_procon.c"), str(CORE / "pademu_hidpad.c"),
-           str(CORE / "pademu_tx.c"), str(CORE / "pademu_usb_desc.c"),
-           str(CORE / "pademu_usb_desc_hidpad.c"),
-           str(CORE / "host" / "procon_host.c"),
-           "-o", str(out)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    assert res.returncode == 0, f"C ビルド失敗:\n{res.stderr}"
-    return out
 
 
 class Device:

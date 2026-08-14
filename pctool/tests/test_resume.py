@@ -12,7 +12,6 @@ from padcue import binfmt, engine
 from padcue.client import DeviceClient, proc_hash
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
-from tests.test_hostc import CORE, find_gcc, host_exe, run_c  # noqa: F401
 
 A = 1 << binfmt.BUTTONS["A"]
 B = 1 << binfmt.BUTTONS["B"]

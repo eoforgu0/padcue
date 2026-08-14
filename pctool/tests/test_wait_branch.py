@@ -14,7 +14,6 @@ from padcue.client import DeviceClient, DeviceError, proc_hash
 from padcue.flowfmt import FlowError
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
-from tests.test_hostc import CORE, find_gcc, host_exe  # noqa: F401
 
 A = 1 << binfmt.BUTTONS["A"]
 B = 1 << binfmt.BUTTONS["B"]

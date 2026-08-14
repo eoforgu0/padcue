@@ -19,8 +19,8 @@ from padcue.client import DeviceClient, proc_hash
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 from padcue.switchsim import parse_input_report
-from tests.test_procon import MAC, Device, procon_exe, run_handshake  # noqa: F401
-from tests.test_hostc import host_exe, run_c  # noqa: F401
+from tests.test_hostc import run_c
+from tests.test_procon import Device, run_handshake
 
 A = 1 << binfmt.BUTTONS["A"]
 B = 1 << binfmt.BUTTONS["B"]

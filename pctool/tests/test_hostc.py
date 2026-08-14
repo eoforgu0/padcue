@@ -1,53 +1,16 @@
 """C 実行エンジン(firmware/components/pademu_core)と Python 参照実装の一致検証。
 
 同一バイナリに対する送出列(絶対フレーム+全状態12値)の完全一致を、
-固定の手順群+乱数生成の手順群で確認する。gcc(WinLibs)が無い環境では skip。
+固定の手順群+乱数生成の手順群で確認する。C のビルドと gcc が無いときの
+扱いは conftest.py の host_exe / gcc fixture にある。
 """
-import glob
-import os
 import random
-import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from padcue import binfmt, engine
 from padcue.dsl import compile_source
-
-REPO = Path(__file__).resolve().parents[2]
-CORE = REPO / "firmware" / "components" / "pademu_core"
-
-
-def find_gcc() -> str | None:
-    if shutil.which("gcc"):
-        return "gcc"
-    pattern = os.path.expandvars(
-        r"%LOCALAPPDATA%\Microsoft\WinGet\Packages"
-        r"\BrechtSanders.WinLibs*\mingw64\bin\gcc.exe")
-    hits = glob.glob(pattern)
-    return hits[0] if hits else None
-
-
-@pytest.fixture(scope="session")
-def host_exe(tmp_path_factory):
-    gcc = find_gcc()
-    if gcc is None:
-        pytest.skip("gcc が見つかりません")
-    del tmp_path_factory   # 使わない(下記の理由でリポジトリ内に置く)
-    # ビルド先はリポジトリ内(build/ は非追跡)。%TEMP% に置くと、
-    # ウイルス対策ソフトが「一時フォルダに現れた無署名 exe」を誤検知・
-    # 隔離して 64 件の検査ごと落とすことがある(2026-08-06 に ESET の
-    # 定義更新で実際に発生)。リポジトリを除外設定していれば巻き込まれない
-    out = CORE.parents[2] / "build" / "hosttest" / "pademu_host.exe"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
-           "-I", str(CORE / "include"),
-           str(CORE / "pademu_core.c"), str(CORE / "host" / "host_main.c"),
-           "-o", str(out)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    assert res.returncode == 0, f"C ビルド失敗:\n{res.stderr}"
-    return out
 
 
 def run_c(host_exe, blob: bytes, tmp_path, session_loops=1, max_steps=1_000_000):
