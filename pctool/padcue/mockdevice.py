@@ -18,7 +18,7 @@ from . import binfmt, engine, proto
 from .client import proc_hash
 from .proto import Message
 
-FW_VERSION = "0.1.0-mock"
+FW_VERSION = "0.3.0-mock"
 
 
 @dataclass

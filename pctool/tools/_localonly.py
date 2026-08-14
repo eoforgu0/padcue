@@ -24,7 +24,7 @@ _LOCAL = ("127.0.0.1", "localhost", "::1")
 def pin_discovery(port: int) -> None:
     """「探す」の結果をモック(loopback)だけにする。"""
     gui.discover = lambda *a, **k: [
-        Found(host="127.0.0.1", port=port, device_id="", fw="0.1.0-mock",
+        Found(host="127.0.0.1", port=port, device_id="", fw="0.3.0-mock",
               how="探索")]
 
 

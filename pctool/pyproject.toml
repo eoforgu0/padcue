@@ -1,6 +1,6 @@
 [project]
 name = "padcue"
-version = "0.1.0"
+version = "0.3.0"
 description = "Switch 2 自動操作システムの PC 側ツール"
 readme = "../README.md"
 license = "Apache-2.0"
