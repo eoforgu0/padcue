@@ -67,12 +67,14 @@ def gcc() -> str:
 def _build_host(gcc: str, name: str, sources: list[str]) -> Path:
     """pademu_core のソースをホストでビルドし、実行ファイルの場所を返す。
 
-    出力先はリポジトリ内(build/ は非追跡)。%TEMP% に置くと、ウイルス対策
-    ソフトが「一時フォルダに現れた無署名の exe」を誤検知・隔離して 64 件の
-    検査ごと落とすことがある(2026-08-06 に ESET の定義更新で実際に発生)。
-    リポジトリを除外設定していれば巻き込まれない。
+    出力先はリポジトリ直下の .hosttest/(非追跡)。%TEMP% に置くと、ウイルス
+    対策ソフトが「一時フォルダに現れた無署名の exe」を誤検知・隔離して 64 件
+    の検査ごと落とすことがある(2026-08-06 に ESET の定義更新で実際に発生)。
+    リポジトリを除外設定していれば巻き込まれない。build/ に置かないのは、
+    そこが利用者の手順のコンパイル結果を入れる場所だから(このリポジトリ
+    自身をプロジェクトフォルダとして使える)。
     """
-    out = REPO / "build" / "hosttest" / name
+    out = REPO / ".hosttest" / name
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [gcc, "-O2", "-std=c11", "-Wall", "-Werror",
            "-I", str(CORE / "include")]

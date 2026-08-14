@@ -17,11 +17,15 @@ padcue.json
 padcue.json.bak
 
 # 実行時生成物
+.hosttest/
 logs.jsonl
 runstate.json
 gui_server.json
 uicheck/
 runbook_walk/
+# 画面の写しの出力先(pctool/tools/shoot.py <出力フォルダ>)。
+# 文書に載せるものだけ docs/images/ に置いて追跡する
+shots/
 
 # 利用者の個人データ(連結実行の編成)。ソフトウェア本体ではない
 sets/
