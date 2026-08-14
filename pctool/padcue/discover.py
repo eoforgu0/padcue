@@ -15,11 +15,12 @@ import json
 import socket
 from dataclasses import dataclass
 
+from .proto import DEFAULT_PORT
+
 PORT = 5557
 PROBE = b"PADEMU?"
 MAGIC = "pademu"
 HOSTNAME = "pademu.local"
-CTRL_PORT = 5555
 
 
 @dataclass(frozen=True)
@@ -100,7 +101,7 @@ def _probe_once(bind_addr: str, port: int, timeout: float) -> list[Found]:
                 continue           # 無関係な機器の応答は無視する
             if obj.get("magic") != MAGIC:
                 continue
-            found.append(Found(host=addr[0], port=int(obj.get("port", CTRL_PORT)),
+            found.append(Found(host=addr[0], port=int(obj.get("port", DEFAULT_PORT)),
                                device_id=str(obj.get("id", "")),
                                fw=str(obj.get("fw", "")), how="探索"))
     finally:
@@ -131,7 +132,7 @@ def discover(timeout: float = 1.5, port: int = PORT,
         # (pademu-<MAC下4桁>.local)を名乗るため、ここでは見つからない
         ip = resolve_by_name()
         if ip:
-            found[ip] = Found(host=ip, port=CTRL_PORT, device_id="", fw="",
+            found[ip] = Found(host=ip, port=DEFAULT_PORT, device_id="", fw="",
                               how="名前 pademu.local")
 
     return sorted(found.values(), key=lambda f: f.host)

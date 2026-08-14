@@ -29,7 +29,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import registry
+from . import proto, registry
 from .client import DeviceClient, DeviceError, connect_verified, is_mock
 from .discover import discover
 from .flowfmt import FlowError
@@ -160,7 +160,7 @@ def _client(args) -> DeviceClient:
     p = _project(args)
     cfg = p.load_config()
     if args.host:                       # 明示指定 = 直結(控えもしない)
-        c = DeviceClient(args.host, int(cfg.get("port", 5555)))
+        c = DeviceClient(args.host, int(cfg.get("port", proto.DEFAULT_PORT)))
         c.connect()
         return c
     dev = _pick_device(args, cfg)
@@ -689,7 +689,8 @@ def cmd_device(args) -> int:
     # 向け替える(控えたまま向けると照合で止まり練習が成立しない。解除は
     # この明示操作のときだけ。探索が黙って mock を採用することはない)
     try:
-        probe = DeviceClient(addr, int(cfg.get("port", 5555)), timeout=1.5)
+        probe = DeviceClient(addr, int(cfg.get("port", proto.DEFAULT_PORT)),
+                             timeout=1.5)
         info = probe.connect()
         probe.close()
         if is_mock(info.device_id) and dev.get("id"):
@@ -817,7 +818,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_discover)
 
     p = sub.add_parser("mock", help="模擬デバイスを起動")
-    p.add_argument("--port", type=int, default=5555)
+    p.add_argument("--port", type=int, default=proto.DEFAULT_PORT)
     p.add_argument("--speed", type=float, default=1.0, help="実行の早送り倍率")
     p.add_argument("--id", default="mock00000000",
                    help="個体ID(2台の練習では2つ目を別のIDにする。"

@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from . import binfmt, engine, proto
-from .client import proc_hash
 from .proto import Message
 
 FW_VERSION = "0.3.0-mock"
@@ -372,14 +371,14 @@ class MockDevice:
             self._put_buf = None
             self._staged = (name, data)
             return Message(proto.T_PUT | proto.T_RESP,
-                           {"hash": proc_hash(data), "size": len(data)})
+                           {"hash": binfmt.proc_hash(data), "size": len(data)})
         if t == proto.T_COMMIT:
             if self._state != "IDLE":
                 return self._err("BUSY", "保存は待機中のみ可能です")
             if self._staged is None:
                 return self._err("NO_STAGED", "転送されたデータがありません")
             name, data = self._staged
-            self._procs[name] = _Proc(name, data, proc_hash(data))
+            self._procs[name] = _Proc(name, data, binfmt.proc_hash(data))
             return Message(proto.T_COMMIT | proto.T_RESP, {})
         if t == proto.T_LIST:
             return Message(proto.T_LIST | proto.T_RESP, {"procs": [

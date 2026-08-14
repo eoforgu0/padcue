@@ -17,6 +17,7 @@ from __future__ import annotations
 import threading
 import time
 
+from . import proto
 from .client import DeviceClient, DeviceError, connect_verified, is_mock
 
 
@@ -290,7 +291,8 @@ class DevicePool:
         自分の接続を横取りして壊すのを防ぐ)。"""
         with self._lock:
             return any(link.client is not None and not link.error
-                       and (link.cfg.get("host"), int(link.cfg.get("port", 5555)))
+                       and (link.cfg.get("host"),
+                            int(link.cfg.get("port", proto.DEFAULT_PORT)))
                        == (host, int(port))
                        for link in self._links.values())
 

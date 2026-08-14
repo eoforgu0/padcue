@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from . import proto
 from .client import DeviceClient, DeviceError
 
 
@@ -27,7 +28,7 @@ def add_device(project, host: str, name: str = "", port=None,
     name = (name or "").strip() or f"{len(devs) + 1}P"
     if any(d.get("name") == name for d in devs):
         return False, f"名前「{name}」は使用済みです"
-    port = int(port or cfg.get("port", 5555))
+    port = int(port or cfg.get("port", proto.DEFAULT_PORT))
     cls = client_cls or DeviceClient
     try:
         c = cls(host, port, timeout=3.0)

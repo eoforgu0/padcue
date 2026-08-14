@@ -15,8 +15,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import binfmt
-from .client import proc_hash
+from .discover import HOSTNAME
 from .flowfmt import FlowError, compile_flow
+from .proto import DEFAULT_PORT
 
 # 名前はそのままファイル名になる。フォルダを跨げる文字を混ぜられると
 # プロジェクトの外を読み書き・削除できてしまうので必ずここで弾く。
@@ -54,7 +55,7 @@ class BuildResult:
 
     @property
     def hash(self) -> str:
-        return proc_hash(self.blob)
+        return binfmt.proc_hash(self.blob)
 
     @property
     def seconds(self) -> float:
@@ -78,7 +79,7 @@ class Project:
         if self.config_path.is_file():
             cfg = json.loads(self.config_path.read_text(encoding="utf-8"))
         else:
-            cfg = {"host": "pademu.local", "port": 5555}
+            cfg = {"host": HOSTNAME, "port": DEFAULT_PORT}
         return self._migrate_config(cfg)
 
     def _migrate_config(self, cfg: dict) -> dict:
@@ -96,8 +97,8 @@ class Project:
                     bak.write_text(self.config_path.read_text(encoding="utf-8"),
                                    encoding="utf-8")
             cfg["devices"] = [{"id": "", "name": "1P",
-                              "host": cfg.get("host", "pademu.local"),
-                              "port": int(cfg.get("port", 5555))}]
+                              "host": cfg.get("host", HOSTNAME),
+                              "port": int(cfg.get("port", DEFAULT_PORT))}]
             self.save_config(cfg)
         # 本体の名前(consoles)のキーを、ペアリング引数の先頭8バイトから
         # 本体 MAC の6バイトへ移す(2026-08-12)。8バイトには先頭のフェーズ

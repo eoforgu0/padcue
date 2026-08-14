@@ -28,6 +28,10 @@ T_CONFIG = 0x0A
 T_SELECT = 0x0B      # 待機分岐の腕選択(AWAITING 中のみ)
 T_CLEAR_ERROR = 0x0C
 T_OTA = 0x0D
+
+# 制御用 TCP の既定ポート。装置は必ずここで待ち受ける
+# (別のポートを使うのは、模擬デバイスを何台も立てる練習のときだけ)
+DEFAULT_PORT = 5555
 T_PASSTHRU = 0x0E    # 手動操作の中継(PC の入力をそのまま USB へ流す)
 T_RESP = 0x80
 T_ERROR = 0xFF

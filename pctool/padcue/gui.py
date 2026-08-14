@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import binfmt, engine, registry
+from . import binfmt, engine, proto, registry
 from .client import DeviceClient, DeviceError, is_mock
 from .coupler import Coupler
 from .devicepool import DevicePool
@@ -392,7 +392,7 @@ class _Handler(BaseHTTPRequestHandler):
                          if d.get("name") == want_name), 0) if want_name else 0
             dev0 = devs_all[didx]
             cur_host = (dev0.get("host") or "").strip()
-            cur_port = int(dev0.get("port", 5555))
+            cur_port = int(dev0.get("port", proto.DEFAULT_PORT))
             # 今つながっているなら何も変えない。収集キャッシュが健康なら
             # 生きている(改めて試すと自分の接続を横取りして壊す)。
             # 先にプールを設定へ追従させる(接続先を書き換えた直後に押された
@@ -818,7 +818,7 @@ class _Handler(BaseHTTPRequestHandler):
         for link in links:
             d = {"name": link.cfg.get("name", ""), "id": link.cfg.get("id", ""),
                  "host": link.cfg.get("host", ""),
-                 "port": int(link.cfg.get("port", 5555)), "at": link.at}
+                 "port": int(link.cfg.get("port", proto.DEFAULT_PORT)), "at": link.at}
             if link.host_info:
                 # つながっている本体(Switch)の識別子。名前は台帳(consoles)
                 # で付け替えられる

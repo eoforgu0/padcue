@@ -5,12 +5,11 @@ GUI・CLI はこのクラスだけを使い、ワイヤ形式を知らない。
 """
 from __future__ import annotations
 
-import hashlib
 import socket
 from dataclasses import dataclass
 
 from . import proto
-from .binfmt import REST_AX, REST_AY, REST_AZ
+from .binfmt import REST_AX, REST_AY, REST_AZ, proc_hash
 from .proto import Message
 
 
@@ -38,13 +37,8 @@ class DeviceInfo:
     device_id: str = ""      # 個体識別子(WiFi MAC 12桁hex)。旧ファームは空
 
 
-def proc_hash(data: bytes) -> str:
-    """手順データの同一性確認に使うハッシュ(転送・実行の照合用)。"""
-    return hashlib.sha256(data).hexdigest()[:16]
-
-
 class DeviceClient:
-    def __init__(self, host: str, port: int = 5555, timeout: float = 5.0):
+    def __init__(self, host: str, port: int = proto.DEFAULT_PORT, timeout: float = 5.0):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -270,7 +264,8 @@ def connect_verified(dev: dict, timeout: float = 3.0,
     client_cls はテストの差し替え口(既定は DeviceClient)。
     """
     cls = client_cls or DeviceClient
-    c = cls(dev.get("host", ""), int(dev.get("port", 5555)), timeout=timeout)
+    c = cls(dev.get("host", ""), int(dev.get("port", proto.DEFAULT_PORT)),
+            timeout=timeout)
     c.connect()
     try:
         info = c.hello()

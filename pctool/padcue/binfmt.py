@@ -16,6 +16,7 @@ total_frames は周回タイミング(A-3 の絶対時刻基準)が直接依存�
 """
 from __future__ import annotations
 
+import hashlib
 import struct
 import zlib
 from dataclasses import dataclass
@@ -54,6 +55,16 @@ OP_JMP = 4
 OP_END = 5
 OP_AWAIT = 6      # 待機分岐: 全ニュートラルで止まり、PC の選択で腕へ進む
 MAX_ARMS = 4
+
+
+def proc_hash(data: bytes) -> str:
+    """手順データの同一性確認に使うハッシュ(転送・実行の照合用)。
+
+    「このバイト列が同じものか」を見るだけなので形式の側の話。通信層に
+    置くと、プロジェクト管理(project.py)がソケットを抱えるモジュールへ
+    依存する理由がこれだけになってしまう。
+    """
+    return hashlib.sha256(data).hexdigest()[:16]
 
 # ボタンのビット割り当て(転送層がレポート形式へ変換する。ここは方式非依存の論理表現)
 BUTTONS = {
