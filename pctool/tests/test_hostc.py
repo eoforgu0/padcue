@@ -140,3 +140,22 @@ def test_c_rejects_corruption(host_exe, tmp_path):
                         capture_output=True, text=True)
     assert res.returncode == 3
     assert "ERR decode 5" in res.stdout  # PADEMU_ERR_CRC
+
+
+def test_c_rejects_zero_loop_count(host_exe, tmp_path):
+    """くり返し回数 0 のバイナリを、装置側も実行前に弾くこと。
+
+    実行は「1 減らしてから 0 か見る」ので、0 から引くと C 側(uint32)が
+    回り込んで約42億周する。Python 側は任意精度なので -1 になって素通り
+    する。両実装の送出列が一致しない唯一の既知の穴だったので、decode の
+    段階で両方が弾くようにした(PC 側は test_binfmt が見ている)。
+    """
+    blob = binfmt.encode("p", [binfmt.SetCnt(0, 0), binfmt.State(0),
+                               binfmt.Djnz(0, target=1, advance=3),
+                               binfmt.End()], 3)
+    p = tmp_path / "zeroloop.bin"
+    p.write_bytes(blob)
+    res = subprocess.run([str(host_exe), str(p), "1", "1000"],
+                         capture_output=True, text=True)
+    assert res.returncode == 3
+    assert "ERR decode 8" in res.stdout   # PADEMU_ERR_ZERO_CYCLE

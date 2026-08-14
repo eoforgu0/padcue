@@ -87,6 +87,11 @@ pademu_err_t pademu_decode(const uint8_t *data, size_t len, pademu_proc_t *out) 
             }
             continue;
         }
+        // くり返し回数 0 は受け取らない。step は減算してから 0 かを見るので、
+        // 0 から引くと uint32 が回り込んで約42億周する。コンパイラは 1 以上
+        // しか出さない(dsl.py が 1..1,000,000 に制限)ので、ここに来るのは
+        // 壊れたバイナリだけ。PC 側の binfmt.decode も同じ値を弾く
+        if (op == OP_SETCNT && le32(r + 6) == 0) return PADEMU_ERR_ZERO_CYCLE;
         if (op == OP_DJNZ || op == OP_JMP) {
             uint32_t target = (op == OP_DJNZ) ? le32(r + 6) : le32(r + 5);
             if (target >= count) return PADEMU_ERR_TARGET;

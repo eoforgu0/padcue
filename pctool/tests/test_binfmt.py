@@ -92,3 +92,11 @@ def test_zero_time_cycles_rejected_on_decode():
     blob = binfmt.encode(
         "p", [SetCnt(0, 5), State(0), Djnz(0, target=1, advance=3), End()], 3)
     binfmt.decode(blob)
+
+
+def test_zero_loop_count_is_rejected():
+    """くり返し回数 0 のバイナリを受け取らないこと(装置側と同じ判断)。"""
+    blob = binfmt.encode(
+        "p", [SetCnt(0, 0), State(0), Djnz(0, target=1, advance=3), End()], 3)
+    with pytest.raises(binfmt.DecodeError, match="くり返し回数"):
+        binfmt.decode(blob)

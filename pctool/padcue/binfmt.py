@@ -269,6 +269,12 @@ def decode(data: bytes) -> tuple[str, list[Event], int]:
                 if t <= i:
                     raise DecodeError(f"イベント{i}: 待機分岐は前方へのみ進めます")
             continue
+        # くり返し回数 0 は受け取らない。実行は減算してから 0 かを見るので、
+        # C 側(uint32)では回り込んで約42億周する。コンパイラは 1 以上しか
+        # 出さない(dsl.py が 1..1,000,000 に制限)ので、ここに来るのは壊れた
+        # バイナリだけ。装置側の pademu_decode も同じ値を弾く
+        if isinstance(ev, SetCnt) and ev.value == 0:
+            raise DecodeError(f"イベント{i}: くり返し回数が 0 です")
         if isinstance(ev, (Djnz, Jmp)) and not (0 <= ev.target < count):
             raise DecodeError(
                 f"イベント{i}: ジャンプ先が範囲外です: {ev.target} / {count}")
