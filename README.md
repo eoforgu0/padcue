@@ -16,12 +16,12 @@ PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコ�
 
 ## 要るもの
 
-| | |
-|---|---|
-| PC | Windows。Python 3.10 以上と、ブラウザ(Chrome / Edge など) |
-| マイコン | M5Stack AtomS3 Lite を1台(2台同時運用なら2台) |
-| ケーブル | データ通信できる USB-C ケーブル。最初の書き込みだけに使い、以後は無線 |
-| Switch | 本体と純正ドック。本体設定の「Pro コントローラーの有線通信」を ON にする |
+|          |                                                                          |
+|----------|--------------------------------------------------------------------------|
+| PC       | Windows。Python 3.10 以上と、ブラウザ(Chrome / Edge など)                |
+| マイコン | M5Stack AtomS3 Lite を1台(2台同時運用なら2台)                            |
+| ケーブル | データ通信できる USB-C ケーブル。最初の書き込みだけに使い、以後は無線    |
+| Switch   | 本体と純正ドック。本体設定の「Pro コントローラーの有線通信」を ON にする |
 
 **実機が無くても、模擬デバイス付きの練習モードで全機能を試せます。**
 
@@ -163,6 +163,9 @@ python pctool/tools/runbook_walk.py <出力先>
 
 # 画面の見た目を確認(明暗テーマのスクリーンショット)
 python pctool/tools/shoot.py <出力先> [--dark]
+
+# 文書の表の桁を、表示幅で揃え直す(--check だけなら確認のみ)
+python pctool/tools/mdtable.py docs/<文書>.md
 
 # マイコン側のビルド(ESP-IDF 5.5 以上。Windows は PowerShell から)
 cd firmware && idf.py build
