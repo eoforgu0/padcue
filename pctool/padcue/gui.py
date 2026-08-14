@@ -1,9 +1,12 @@
-"""操作画面(GUI v1: 実行・監視)。ローカルの Web アプリとして動く。
+"""操作画面。ローカルの Web アプリとして動く。
 
     padcue gui
 
 デバイスに繋がっていなくてもコンパイルとタイムライン確認はできる
 (実機到着前でも手順を作って検証できるようにするため)。
+
+このファイル中の「原則 §N」は docs/design/gui-principles.md の節を指す。
+画面の見た目・文言・配置は、すべてそこから説明できる状態を保つこと。
 """
 from __future__ import annotations
 
@@ -532,7 +535,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._coupler().stop_both(mode)
         if path == "/api/select_both":
             return self._coupler().select_both(int(body.get("arm", 0)))
-        # ---- 編成(盤面のスナップショット。sets/<名前>.json) ----
+        # ---- プリセット(盤面のスナップショット。sets/<名前>.json) ----
         if path == "/api/formation_save":
             self.project.save_formation(body.get("name", ""),
                                         body.get("data") or {})
@@ -3653,7 +3656,7 @@ async function syncLaneTimeline(lane, runName) {
     if ([...lane.resume.options].some(o => o.value === keep)) {
       lane.resume.value = keep;
     }
-    // 編成の呼び出しで指定された開始位置は、選択肢がそろった今しか
+    // プリセットの呼び出しで指定された開始位置は、選択肢がそろった今しか
     // 適用できない(呼び出し時点では図がまだ古い)
     if (lane.pendingResume !== undefined) {
       const wantAt = lane.pendingResume || '先頭';
@@ -3973,7 +3976,7 @@ function manualTarget() {
 // 連結はそのうちの一つ(2台をまとめる唯一の入口)。連動の実体はサーバ
 // (coupler.py)で、ここは盤面の写像と操作の入口だけ
 
-let loadedFormation = '';    // 呼び出した編成の名前('' = 未使用)
+let loadedFormation = '';    // 呼び出したプリセットの名前('' = 未使用)
 let cplStopSeen = 0;         // 連動停止の知らせを × で閉じた時刻(at)
 
 function cpl() { return state.coupling || null; }

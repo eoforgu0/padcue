@@ -781,7 +781,7 @@ class Coupler:
             self._save_runstate()
 
     def _accumulate_laps(self, run) -> None:
-        """編成ごとの通算周回(呼び出し元が self._lock を握っていること)。"""
+        """プリセットごとの通算周回(呼び出し元が self._lock を握っていること)。"""
         name = run.get("formation")
         if not name:
             return

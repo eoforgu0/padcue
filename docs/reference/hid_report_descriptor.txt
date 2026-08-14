@@ -1,3 +1,13 @@
+// 純正 Nintendo Switch Pro コントローラー(有線 USB)の
+// HID レポートディスクリプタ 203 バイト。
+//
+// 採取: 実機から usbhid-dump で読み出したものに注釈を付けた。
+// 用途: firmware/components/pademu_core/pademu_usb_desc.c が
+//       このバイト列をそのまま複製する(機能的に等価に見えても
+//       再構成しない。Switch が実在製品と同一の記述を期待しうるため)。
+// 権利: これは既存製品のインターフェース記述であり、本プロジェクトの
+//       著作物ではない。扱いは NOTICE を参照。
+
 0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
 0x15, 0x00,        // Logical Minimum (0)
 0x09, 0x04,        // Usage (Joystick)

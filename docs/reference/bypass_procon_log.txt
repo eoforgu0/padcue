@@ -1,3 +1,13 @@
+# 純正 Pro コントローラーと Switch 本体の USB 通信を中継して採った記録。
+#
+# 採取: Raspberry Pi を両者の間に挟み、出力レポート(>>>)と入力レポート
+#       (<<<)を順に書き出した。定期入力レポート(<<< 30)は量が多いので
+#       除いてある。
+# 用途: docs/design/procon-protocol.md の「実測」の根拠。初期化シーケンス
+#       の順序と、各サブコマンドへの応答バイト列を、この記録から起こした。
+#       pctool/padcue/switchsim.py はこの列を再生して実装を検証する。
+# 注意: 本体とコントローラーの Bluetooth MAC が含まれる。
+
 pi@raspberrypi:~ $ sudo python3 bypass_procon.py | grep -v '<<< 30'
 >>> 0000
 >>> 0000

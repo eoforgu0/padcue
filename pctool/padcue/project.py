@@ -397,9 +397,9 @@ class Project:
             return []
         return self._apply_order([p.stem for p in d.glob("*.csv")], "parts")
 
-    # ---- 編成(連結実行の盤面スナップショット。sets/<名前>.json) ----
+    # ---- プリセット(連結実行の盤面スナップショット。sets/<名前>.json) ----
     # 利用者の資産(手順・部品と同格)なのでプロジェクト直下に置く。
-    # 保存キーは装置の個体ID(改名しても編成が切れないように。計画 D6)
+    # 保存キーは装置の個体ID(改名してもプリセットが切れないように。計画 D6)
 
     def formation_names(self) -> list[str]:
         d = self.root / "sets"

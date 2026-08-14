@@ -355,11 +355,11 @@ def test_formations(env):
     assert r.get("ok"), r
     wait_until(lambda: get(base, "/api/state")["coupling"]["run"]["active"]
                is False, timeout=20)
-    # 通算周回が編成に積み上がる
+    # 通算周回がプリセットに積み上がる
     snap = get(base, "/api/state")["coupling"]
     totals = snap["formations"]["検証A"]["total_laps"]
     assert totals.get("1P") == 2 and totals.get("2P") == 2, totals
-    # 編成の保存・一覧・読み出し・削除
+    # プリセットの保存・一覧・読み出し・削除
     data = {"linked": True, "auto_join": True, "arm": 0,
             "devices": [{"id": "aaaa00000001", "proc": "合流", "loops": 5,
                          "resume": ""},
