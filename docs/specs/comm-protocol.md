@@ -5,9 +5,12 @@
 
 ## 設計原則
 
-- 遅延不問・利用者1名・LAN 内限定(設計文書の許容条件)。HTTP/MQTT 等は使わず最小の自作パケット形式
-- 実行中のタイミング経路に PC を関与させない(D2)。実行中に許されるのは RAM フラグ操作(停止指示)と状態読み出しのみ
-- 実行中のフラッシュ書き込み禁止(7.4)。転送データは RAM 受け、COMMIT は停止中のみ
+- 遅延不問・利用者1名・LAN 内限定(設計文書の許容条件)。HTTP/MQTT 等は使わず最小
+  の自作パケット形式
+- 実行中のタイミング経路に PC を関与させない(D2)。実行中に許されるのは RAM フラ
+  グ操作(停止指示)と状態読み出しのみ
+- 実行中のフラッシュ書き込み禁止(7.4)。転送データは RAM 受け、COMMIT は停止中の
+  み
 
 ## トランスポート
 
@@ -16,9 +19,13 @@
 | TCP :5555(マイコン=サーバ) | コマンド/応答。パケットの形: `len u16 \| type u8 \| payload \| crc32`(**この「パケット」はゲームの1描画周期を指す「フレーム」とは別物**。2026-08-12 に語を分けた) |
 | UDP :5556(マイコン→PC)     | ログストリーム。実行中は詳細ログを RAM リングバッファに蓄積し停止後に回収(A-4)                                                                                    |
 
-デバイスの IP は DHCP 固定割当(ルーター側設定)を前提とし、PC ツールは設定ファイルに保持する。
+デバイスの IP は DHCP 固定割当(ルーター側設定)を前提とし、PC ツールは設定ファイ
+ルに保持する。
 
-**ペイロード形式**: `json_len u16 | JSON(UTF-8) | blob`。制御情報は JSON(タイミング経路外のため拡張性・可読性を優先。MCU 側は cJSON)、手順データ等の大きなバイト列は blob に載せる。応答の type は「要求 type | 0x80」、エラー応答は 0xFF(code, message)。参照実装: `pctool/padcue/proto.py`
+**ペイロード形式**: `json_len u16 | JSON(UTF-8) | blob`。制御情報は JSON(タイミ
+ング経路外のため拡張性・可読性を優先。MCU 側は cJSON)、手順データ等の大きなバイ
+ト列は blob に載せる。応答の type は「要求 type | 0x80」、エラー応答は
+0xFF(code, message)。参照実装: `pctool/padcue/proto.py`
 
 ## コマンド一覧
 
@@ -41,10 +48,14 @@
 
 ## デバイス状態機械(LED 表示と対応)
 
-**正本は firmware-architecture.md §6**(AWAITING の遷移表・ERROR 解除を含む)。概要: BOOT → WIFI_CONNECTING → IDLE ⇄ RUNNING(⇄ AWAITING)/ ERROR(ラッチ、CLEAR_ERROR で解除)/ OTA
+**正本は firmware-architecture.md §6**(AWAITING の遷移表・ERROR 解除を含む)。概
+要: BOOT → WIFI_CONNECTING → IDLE ⇄ RUNNING(⇄ AWAITING)/ ERROR(ラッチ、
+CLEAR_ERROR で解除)/ OTA
 
-- プレイヤー番号(Switch からのサブコマンド 0x30)受信時は LED に反映(1P/2P 以降の判別)
-- USB 切断・サスペンドを RUNNING 中に検出した場合: 中断+全ニュートラル+位置(周回・index)記録 → ERROR
+- プレイヤー番号(Switch からのサブコマンド 0x30)受信時は LED に反映(1P/2P 以降の
+  判別)
+- USB 切断・サスペンドを RUNNING 中に検出した場合: 中断+全ニュートラル+位置(周回・
+  index)記録 → ERROR
 
 ## 決着した設計事項
 

@@ -1,14 +1,16 @@
 # padcue — Nintendo Switch 2 自動操作システム
 
-PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコントローラーとして
-高い時間精度で実行します。長時間の周回作業の代行と、フレーム単位の精密な挙動検証が目的です。
+PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコントローラーとし
+て高い時間精度で実行します。長時間の周回作業の代行と、フレーム単位の精密な挙動検
+証が目的です。
 
 **PC 側は Python の標準ライブラリだけで動きます**(外部パッケージの導入は不要)。
 **2台同時運用**まで実機で検証済みです — 装置ごとのレーン画面、「連結」でのまとめて
 開始・自動合流・連動停止、割り当てのプリセット保存、どの Switch につながっているかの
 自動表示。初代 Switch でも動作します。
 
-**セットアップは [docs/runbook.md](docs/runbook.md)**(2台目の追加は §8、連結の使い方は §9)。
+**セットアップは [docs/runbook.md](docs/runbook.md)**(2台目の追加は §8、連結の使
+い方は §9)。
 
 > 固有用語は [docs/glossary.md](docs/glossary.md) にまとまっています。
 
@@ -57,7 +59,8 @@ python -m padcue mock         # 模擬デバイス(別の端末で)
 手順の作成・編集も同じ画面で行います(ファイルを直接いじる必要はありません)。
 
 **実機がある場合**は `padcue device auto`(LAN 内を探して覚える)に変えるだけで、
-同じ操作が実機に対して行われます。はじめての一台は [docs/runbook.md](docs/runbook.md) を参照。
+同じ操作が実機に対して行われます。はじめての一台は
+[docs/runbook.md](docs/runbook.md) を参照。
 
 ---
 
@@ -116,11 +119,15 @@ F,A,B,ZL,LX,GP
 
 **ルール**
 
-- 数値はすべて**生値**。スティックは中心 0 の -2048〜+2047(左と下が負)。`+1` が送信分解能の最小刻み
+- 数値はすべて**生値**。スティックは中心 0 の -2048〜+2047(左と下が負)。`+1` が
+  送信分解能の最小刻み
 - ジャイロ(GP/GY/GR)は毎フレームの回転速度(生値)
-- CSV の**空セル**は「離す/0」。操作画面で作った部品は**全ての入力を明示**します(手書きの CSV で列そのものを省いた場合だけ「直前の状態を継続」)
-- **くり返しは書いた区間の正確な再生**。押しっぱなしを周回にまたがせたい場合は loop の前で押す
-- 危ない書き方(1フレームの押下=まったく現れないことがある、0フレームで消える操作、周回の継ぎ目の衝突)は変換時に警告
+- CSV の**空セル**は「離す/0」。操作画面で作った部品は**全ての入力を明示**します
+  (手書きの CSV で列そのものを省いた場合だけ「直前の状態を継続」)
+- **くり返しは書いた区間の正確な再生**。押しっぱなしを周回にまたがせたい場合は
+  loop の前で押す
+- 危ない書き方(1フレームの押下=まったく現れないことがある、0フレームで消える操作、
+  周回の継ぎ目の衝突)は変換時に警告
 
 詳細は [docs/specs/flow-format.md](docs/specs/flow-format.md)。
 
@@ -140,13 +147,18 @@ pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デ
 追う場合の順:
 
 0. [glossary.md](docs/glossary.md) — 固有用語
-1. [hardware-design.md](docs/hardware-design.md) — 何を作るのか、なぜこの構成か(第一原理は「入力精度」)
-2. [specs/procedure-format.md](docs/specs/procedure-format.md) — 手順データの形式と実行モデル
+1. [hardware-design.md](docs/hardware-design.md) — 何を作るのか、なぜこの構成か(第
+   一原理は「入力精度」)
+2. [specs/procedure-format.md](docs/specs/procedure-format.md) — 手順データの形
+   式と実行モデル
 3. [specs/flow-format.md](docs/specs/flow-format.md) — 手順の書き方(正本形式)
 4. [specs/comm-protocol.md](docs/specs/comm-protocol.md) — PC とマイコンの通信
-5. [design/firmware-architecture.md](docs/design/firmware-architecture.md) — マイコン内部の設計
-6. [design/procon-protocol.md](docs/design/procon-protocol.md) — コントローラーとして名乗るためのプロトコル(実測値つき)
-7. [design/gui-principles.md](docs/design/gui-principles.md) — 画面の見た目・文言・配置を説明できる状態に保つための原則
+5. [design/firmware-architecture.md](docs/design/firmware-architecture.md) — マ
+   イコン内部の設計
+6. [design/procon-protocol.md](docs/design/procon-protocol.md) — コントローラー
+   として名乗るためのプロトコル(実測値つき)
+7. [design/gui-principles.md](docs/design/gui-principles.md) — 画面の見た目・文
+   言・配置を説明できる状態に保つための原則
 
 ---
 
