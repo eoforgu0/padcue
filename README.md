@@ -109,7 +109,7 @@ pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デ
 # PC 側のテスト(実機不要。C 実装の検証も含む)
 python -m pytest -q
 
-# GUI を実際にブラウザで操作して想定と突き合わせる(52項目)
+# GUI を実際にブラウザで操作して想定と突き合わせる
 cd pctool && python tools/uicheck.py <出力先>
 
 # 手順書(docs/runbook.md)のとおりになぞって、ずれていないか確認する
