@@ -7,6 +7,7 @@
 #include "app_engine.h"
 #include "class/hid/hid_device.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "pademu_hidpad.h"
@@ -71,8 +72,26 @@ bool app_usb_manual_enabled(void) {
     return s_manual_on;
 }
 
-// 実在品と同じ MAC を名乗る必要はないが、形式は合わせる(下位3バイトは任意)
-static const uint8_t s_mac[6] = { 0x04, 0x03, 0xD6, 0x00, 0x00, 0x01 };
+// 自機として名乗る MAC。本体はこの値でコントローラーの登録記録を引く。
+//
+// 上位3バイトは実在のコントローラーと同じベンダー識別子(OUI)のまま。
+// 本体がベンダーを見ている可能性を否定できないので変えない(公開登録情報
+// なので、これだけでは個体を指さない)。**下位3バイトはこの装置自身の MAC
+// から作る** —— 実在の個体の値を焼き込まないためと、装置ごとに固有にする
+// ため(2台を同じ本体につなぐと、同じ値では本体側の登録記録が1つに
+// 重なる)。本物のコントローラーも個体ごとに違う値を名乗る。
+//
+// 値が変わると本体から見て「別のコントローラー」になるので、更新後の
+// 初回接続で登録がやり直しになる(ペアリングの流れは実装済みで自動)。
+static uint8_t s_mac[6] = { 0x04, 0x03, 0xD6, 0x00, 0x00, 0x00 };
+
+static void init_self_mac(void) {
+    uint8_t own[6] = {0};
+    esp_read_mac(own, ESP_MAC_WIFI_STA);
+    s_mac[3] = own[3];
+    s_mac[4] = own[4];
+    s_mac[5] = own[5];
+}
 
 // ---- ディスクリプタ ----
 
@@ -327,6 +346,7 @@ esp_err_t app_usb_start(app_usb_mode_t mode, const app_usb_cb_t *cb) {
         .on_rumble = NULL,
         .ctx = NULL,
     };
+    init_self_mac();
     pademu_procon_init(&s_procon, s_mac, &pcb);
 
     tinyusb_config_t cfg = {

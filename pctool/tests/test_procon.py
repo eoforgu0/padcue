@@ -19,6 +19,8 @@ from padcue.switchsim import (
 )
 from tests.conftest import CORE
 
+# ホスト検査の装置が名乗る MAC(host/procon_host.c と同じ値)。実機は装置ごとに
+# 下位3バイトを自分の MAC から作るので、ここは検査用の固定値でよい
 MAC = bytes([0x04, 0x03, 0xD6, 0x00, 0x00, 0x01])
 
 

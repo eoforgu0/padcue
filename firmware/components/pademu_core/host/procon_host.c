@@ -56,6 +56,8 @@ static void print_hex(const char *tag, const uint8_t *p, size_t n) {
 }
 
 int main(void) {
+    // 検査用の値(実機は装置ごとに下位3バイトを自分の MAC から作る。
+    // app_usb.c の s_mac を参照)。ここは Python 側の期待値と揃っていれば足りる
     static const uint8_t MAC[6] = { 0x04, 0x03, 0xD6, 0x00, 0x00, 0x01 };
     pademu_procon_cb_t cb = { .on_player_lights = on_led, .on_rumble = NULL, .ctx = NULL };
     pademu_procon_t pc;
