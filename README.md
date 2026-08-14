@@ -41,8 +41,8 @@ PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコ�
 
 はじめて開いたときは手順がまだ1つもありません。雛形を作ると、画面の一覧に出ます:
 
-```bash
-set PYTHONPATH=pctool
+```powershell
+$env:PYTHONPATH = "pctool"
 python -m padcue init         # サンプルの手順と部品を作る
 ```
 
@@ -50,7 +50,7 @@ python -m padcue init         # サンプルの手順と部品を作る
 
 コマンドから使う場合:
 
-```bash
+```powershell
 python -m padcue gui          # 操作画面
 python -m padcue mock         # 模擬デバイス(別の端末で)
 ```
@@ -135,7 +135,7 @@ F,A,B,ZL,LX,GP
 
 ## 構成
 
-```
+```text
 docs/           設計文書(下記)
 firmware/       マイコン側(ESP-IDF)
   components/pademu_core/   移植可能な純粋C(手順の解釈・実行・プロトコル)

@@ -11,7 +11,7 @@
 
 ## 全体の流れ
 
-```
+```text
 0. PC の下準備     - 15分  Python と ESP-IDF が動くことを確認
 1. 書き込む        - 20分  WiFi 設定 -> ケーブルで1回だけ書き込む
 2. PC から見つける - 10分  無線でつながる確認(IP のメモは不要)
@@ -43,7 +43,10 @@
 
 ### 0-2. PC 側が動くことを確認する
 
-```
+ここから先、コマンドは **PowerShell** に貼り付けます
+(`C:\path\to\padded` は、このリポジトリを置いた場所に読み替えてください)。
+
+```powershell
 cd C:\path\to\padded
 python -m pytest -q
 ```
@@ -55,8 +58,8 @@ python -m pytest -q
 
 手に入れた直後は手順が1つもないので、先に雛形を作ります。
 
-```
-set PYTHONPATH=pctool
+```powershell
+$env:PYTHONPATH = "pctool"
 python -m padcue init
 ```
 
@@ -88,7 +91,7 @@ python -m padcue init
 Windows では **PowerShell** から使います(Git Bash からは動きません)。
 PowerShell を開いて、上から順に貼り付けてください。
 
-```
+```powershell
 Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue
 . C:\path\to\esp-idf\export.ps1
 cd C:\path\to\padded\firmware
@@ -100,7 +103,7 @@ idf.py --version
 
 ### 1-2. WiFi の SSID とパスワードを入れる
 
-```
+```powershell
 cd ..\pctool
 python tools/set_wifi.py
 ```
@@ -130,7 +133,7 @@ SSID とパスワードを聞かれます(パスワードは画面に出ませ�
 
 **まだ Switch には挿さないでください。** PC につなぎます。
 
-```
+```powershell
 idf.py -p COM5 flash monitor
 ```
 
@@ -139,7 +142,7 @@ idf.py -p COM5 flash monitor
 
 **確認**: ログが次の順に出ます。
 
-```
+```text
 pademu fw 0.3.0 起動
 ...
 IP取得: 192.168.x.x            <- この IP を控えておくと後で楽(必須ではない)
@@ -189,7 +192,7 @@ USB を開始します(ここでシリアルのログは終わります)
 画面**左の「装置」パネル**に、装置の行があります。行の **▸** を押すと詳細が開き、
 接続先・探す・接続がそこに集約されています。
 
-```
+```text
 [>] * 1P                          <- 行を押すと詳細が開く(未接続・異常なら自動で開く)
     接続先 [192.168.x.x____] [探す] [接続]
              ^いまの接続先      ^         ^
@@ -232,9 +235,9 @@ USB を開始します(ここでシリアルのログは終わります)
 
 **コマンドで済ませたい場合**(GUI を使わずに確認したいとき)
 
-```
+```powershell
 cd C:\path\to\padded
-set PYTHONPATH=pctool
+$env:PYTHONPATH = "pctool"
 python -m padcue device auto     # 探して接続先を覚える
 python -m padcue status          # 状態を表示
 ```
@@ -478,7 +481,7 @@ Switch に挿す前にここを見ておくと、次で失敗したとき**マ�
 「**部品を編集**」タブ → **＋ 新規** → 1 行 = 1 フレームで埋めます。
 **すべてのボタン・スティックの列が最初から並んでいます**(列を足す操作はありません)。
 
-```
+```text
 フレーム   A    B    ZL   ... LX
    1      ON                        <- A を押す
    2      ON
@@ -759,7 +762,7 @@ Switch 側の**ゼロ点自動較正**に「センサーのずれ」として吸
 
 以後ケーブルの抜き挿しが不要になります。**挿したまま**試してください。
 
-```
+```powershell
 （1-1 の PowerShell で）
 cd C:\path\to\padded\firmware
 idf.py build
@@ -795,7 +798,7 @@ Switch で発生)。`padcue status` の到達段階が **0x400 のまま**(= 入
 
 数千フレームの手順を流して後半がずれるなら、切り替えて比べます。
 
-```
+```powershell
 python -m padcue config frame_period_ns 16683333    # 59.94Hz 相当にする
 python -m padcue config frame_period_ns 16666667    # 60.00Hz に戻す
 ```
@@ -826,8 +829,9 @@ python -m padcue config frame_period_ns 16666667    # 60.00Hz に戻す
 
 1. **有線で書き込む**(§1 と同じ。2台目は必ず有線から。書き込み時の
    シリアルログに「個体ID: xxxxxxxxxxxx」と IP アドレスが表示されるので控える)
-2. **WiFi を本体保存にする**(§1 の仕上げと同じ。`padcue --host <IP> config
-   wifi_ssid <SSID>` と `wifi_pass`。ビルド設定に頼らず NVS に入れる)
+2. **WiFi を本体保存にする**(§1 の仕上げと同じ。
+   `padcue --host <IP> config wifi_ssid <SSID>` と `wifi_pass`。
+   ビルド設定に頼らず NVS に入れる)
 3. **すぐ登録する**(どちらでも同じ):
    - 画面から: 左の**装置パネルの「＋ 装置を追加」**。LAN から未登録の
      実機を探して候補に出す(見つからないときは IP 直接指定の欄が出る)
@@ -986,7 +990,8 @@ python -m padcue --project . gui
 
 ふだんは `padcue.bat` をダブルクリックするだけです。
 コマンドで使う場合は、`padcue.bat` と同じフォルダで
-`set PYTHONPATH=pctool` を一度実行してから次を使います。
+`$env:PYTHONPATH = "pctool"` を一度実行してから次を使います
+(コマンドプロンプトなら `set PYTHONPATH=pctool`)。
 
 | コマンド                                 | すること                                             |
 |------------------------------------------|------------------------------------------------------|

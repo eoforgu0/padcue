@@ -202,8 +202,9 @@ P2-3 検査(uicheck)の書き換えと文書改訂。プリセットの保存・
 ブラウザを閉じても連動停止・自動合流が動き続けるため(収集と同じ理由)。
 GUI は盤面の写像に徹する。
 
-- **連結の保存**: `padcue.json` の `coupling: {on, auto_join, arm,
-  oneshot_manual}`。対象は台帳の先頭2台(3台以上は対象外のまま)
+- **連結の保存**: `padcue.json` の
+  `coupling: {on, auto_join, arm, oneshot_manual}`。
+  対象は台帳の先頭2台(3台以上は対象外のまま)
 - **実行の運転記録**: プロジェクト直下 `runstate.json`(実行時生成物・
   非追跡)。内容 = 連結実行の計画(装置×手順×周回×開始位置)、開始時刻、
   開始ズレms、人為停止の記録、プリセットごとの通算周回と合流待ち実測(直近20件)。
@@ -238,8 +239,8 @@ GUI は盤面の写像に徹する。
   PC_SELECT_BOTH / PC_LINK_STOP / PC_WAIT_LATE。装置タグ付き)。装置内µs
   (LATE_EVENT 等)と混同しないよう ms は必ず「ズレ」と書く
 - **プリセット**: `sets/<名前>.json`(ユーザー資産・非追跡)。
-  `{schema:1, name, linked, auto_join, arm, devices:[{id, proc, loops,
-  resume}]}`。保存キーは装置の個体ID(改名に耐える)。実行中の呼び出しは
+  `{schema:1, name, linked, auto_join, arm, devices:[{id, proc, loops, resume}]}`。
+  保存キーは装置の個体ID(改名に耐える)。実行中の呼び出しは
   拒否(理由を出す)。盤面がプリセットとずれたら連結バーのプリセット名に *
 - **ペア反復テスト**: 対象「連結(1P+2P)」= 連結1回実行を1試行として、
   ○×に手順ハッシュと開始ズレmsを添えて記録する
