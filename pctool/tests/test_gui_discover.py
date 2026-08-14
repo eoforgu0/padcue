@@ -101,13 +101,13 @@ def test_does_not_adopt_an_unreachable_candidate(env, monkeypatch):
     proj, dev, base = env
     monkeypatch.setattr(gui, "discover", lambda *a, **k: [])
     cfg = proj.load_config()
-    cfg["host"] = "10.255.255.1"        # 応答しない住所にしておく
+    cfg["host"] = "192.0.2.9"        # 応答しない住所にしておく
     proj.save_config(cfg)
     dev.stop()                          # 探しても見つからない状態にする
     r = post(base, "/api/discover")
     assert "error" in r, r
     assert "変えていません" in r["error"] or "見つかりません" in r["error"], r
-    assert proj.load_config()["host"] == "10.255.255.1", \
+    assert proj.load_config()["host"] == "192.0.2.9", \
         "つながらないのに接続先を書き換えた"
 
 

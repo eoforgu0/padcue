@@ -196,6 +196,12 @@ def main() -> int:
         return 2
     out = Path(args[0])
     out.mkdir(parents=True, exist_ok=True)
+    # 前回の失敗写真を消す。ファイル名は NG-<通番>-<項目名> で、項目を1つ
+    # 足すと以降の番号がずれるため上書きされない。放っておくと直したはずの
+    # 項目の写真が残り続け、「どれが今回の失敗か」が分からなくなる
+    # (実際に41枚たまり、同じ項目の別番号が別の日付で同居していた)
+    for old in out.glob("NG-*.png"):
+        old.unlink()
     proj = build_project(out / "_proj")
     # 実機と同じく全アダプタで待つ(探索で見つかった自分の IP へ繋げるように)
     dev = MockDevice(speed=1.0, host="0.0.0.0")

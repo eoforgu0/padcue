@@ -73,7 +73,6 @@ def test_abort_frame_reflects_when_stopped(dev):
         seen.append(e["a"])
     assert len(set(seen)) >= 4, f"止めた時点によらず同じ値になっている: {seen}"
     assert all(0 < v <= total for v in seen), (seen, total)
-    assert seen == sorted(seen) or True        # 順序は問わない(乱択のため)
 
 
 def test_abort_frame_grows_with_wait(dev):

@@ -1,3 +1,8 @@
+"""PC とマイコンの通信パケットの組み立てと取り出し(proto)。
+
+`len u16 | type u8 | payload | crc32` の形。分割して届いた場合や、
+壊れた場合の振る舞いを見る(仕様は docs/specs/comm-protocol.md)。
+"""
 import pytest
 
 from padcue import proto

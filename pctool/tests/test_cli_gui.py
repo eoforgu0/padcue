@@ -76,7 +76,7 @@ def test_cli_without_device_reports_clearly(proj, monkeypatch):
     # 既定の接続先は pademu.local。実機が同じ LAN にいると名前が引けてしまうので、
     # 届かない住所を明示しておく
     cfg = proj.load_config()
-    cfg["host"] = "10.255.255.1"
+    cfg["host"] = "192.0.2.9"
     proj.save_config(cfg)
     with pytest.raises(SystemExit):
         run_cli(proj, "status")

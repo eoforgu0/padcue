@@ -122,7 +122,7 @@ def test_passthrough_burst_is_served(env):
 def test_host_change_drops_old_connection(env):
     _proj, _dev, base = env
     assert wait_until(lambda: get(base, "/api/state").get("device"))
-    post(base, "/api/device", {"host": "10.255.255.1"})
+    post(base, "/api/device", {"host": "192.0.2.9"})
     assert wait_until(
         lambda: get(base, "/api/state").get("device") is None), \
         "接続先を変えたのに古い接続を使っている"
