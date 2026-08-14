@@ -4,7 +4,7 @@
       procedures/<名前>.flow.json   フロー(正本)
       parts/<名前>.csv              行列部品
       build/<名前>.bin              コンパイル済み(転送するもの)
-      padcue.json                デバイスの接続先など
+      padcue.json                   デバイスの接続先など
 """
 from __future__ import annotations
 

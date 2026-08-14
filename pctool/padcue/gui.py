@@ -624,11 +624,10 @@ class _Handler(BaseHTTPRequestHandler):
                 link.write_through(status=link.call(
                     lambda c: (c.passthrough(False), c.status())[1]))
             return {"ok": True}
-        # ---- 連結(2台をまとめて動かす。実体は coupler.py) ----
         return None
 
     def _act_couple(self, path: str, body: dict) -> dict | None:
-        """連結(2台をまとめて動かす)と編成のプリセット。"""
+        """連結(2台をまとめて動かす)と編成のプリセット。実体は coupler.py。"""
         if path == "/api/couple":
             return {"ok": True,
                     "coupling": self._coupler().set_coupling(

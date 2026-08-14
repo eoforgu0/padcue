@@ -8,10 +8,20 @@
     padcue status                  状態表示
     padcue logs                    ログ回収
     padcue list                    デバイス内の手順一覧
-    padcue device <IP>|auto        接続先を設定(auto で自動検出)
+    padcue device ...              装置の登録・一覧・接続先設定(下記)
     padcue discover                LAN 内のマイコンを探す
     padcue mock                    模擬デバイスを起動(実機なしの動作確認)
     padcue gui                     操作画面を開く
+
+  装置台帳(どの個体をどの名前で覚えているか):
+
+    padcue device list             登録済みの一覧
+    padcue device add <IP> [名前]  新しい装置を登録(繋いで個体IDを覚える)
+    padcue device rename <旧> <新> 表示名を変える(参照は個体IDなので切れない)
+    padcue device forget <名前>    個体IDの控えだけ解除する(基板の交換用)
+    padcue device remove <名前>    台帳から外す
+    padcue device auto             登録した個体のIPを探索で追いかける
+    padcue device <IP>             接続先を手で設定する
 
   マイコンの保守(操作画面を開いている間と、実行中は受け付けません):
 
@@ -586,6 +596,8 @@ def cmd_device(args) -> int:
     device list                    登録済み装置の一覧
     device add <IP> [名前]         新しい装置を登録(接続して個体IDを学習)
     device rename <名前> <新名前>  表示名の変更(IDで参照するため履歴は切れない)
+    device forget <名前>           個体IDの控えだけ解除(基板が変わったとき)
+    device remove <名前>           台帳から外す
     device auto                    1台目のIPを探索で追跡(ID一致のみ)
     device <IP>                    1台目の接続先を手で設定(従来互換)
     """
@@ -812,8 +824,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_ota)
 
     p = sub.add_parser("device", help="装置の登録・一覧・接続先設定")
-    p.add_argument("address", help="list / add / rename / auto / IP アドレス")
-    p.add_argument("extra", nargs="*", help="add <IP> [名前] / rename <旧> <新>")
+    p.add_argument("address",
+                   help="list / add / rename / forget / remove / auto / IP")
+    p.add_argument("extra", nargs="*",
+                   help="add <IP> [名前] / rename <旧> <新> / "
+                        "forget <名前> / remove <名前>")
     p.set_defaults(func=cmd_device)
 
     p = sub.add_parser("discover", help="LAN 内のマイコンを探す")
