@@ -121,13 +121,33 @@ const PALETTE = [
 ];
 
 
+// 応答は必ず {error: 文字列} か中身のどちらか。呼ぶ側は 56 箇所すべてが
+// `if (r.error) …` の形なので、ここで失敗を error に畳んでおけば、
+// 「押しても無反応」になる経路が無くなる
 async function api(path, method = 'GET', body) {
-  const r = await fetch(path, {
-    method,
-    headers: body ? {'Content-Type': 'application/json'} : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return r.json();
+  let r;
+  try {
+    r = await fetch(path, {
+      method,
+      headers: body ? {'Content-Type': 'application/json'} : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    return {error: '操作画面につながりません(' + e.message + ')'};
+  }
+  let data;
+  try {
+    data = await r.json();
+  } catch {
+    data = null;
+  }
+  if (!data || typeof data !== 'object') {
+    return {error: 'サーバーの応答を読めません(' + r.status + ')'};
+  }
+  if (!r.ok && !data.error) {
+    return {error: 'サーバーが ' + r.status + ' を返しました'};
+  }
+  return data;
 }
 function el(tag, cls, text) {
   const e = document.createElement(tag);

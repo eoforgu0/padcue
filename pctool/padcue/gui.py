@@ -14,6 +14,7 @@ import json
 import os
 import threading
 import time
+import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,6 +30,9 @@ from .project import Project, validate_name
 from .record import Recorder
 
 _WEB = Path(__file__).resolve().parent / "web"
+
+# 操作画面を開いてよい相手。ここ以外から来た要求は入口で断る
+_LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 # 画面の資産。読み込む順に依存があるので、この並びが index.html の
 # script タグの順と一致していること
@@ -223,10 +227,51 @@ class _Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0"))
         return json.loads(self.rfile.read(n) or b"{}")
 
+    # ---- 入口の門番 ----
+    # 127.0.0.1 で待つだけでは足りない。利用者が別のタブで開いた任意の
+    # Web ページから fetch を投げられ、応答は同一生成元規則で読めなくても
+    # **副作用は起きる**(実機が動き出す)。Host と Origin で弾く。
+
+    def _local_host(self) -> bool:
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        return host.strip("[]") in _LOCAL_HOSTS
+
+    def _same_origin(self) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True     # 同一生成元の GET には付かない
+        return origin == "http://" + (self.headers.get("Host") or "")
+
+    def _reject(self, why: str):
+        """入口で断る。送られてきたボディは読み捨ててから応答する。
+
+        読まずに閉じると、まだ送信中のクライアントには接続リセットとして
+        届き、断った理由が伝わらない(理由の見えない失敗になる)。
+        """
+        n = int(self.headers.get("Content-Length", "0"))
+        if n > 0:
+            self.rfile.read(n)
+        self._json({"error": why}, 403)
+
+    def _guard(self, need_json: bool) -> str:
+        """通してよいかを見る。通すなら空文字、弾くなら理由を返す。"""
+        if not self._local_host():
+            return "この画面は同じ PC からのみ操作できます"
+        if not self._same_origin():
+            return "別のページからの操作は受け付けません"
+        if need_json and int(self.headers.get("Content-Length", "0")) > 0:
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0]
+            if ctype.strip() != "application/json":
+                return "形式が違います(application/json で送ってください)"
+        return ""
+
     # ---- ルーティング ----
 
     def do_GET(self):
         u = urlparse(self.path)
+        why = self._guard(need_json=False)
+        if why:
+            return self._reject(why)
         if u.path in _STATIC:
             return self._static(u.path)
         if u.path == "/api/state":
@@ -283,6 +328,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        why = self._guard(need_json=True)
+        if why:
+            return self._reject(why)
         try:
             body = self._read_json()
         except json.JSONDecodeError:
@@ -296,6 +344,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json({"error": e.message}, 200)
         except (OSError, ConnectionError) as e:
             return self._json({"error": f"接続できません: {e}"}, 200)
+        except Exception as e:       # noqa: BLE001
+            # ここで捕まえないと、http.server は応答を返さずに接続を切る。
+            # 画面には「押しても無反応」としか見えず、原因を追う手がかりが
+            # 何も残らない。端末には traceback を出し、画面には理由を返す
+            traceback.print_exc()
+            return self._json({"error": f"内部エラー: {e}"}, 200)
 
     def _action(self, path: str, body: dict) -> dict:
         if path == "/api/device":
