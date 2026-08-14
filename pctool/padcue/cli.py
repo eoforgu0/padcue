@@ -745,9 +745,11 @@ def cmd_mock(args) -> int:
               "先に動いている方を使ってください")
         return 1
     # 探索の問いかけにも応える。実機と同じく画面の「探す」で見つかるようにして、
-    # 練習の手順が本番と食い違わないようにする
+    # 練習の手順が本番と食い違わないようにする。start(discover_port=...) に
+    # まとめないのは、ここだけ失敗しても「接続先を手で入れれば使える」ため
+    # (本体の失敗と同じ扱いにすると、使える状態なのに諦めさせる)
     try:
-        d._start_discover(DISCOVER_PORT)
+        d.start_discover(DISCOVER_PORT)
         findable = True
     except OSError:
         findable = False

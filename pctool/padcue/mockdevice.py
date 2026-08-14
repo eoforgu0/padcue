@@ -105,6 +105,13 @@ class MockDevice:
     # ---- ライフサイクル ----
 
     def start(self, discover_port: int = 0) -> int:
+        """本体(TCP)を立てる。discover_port を渡すと探索にも応える。
+
+        両方をここで立てると、失敗したときにどちらが駄目だったのか分から
+        なくなる。本体が立たなければ模擬デバイスは無いのと同じだが、探索が
+        立たないだけなら「接続先を手で入れれば使える」。区別したい呼び出し元
+        (cli.cmd_mock)は discover_port を省いて start_discover を直に呼ぶ。
+        """
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Windows の SO_REUSEADDR は「使用中のポートへの二重 bind」まで通して
         # しまい、2つ目の mock が同じポートで黙って壊れる。排他 bind にして
@@ -121,11 +128,15 @@ class MockDevice:
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
         if discover_port:
-            self._start_discover(discover_port)
+            self.start_discover(discover_port)
         return self.port
 
-    def _start_discover(self, port: int) -> None:
-        """探索の問い合わせに応答する(実機と同じ仕組み)。"""
+    def start_discover(self, port: int) -> None:
+        """探索の問い合わせに応答する(実機と同じ仕組み)。
+
+        start() から呼ばれるほか、本体の失敗と切り分けたい呼び出し元が
+        直に呼ぶ。ポートが埋まっていれば OSError を上げる。
+        """
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
