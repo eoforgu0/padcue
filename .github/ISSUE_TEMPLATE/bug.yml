@@ -1,0 +1,57 @@
+name: うまく動かない
+description: 動かない・思ったとおりにならない、の報告
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        切り分けに要る情報は4つです。埋めていただけると、往復の回数が
+        かなり減ります(過去の障害は、この4つが揃った時点でほぼ原因が
+        絞れていました)。
+
+  - type: textarea
+    id: status
+    attributes:
+      label: 状態表示の出力
+      description: |
+        `python -m padcue status` の出力をそのまま貼ってください。
+        ファーム版・転送方式・USB の到達段階・ジャイロ・ペアリングの状況が
+        1回で分かります。
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: console
+    attributes:
+      label: つないでいる本体
+      options:
+        - Nintendo Switch 2
+        - 初代 Nintendo Switch
+        - 実機につないでいない(模擬デバイスで練習中)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 何をしたら、どうなったか
+      description: |
+        操作した順と、期待した結果・実際の結果を書いてください。
+      placeholder: |
+        1. padcue.bat を開いた
+        2. 「周回実行」を押した
+        3. 期待: 手順が走る / 実際: 「未接続」のまま変わらない
+    validations:
+      required: true
+
+  - type: textarea
+    id: procedure
+    attributes:
+      label: 実行していた手順(あれば)
+      description: |
+        `procedures/<名前>.flow.json` の中身を貼るか、要点(長さ・
+        待機分岐やジャイロを使っているか)を書いてください。
+      render: json
+    validations:
+      required: false
