@@ -40,3 +40,32 @@ def test_all_button_lists_cover_the_same_buttons():
         f"\n編集画面: {sorted(js)}\n形式    : {sorted(binfmt.BUTTONS)}")
     assert set(_BUTTON_ORDER) == set(binfmt.BUTTONS), (
         f"\n帯グラフ: {sorted(_BUTTON_ORDER)}\n形式    : {sorted(binfmt.BUTTONS)}")
+
+
+def test_gyro_axis_labels_agree_between_dsl_and_screen():
+    """ジャイロ3軸の呼び名が、テキスト DSL と画面で一致していること。
+
+    軸の対応は GP=gx=ひねり(ロール) / GY=gy=上下(ピッチ) / GR=gz=水平(ヨー)。
+    実機確認済みは GY と GR(docs/design/procon-protocol.md §5)。この対応は
+    ワイヤの並びで決まっていて入れ替えられないのに、呼び名は DSL のヘルプと
+    画面で別々に書かれている。実際 2026-08-15 の外部レビューまで、DSL 側
+    (と仕様書)が gp と gy を取り違えたままだった —— そのとおりに書くと
+    「上下に振る」つもりで未確認のロール軸が動く。
+    """
+    from tests.conftest import REPO
+    dsl = (REPO / "pctool" / "padcue" / "dsl.py").read_text(encoding="utf-8")
+    m = re.search(r'"構文: gyro <(.+?)> <(.+?)> <(.+?)>', dsl)
+    assert m, "gyro の構文ヘルプが見つかりません"
+    assert m.groups() == ("ひねり", "上下", "水平"), m.groups()
+
+    # 引数を読む順(gp, gy, gr)と、その説明の対応
+    labels = re.findall(r'_parse_int\(tok\[[123]\], lineno, "ジャイロ(.+?)\(生値\)"',
+                        dsl)
+    assert labels == ["ひねり", "上下", "水平"], labels
+
+    # 画面のブロック表示。[['ひねり', n.gp], ['上下', n.gy], ['左右', n.gr]]
+    js = re.search(r"const v = \[(.+?)\]\s*\n?\s*\.filter", web_asset("flow.js"),
+                   re.S)
+    assert js, "gyro ブロックの表示が見つかりません"
+    pairs = re.findall(r"\['(.+?)', n\.(g[pyr])\]", js.group(1))
+    assert pairs == [("ひねり", "gp"), ("上下", "gy"), ("左右", "gr")], pairs

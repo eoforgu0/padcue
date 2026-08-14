@@ -216,12 +216,14 @@ def parse(text: str) -> dict[str, Proc]:
         if cmd == "gyro":
             if len(tok) not in (4, 5, 6, 7, 8):
                 raise CompileError(
-                    lineno, "構文: gyro <上下> <ひねり> <水平> "
+                    lineno, "構文: gyro <ひねり> <上下> <水平> "
                             "[フレーム数 [ゆらぎ幅 [ゆらぎ周期 [ゆらぎ間隔]]]]"
                             "(生値 -32768..32767。フレーム数を書くとその長さだけ"
                             "回して自動で止まる。省略 = 次に変えるまで続く)")
-            gp = _parse_int(tok[1], lineno, "ジャイロ上下(生値)", -32768, 32767)
-            gy = _parse_int(tok[2], lineno, "ジャイロひねり(生値)", -32768, 32767)
+            # 軸の対応は GP=gx=ひねり(ロール) / GY=gy=上下(ピッチ) /
+            # GR=gz=水平(ヨー)。実機確認は GY と GR(procon-protocol.md §5)
+            gp = _parse_int(tok[1], lineno, "ジャイロひねり(生値)", -32768, 32767)
+            gy = _parse_int(tok[2], lineno, "ジャイロ上下(生値)", -32768, 32767)
             gr = _parse_int(tok[3], lineno, "ジャイロ水平(生値)", -32768, 32767)
             frames = (_parse_int(tok[4], lineno, "フレーム数", 1, 10**9)
                       if len(tok) >= 5 else 0)
