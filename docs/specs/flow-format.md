@@ -1,6 +1,6 @@
 # フロー構造化データ仕様 v0(設計・レビュー用)
 
-作成: 2026-07-29 ／ 状態: **実装済み**(pctool/switchctl/flowfmt.py)。GUI(development-plan.md §6)とコンパイラが読み書きする正本形式。
+作成: 2026-07-29 ／ 状態: **実装済み**(pctool/switchctl/flowfmt.py)。GUI とコンパイラが読み書きする正本形式。
 
 ## 0. 目的からの演繹
 

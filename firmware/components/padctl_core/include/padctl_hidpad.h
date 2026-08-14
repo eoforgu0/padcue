@@ -1,7 +1,7 @@
 // padctl_hidpad: HID ゲームパッド方式(保険モード)の転送層
 //
-// 位置づけ: プロコン方式が Switch 2 で成立しなかった場合の縮退先
-// (development-plan.md §2)。自作機での Switch 2 動作報告がある方式。
+// 位置づけ: プロコン方式が Switch 2 で成立しなかった場合の縮退先。
+// 自作機での Switch 2 動作報告がある方式。
 // 制約: スティックは 8bit(256 段階)に丸まり、モーションは構造的に送れない。
 // 相当する一般商品: HORI ホリパッド for Nintendo Switch(NSW-001)系。
 #pragma once
