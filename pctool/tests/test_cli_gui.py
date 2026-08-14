@@ -123,9 +123,12 @@ def http_post(url, obj):
 
 
 def test_gui_serves_page_and_state(guiserver):
+    from tests.conftest import page_assets
     with urllib.request.urlopen(guiserver + "/", timeout=5) as r:
         html = r.read().decode("utf-8")
-    assert "pademu" in html and "タイムライン" in html
+    assert "padcue" in html                  # 画面の題(index.html)
+    assert "app.css" in html and "app.js" in html   # 資産を読み込んでいる
+    assert "タイムライン" in page_assets(guiserver)
 
     st = http_get(guiserver + "/api/state")
     assert [p["name"] for p in st["procedures"]] == ["サンプル"]

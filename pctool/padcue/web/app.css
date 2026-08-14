@@ -1,0 +1,741 @@
+/* ===== 文字の大きさ =====
+   役目ごとに1つ。以前は 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 14 / 15px の
+   9値が散っていて、階層が読み取れなかった(同じ役目に 0.5px 違いの2値が
+   当たっている状態。0.5px は見て分からないので、差を持つ意味がない)。
+   **値が同じでも役目が違えば別のトークンで持つ**——「見出し」と「記号」は
+   たまたま同じ 15px だが、片方を動かすときにもう片方まで動いては困る */
+:root {
+  --fs-tight:10px;   /* 狭い場所に収める: ON セル・バッジ・目盛り・列見出し */
+  --fs-sub:11px;     /* 補足・注釈: hint・ID・単位・チップ */
+  --fs-body:12px;    /* 本文とラベル、小さめの操作(button.small・折り畳み) */
+  --fs-name:13px;    /* 名前と小見出し: レーンの見出し・一覧の名前 */
+  --fs-title:15px;   /* 見出し: アプリ名 */
+  --fs-glyph:15px;   /* 単独の記号(⚙ ×)。読む文字ではなく押す的なので、
+                        見出しと同じ値でも別に持つ */
+  --fs-field:14px;   /* 打つ欄(input/select)。body から継承させる起点 */
+}
+/* ===== 配色 =====
+   3系統 × ライト/ダーク。色を5つの役目に分ける(原則 §5):
+
+     中立 7段  地・面・沈んだ面・線・強い線・弱い文字・本文
+     強調 3    文字と線・塗り・淡い地
+     意味 7    異常/注意/良好 の文字と、それぞれの淡い地
+     分類 2    部品・くり返し(手順ブロックの帯と枠)
+     塗りの上 1  塗った面に載せる文字
+
+   **分類の色は意味の色より控えめにする**(彩度 18 前後)。くり返し・
+   分岐の枠は当初 41.7 あり、注意(52.7)に匹敵する目立ち方だった——
+   入れ子であることは枠の形と見出しの文字が既に言っているので、平常の
+   構造表示にその水準の色は要らない(2026-08-12 ユーザー指摘)。細い線は
+   色みが立ちにくいので下げすぎると灰に見えるが、そこは許容した——
+   ティール等へ色相を変える案も撮って比べたうえで、黄緑を残す判断
+
+   **意味の色は6配色すべて同じ値**にする。系統が変えてよいのは中立・強調・
+   分類だけ。以前は6配色それぞれに意味の色を手書きしていたため、琥珀ライトで
+   「注意」と「強調」が色差 1.6 まで接近していた(10 未満は並べても判別が
+   難しい水準)。中立7段の明るさも3系統で共通なので、系統を切り替えても面の
+   段差と文字の読みやすさは変わらない。
+
+   系統の違い:
+   - 藍  : 既定。中立をわずかに青へ倒し、強調の青と地をつなげる
+   - 墨  : 彩度をほぼ落とす(中立 0.18・強調 0.28・分類 0.45 倍)。0 に
+           しないのは、手順の色分けが見分けられなくなるため
+   - 琥珀: 地と線だけを暖色へ倒す(3.4 倍)。文字は倒さない(読む対象に色を
+           持たせない)。取り柄は暗い部屋で画面全体の明るさが下がることで、
+           「青白い光が目に刺さる」ためではない——ブルーライトを減らしても
+           短期の眼精疲労は軽減しないという結論が出ている(17研究のメタ分析)
+   純黒(OLED 向け)は、文字が主体の本ツールでは境界が滲んで読みにくいので
+   採用しない。切り替えは右上のボタン、選択はこのブラウザに保存される */
+/* チェックボックス・ラジオ・スライダー・選択欄・スクロールバーを配色に乗せる。
+   どちらも指定が無いと、6配色すべてで OS 既定の青が出て、暗い配色でも
+   選択欄だけが白く残っていた。属性は html に付くので、ここに書けば継承される */
+:root { accent-color:var(--accent); }
+:root, [data-theme="ai-light"] {
+  color-scheme:light;
+  --bg:#edf0f5; --surface:#fbfdff; --surface-2:#eaeef5;
+  --line:#c8ccd3; --line-strong:#8d9198; --muted:#636973; --ink:#22272e;
+  --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
+  --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
+  --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
+  --cat-part:#914b88; --cat-loop:#666c4e;
+  /* 塗りつぶした面(primary ボタン・ON セル)に載せる文字。6配色で共通 */
+  --on-fill:#f8fafd;
+}
+[data-theme="ai-dark"] {
+  color-scheme:dark;
+  --bg:#161a20; --surface:#202328; --surface-2:#2c2f34;
+  --line:#41454b; --line-strong:#70757b; --muted:#989fa9; --ink:#d7dde6;
+  --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
+  --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
+  --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
+  --cat-part:#c387ba; --cat-loop:#a4ac8e;
+  --on-fill:#f8fafd;
+}
+[data-theme="sumi-light"] {
+  color-scheme:light;
+  --bg:#eff0f1; --surface:#fdfdfe; --surface-2:#edeeef;
+  --line:#cbcccd; --line-strong:#909192; --muted:#68696b; --ink:#262728;
+  /* 彩度 0.28 倍だと、帯として隣り合う muted との色差が 9.9 しかない
+     (10 未満は並べて判別が難しい)。系統の性格を保てる範囲で 1.4 倍だけ
+     戻し、12.7 にしてある(D-3 で入力の帯が muted になったため) */
+  --accent:#4a6380; --accent-fill:#436081; --accent-soft:#e8ebef;
+  --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
+  --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
+  /* 無彩色基調でも、手順の色分けは見分けが付く程度に差を残す(彩度 0.45 倍) */
+  --cat-part:#7c5d77; --cat-loop:#656d50;
+  --on-fill:#f8fafd;
+}
+[data-theme="sumi-dark"] {
+  color-scheme:dark;
+  --bg:#191a1b; --surface:#222324; --surface-2:#2e2f30;
+  --line:#444546; --line-strong:#747476; --muted:#9d9ea0; --ink:#dcddde;
+  /* 明るい墨と同じ理由で 1.4 倍(色差 10.0 → 12.9) */
+  --accent:#8da7c8; --accent-fill:#557194; --accent-soft:#2d333c;
+  --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
+  --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
+  --cat-part:#b095ab; --cat-loop:#a3ac8d;
+  --on-fill:#f8fafd;
+}
+[data-theme="kohaku-light"] {
+  color-scheme:light;
+  /* 中立の彩度は、生成規則の 3.4 倍そのままだと地が 9.7(他系統は
+     0.6〜4.8)まで上がり、寒色の強調が浮いて系統としてまとまらない。
+     灰へ 0.6 だけ寄せて 5.9 にしてある(2026-08-12 の自己点検) */
+  --bg:#f7efe5; --surface:#fdfbf3; --surface-2:#f7ebde;
+  --line:#d5cabd; --line-strong:#9a8e81; --muted:#6e6862; --ink:#2a2521;
+  /* 強調は暖色にしない。暖色にすると注意(色相 78)と同じ色相帯に入り、
+     いまの琥珀ライトのように「注意」と「強調」が並べて判別できなくなる */
+  --accent:#1f5fae; --accent-fill:#075bb5; --accent-soft:#e2ecfa;
+  --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
+  --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
+  --cat-part:#914b88; --cat-loop:#666c4e;
+  --on-fill:#f8fafd;
+}
+[data-theme="kohaku-dark"] {
+  color-scheme:dark;
+  /* 明るい琥珀と同じ理由で灰へ 0.6 寄せる(地の彩度 14.5 → 9.2) */
+  --bg:#21160a; --surface:#282117; --surface-2:#352d23;
+  --line:#4c4236; --line-strong:#7d7266; --muted:#a49e96; --ink:#e1dbd5;
+  --accent:#66a6fb; --accent-fill:#216dc9; --accent-soft:#1c3352;
+  --err:#e68677; --err-fill:#c24839; --warn:#e6bd7c; --ok:#80c7a8;
+  --err-bg:#492924; --warn-bg:#3e301b; --ok-bg:#21392e;
+  --cat-part:#c387ba; --cat-loop:#a4ac8e;
+  --on-fill:#f8fafd;
+}
+* { box-sizing:border-box; }
+/* ヘッダーは固定し、スクロールは main(本文領域)が持つ。ページ全体で
+   スクロールさせると、縦スクロールバーがヘッダーの高さまで貫通する
+   (2026-08-04 ユーザー指摘。一般的なヘッダ+本文のアプリと同じ構造に) */
+html, body { height:100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font-size:var(--fs-field);
+  font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",Meiryo,sans-serif;
+  overflow:hidden; display:flex; flex-direction:column; }
+header { display:flex; align-items:center; gap:10px; padding:9px 18px;
+  border-bottom:1px solid var(--line); background:var(--surface); flex-wrap:wrap;
+  flex:none; }
+header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
+header .spacer { margin-left:auto; }
+/* 装置の状態と接続先は同じことなので1つの枠にまとめる。
+   状態だけ左端に離れていると、何の状態なのか・どこで直すのかが分からない */
+header { position:relative; }
+/* ⚙ = この画面そのものの設定(通知・配色)。運転席にも格納庫にも属さない
+   ものはヘッダに置く(設計原則 §1)。設定の入口は1つに保つ */
+.setmenu { margin-left:auto; position:relative; }
+/* ヘッダの手動操作中の印。チップの形だが押せる(その場で終えられる) */
+#manualbadge { margin-left:14px; cursor:pointer; font-weight:700;
+  border-color:var(--ok); }
+.iconbtn { border:1px solid var(--line); background:var(--surface);
+  color:var(--ink); border-radius:8px; width:30px; height:28px;
+  cursor:pointer; font-size:var(--fs-glyph); line-height:1; padding:0;
+  display:inline-flex; align-items:center; justify-content:center; }
+.iconbtn:hover { border-color:var(--accent); color:var(--accent); }
+.menu { position:absolute; right:0; top:34px; z-index:30; min-width:210px;
+  background:var(--surface); border:1px solid var(--line); border-radius:9px;
+  padding:4px; box-shadow:0 6px 20px rgba(0,0,0,.18); }
+.menu button { display:block; width:100%; text-align:left; border:0;
+  background:transparent; color:var(--ink); padding:6px 9px; cursor:pointer;
+  border-radius:6px; font-size:var(--fs-body); }
+.menu button:hover { background:var(--accent-soft); color:var(--accent); }
+.menu button.on { font-weight:700; color:var(--accent); }
+.menu button.on::before { content:'✓ '; }
+.menu.setpanel { min-width:436px; }
+.setsec { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em;
+  padding:5px 9px 3px; }
+/* 通知の設定: 行=場面、列=知らせ方。列見出しを「音」「タブ名を点滅」だけに
+   すると、どの欄が何の設定なのかを行ごとに読み直さずに済む */
+/* 列はすべて中身の幅(max-content)。1列目を 1fr にすると、狭いパネルでは
+   場面名が1文字ずつ縦に折り返す */
+.ngrid { display:grid; padding:2px 9px 7px; font-size:var(--fs-body);
+  grid-template-columns:repeat(6, max-content);
+  column-gap:8px; row-gap:6px; align-items:center; }
+.ngrid .nghead { color:var(--muted); font-size:var(--fs-sub); }
+.ngrid .nghead.snd { grid-column:2 / 6; }
+.ngrid .ngtab, .ngrid .nghead:last-child { justify-self:center; }
+.ngrid .nglab { display:flex; align-items:center; gap:7px; cursor:pointer;
+  white-space:nowrap; }
+.ngrid select { font-size:var(--fs-body); padding:2px 5px; }
+.ngrid input[type=range] { width:74px; }
+.ngrid button { padding:1px 7px; }
+.ngrid select:disabled, .ngrid input:disabled, .ngrid button:disabled {
+  opacity:.4; }
+/* 設定の中の補足(どのキーが何をするか)。名前では言い切れないぶんだけ */
+.sethint { padding:0 9px 7px; font-size:var(--fs-sub); color:var(--muted);
+  line-height:1.65; }
+.setsec.line { border-top:1px solid var(--line); margin-top:5px;
+  padding-top:8px; }
+.setrow { padding:3px 9px 5px; display:flex; flex-wrap:wrap; gap:9px;
+  align-items:center; font-size:var(--fs-body); }
+.setrow label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+.setrow input[type=range] { width:92px; }
+/* .menu button の全幅指定を、行の中のボタンには効かせない */
+.setrow button { display:inline-flex; width:auto; align-items:center;
+  border:1px solid var(--line); }
+/* ラベル語(接続先・選択肢を両方へ同時に送る、など)の基本の見た目。強調したい
+   文脈(連結中の上部バー)だけ .coupler .lbl で太字に上書きする */
+.lbl { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em; }
+.sep-v { width:1px; height:18px; background:var(--line); margin:0 4px; }
+.tabs { display:flex; gap:4px; }
+.tab { border:1px solid var(--line); border-radius:7px; padding:3px 14px;
+  cursor:pointer; font-size:var(--fs-body); }
+.tab.on { background:var(--accent-soft); color:var(--accent); font-weight:700;
+  border-color:transparent; }
+/* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常専用。
+   ふだんの実行中・待機中を黄や赤にしない(色が警告の意味を失う)。
+   つながっていないだけは中立色——異常ではないため(2026-08-12 の原則改定) */
+.dot { width:9px; height:9px; border-radius:50%; background:var(--muted);
+  display:inline-block; flex:none; }
+.dot.ok { background:var(--ok); }
+.dot.warn { background:var(--warn); }
+.dot.err { background:var(--err); }
+/* 装置カードの行。手順一覧の .proc の形を借りるが、行は選択対象ではない */
+.devrow:not(.foldable) b, .devrow:not(.foldable) .meta { cursor:default; }
+.devrow .meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+/* 開閉式の詳細を持つ行(装置の台帳)。折りたたみ三角ぶんだけ列を1つ増やす
+   (手順を編集のフォルダ行 .folder-row と同じ作法。原則 §5 同じ意味は同じ形) */
+.devrow.foldable { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
+.devrow.foldable .meta { grid-column:3 / -1; }
+.devtoggle { border:0; background:transparent; cursor:pointer;
+  color:var(--muted); padding:0; width:16px; font-size:var(--fs-body); text-align:center; }
+.devdetail { grid-column:1 / -1; display:none; margin-top:8px; padding-top:8px;
+  border-top:1px solid var(--line); }
+.devrow.open .devdetail { display:flex; flex-direction:column; gap:8px; }
+/* 異常のとき、対処の場所であることを縁取りで自ら名乗る(原則 §1)。
+   未接続では縁取らない——つながっていないだけは異常ではない */
+.devrow.flagged { border-color:var(--err); background:var(--err-bg); }
+/* プリセットの行 = 装置の開閉行から丸印の列だけを抜いた形。詳細は名前の
+   位置まで下げて、どの行の中身かを字下げで示す。名前は行幅を目一杯使い、
+   操作(呼び出す・改名・削除)は2行目に置く(2026-08-08 ユーザー指摘) */
+.devrow.foldable.formrow { grid-template-columns:16px 1fr; }
+.devrow.foldable.formrow .fact,
+.devrow.foldable.formrow .devdetail { grid-column:2 / -1; }
+/* 連結の別は名前の前に(「何の組か」を先に読む)。名前より控えめに */
+.fkind { color:var(--muted); font-size:var(--fs-sub); white-space:nowrap; flex:none; }
+.fjoin { color:var(--muted); font-size:var(--fs-sub); }
+.fdevs { display:flex; flex-direction:column; gap:3px; }
+/* 装置 / 手順 / 開始ラベル / 周回。周回は右端で桁を揃え、1P と 2P の値を
+   目で突き合わせられるようにする(手順一覧の所要フレーム数と同じ作法) */
+.fdev { display:grid; grid-template-columns:auto minmax(0, 1fr) auto auto;
+  column-gap:6px; align-items:baseline; font-size:var(--fs-sub); }
+.fdevname { color:var(--muted); }
+.fproc { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fresume { color:var(--muted); white-space:nowrap; }
+.floops { color:var(--muted); font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
+/* 2行目の操作。行アイコン(✎ 🗑)は一覧の作法どおり右端へ(原則 §3) */
+.fact { display:flex; align-items:center; gap:6px; margin-top:5px; }
+.fact .rowops { margin-left:auto; }
+/* 装置ごとの縦レーン(台数に関わらず常に1本以上。原則 §1 系: 1台と2台は
+   同型)。2台以上は横に並べて両方を常に1画面に。幅が足りなければ縦積みに
+   落ちる(minmax の下限) */
+.lanes { display:grid; grid-template-columns:repeat(auto-fit, minmax(430px, 1fr));
+  gap:14px; align-items:start; }
+.lane h2 { display:flex; align-items:center; gap:7px; font-size:var(--fs-name);
+  color:var(--ink); letter-spacing:normal; }
+.lane h2 .tlprog { margin-left:auto; }
+/* 人の操作を待っている・異常で止まっているレーンは、外周のリングで名乗る。
+   画面をぼかして面と明るさだけ残すと(横目で見たときの代わり)、赤い面は
+   見えるのに操作待ちは正常時とほぼ同じに見えていた。box-shadow は寸法を
+   持たないので、出ても消えても位置は動かない(border だと行が動く)。
+   実行中には出さない——数時間ずっと光ることになり、平常時に色を使い切ると
+   異常が浮かばなくなる(ISA-101 の「平常はグレー基調」) */
+.lane.needs { box-shadow:0 0 0 3px var(--warn); }
+.lane.faulted { box-shadow:0 0 0 3px var(--err); }
+/* レーン内の小見出し(1台時のカード見出しに相当) */
+.subh { font-size:var(--fs-sub); letter-spacing:.1em; color:var(--muted);
+  font-weight:700; margin:12px 0 7px; padding-top:10px;
+  border-top:1px solid var(--line); }
+/* 連結中は左の帯で「まとめる場所」であることを示す(外すと帯ごと消える) */
+.coupler { border-left:4px solid var(--accent); }
+.coupler .lbl { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em;
+  font-weight:700; }
+/* 上部バーは「2台にまたがること」だけを置く場所。連結の語彙(まとめて開始・
+   自動合流・両方停止・開始ズレ)は連結しているときだけ現れ、外すと消える。
+   プリセットは2台ぶんの割り当てに名前を付けたもの=またがるものなので、
+   連結の有無に関わらず残る(1台で閉じることはレーンの仕事) */
+#coupler:not(.linked) .linkonly { display:none; }
+#coupler.linked #clink { display:none; }
+.chip.link { color:var(--accent); border-color:var(--accent);
+  font-weight:700; }
+/* 相方待ち(連結中の正常な待ち)は藍。黄色は「人の操作が要る」専用、
+   赤は装置の異常専用(計画 §2b の三態色) */
+.chip.wait { color:var(--accent); border-color:var(--accent); }
+.msg.wait { background:var(--accent-soft); color:var(--accent); }
+.lane h2 .runchip { font-size:var(--fs-tight); padding:1px 8px; }
+/* 連結中のレーン単独 SELECT は畳んでおく(合流の対応がずれる操作なので、
+   ワンクリックでは押させない) */
+details.soloadv summary { cursor:pointer; font-size:var(--fs-body);
+  color:var(--muted); }
+details.soloadv { margin-top:6px; }
+main { display:grid; gap:14px; padding:14px; align-items:start;
+  flex:1; min-height:0; overflow:auto; }
+/* 中身が広いとき、列そのものを広げずに中で横スクロールさせる
+   (これが無いと画面全体が横に伸びる) */
+main > * { min-width:0; }
+/* 左ペインの幅は画面ごと。手順の一覧だけ1行に名前と所要フレーム数を並べるため
+   広く取る(他の2画面は名前だけなので狭くてよい) */
+main.home { grid-template-columns:280px 1fr; }
+main.flow { grid-template-columns:400px 1fr 260px; }
+main.part { grid-template-columns:280px 1fr; }
+@media (max-width:900px){ main.home, main.flow, main.part { grid-template-columns:1fr; } }
+.card { background:var(--surface); border:1px solid var(--line);
+  border-radius:10px; padding:13px 15px; }
+/* グリッド(格子)の中身がカードより広いときに、ページ全体でなくカード内で
+   横スクロールさせる。CSS グリッドの子は min-width:auto で中身に負けて
+   吹き出すので、明示的に 0 へ */
+main > .card { min-width:0; }
+/* 編集エリア上部に貼り付く操作バー(保存・状態・行の増減)。
+   長い部品でもスクロールせずに保存でき、未保存かどうかも常に見える */
+.ebar { position:sticky; top:0; z-index:6; background:var(--surface);
+  padding:6px 0 8px; margin-bottom:6px;
+  border-bottom:1px solid var(--line); }
+.ebar .row { margin:0; }
+.card h2 { font-size:var(--fs-sub); letter-spacing:.1em; color:var(--muted);
+  margin:0 0 9px; font-weight:700; }
+.stack { display:flex; flex-direction:column; gap:14px; }
+/* 行全体は「押せるもの」ではない(掴む・選ぶ・アイコンで操作、が同居する)。
+   指差しは実際に何か起きる所=名前(選択)とアイコンにだけ付ける */
+.proc { border:1px solid var(--line); border-radius:8px; padding:7px 10px;
+  margin-bottom:5px; }
+.proc b, .proc .meta { cursor:pointer; }
+.proc:hover { border-color:var(--accent); }
+.proc.sel { border-color:var(--accent); background:var(--accent-soft); }
+.proc { display:grid; grid-template-columns:14px 1fr auto;
+  column-gap:6px; align-items:center; }
+.proc b { font-size:var(--fs-name); }
+.proc .meta { grid-column:2 / -1; color:var(--muted); font-size:var(--fs-sub);
+  margin-top:2px; }
+/* 手順名と、その右に置く所要フレーム数。桁を揃えて(tabular-nums)縦に並べ、
+   1P と 2P の長さを目で突き合わせられるようにする(2台運用で「相方と同じ
+   時間だけ待つ」を手順に書くため)。名前が長いときは名前側を詰める */
+.pname { display:flex; align-items:baseline; gap:8px; min-width:0; }
+.pname b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pname .fr { margin-left:auto; color:var(--muted); font-size:var(--fs-sub);
+  font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer; }
+/* 所要フレーム数の席に出る「変換できない」の印。同じ席なので行は動かない */
+.pname .fr.err { color:var(--err); font-weight:700; }
+/* 行の名前に付く ID。名前のすぐ右に薄く小さく置く(下段へ落とすと、装置の
+   ID なのか Switch 本体の ID なのかが読み取れない。2026-08-08 ユーザー指摘) */
+.rowid { color:var(--muted); font-size:var(--fs-sub); font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
+/* 並べ替えのつまみ。行クリック(選択)と衝突しないよう専用の持ち手にする */
+.grab { color:var(--muted); opacity:.35; cursor:grab; user-select:none;
+  font-size:var(--fs-sub); touch-action:none; }
+.proc:hover .grab { opacity:.9; }
+.proc.dragging { opacity:.35; }
+.drop-line { height:3px; border-radius:2px; background:var(--accent);
+  margin:1px 2px; }
+/* 行右端の操作アイコン(名前変更・複製・削除)。普段は薄く。
+   中身は線画 SVG(文字グリフだと小さいサイズで潰れる)。ボタン自体は
+   22px 角を確保して押しやすくする */
+.rowops { display:flex; gap:2px; }
+.rowops button { border:0; background:transparent; cursor:pointer;
+  color:var(--muted); opacity:.3; padding:0; width:22px; height:22px;
+  border-radius:4px; display:inline-flex; align-items:center;
+  justify-content:center; }
+.rowops button svg { display:block; }
+.proc:hover .rowops button, .rowops button:focus-visible { opacity:1; }
+.rowops button:hover { background:var(--accent-soft); color:var(--accent); }
+.rowops button.dgr:hover { background:var(--err-bg); color:var(--err); }
+/* 実行・監視の一覧に出さない手順は、編集一覧側で薄く見せる(消したのでは
+   ないと分かるように。目のアイコンでいつでも戻せる) */
+.proc.off { opacity:.55; }
+/* フォルダ(手順を編集の一覧。VSCode のエクスプローラ風)。見出し行は
+   .proc の見た目を借りつつ、開閉の三角ぶんだけ列を1つ増やす */
+.folder-row { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
+.foldertoggle { border:0; background:transparent; cursor:pointer;
+  color:var(--muted); padding:0; width:16px; font-size:var(--fs-body);
+  text-align:center; }
+.folder-row b { font-weight:700; }
+.foldericon { color:var(--muted); display:inline-flex; margin-right:5px; }
+.foldericon svg { vertical-align:-2px; }
+.folder-items { margin-left:20px; }
+/* たたんだフォルダへ手順を落とすときの目印。挿入線だと「たたんだフォルダの
+   中」と「フォルダの外の先頭」が同じ位置に出て見分けが付かないので、
+   行そのものを落とし先として見せる(選択中と同じ見え方に揃える) */
+.folder-row.into { border-color:var(--accent); background:var(--accent-soft); }
+.chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:var(--fs-sub);
+  border:1px solid var(--line); color:var(--muted); }
+.chip:empty { display:none; }   /* 中身が空のときは枠だけ残さない */
+/* 保存できた合図: バッジの枠がパッと光ってスッと消える。
+   「保存しました」の文を出す代わり(正常系は状態変化で伝える。文だと
+   消し忘れが実状とずれる)。異常系のメッセージは従来どおり文で出す */
+@keyframes chipflash {
+  0%   { box-shadow:0 0 0 1px var(--ok), 0 0 9px 2px var(--ok); }
+  100% { box-shadow:0 0 0 7px rgba(0,0,0,0), 0 0 9px 7px rgba(0,0,0,0); }
+}
+.chip.flash { animation:chipflash .8s ease-out 1; }
+.stale { opacity:.5; }          /* 情報が古い(取得できていない)ことを示す */
+.chip.ok { color:var(--ok); border-color:var(--ok); font-weight:700; }
+.chip.warn { color:var(--warn); border-color:var(--warn); }
+.chip.err { color:var(--err); border-color:var(--err); font-weight:700; }
+.row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+/* 意味のまとまり(実行の2つ・停止の2つ)。行が折り返すとき、まとまりの中では
+   割れずに境目で折り返す。幅が足りていれば1行のまま変わらない——以前は
+   溢れたぶんだけが次の行へ落ちるので、停止の2つが上下に分かれることがあった
+   (1280px=FHD の 150% 表示・2台のとき。急いで止めたい場面で押す先が散る) */
+.btngrp { display:flex; gap:7px; align-items:center; }
+/* レーンは行(手順・開始位置・実行ボタン…)を縦に積むので、行間に周囲と
+   同じリズムの余白を入れる(無いと実行ボタン行が上の行に密着する) */
+.lane .row + .row { margin-top:9px; }
+/* .hint の上マージンは本文下の注釈用。行の中に置いたラベルまで持ち上げると
+   行(と保存バー)が画面ごとに違う高さになる(2026-08-04 ユーザー指摘) */
+.row > .hint { margin-top:0; }
+button { font:inherit; border:1px solid var(--line); background:var(--surface);
+  color:var(--ink); border-radius:7px; padding:4px 12px; cursor:pointer; }
+button:hover:not(:disabled) { border-color:var(--accent); }
+button.primary { background:var(--accent-fill); color:var(--on-fill);
+  border-color:transparent;
+  font-weight:700; }
+/* primary/danger は独自の枠色を持つため、素のホバー(枠を藍に)が効かず
+   「最重要ボタンだけホバーで無反応」になっていた。地色側で反応させる */
+button.primary:hover:not(:disabled) {
+  background:color-mix(in srgb, var(--accent) 86%, var(--ink)); }
+button.danger:hover:not(:disabled) { background:var(--err-bg); }
+button.small { padding:2px 8px; font-size:var(--fs-body); }
+button:disabled { opacity:.45; cursor:not-allowed; }
+/* 塗りのボタン(実行)は、薄めるのではなく中立色の塗りへ置き換える。
+   薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
+   塗り=ボタンの形は残るので「押せるボタンが減った」と読み違えない。
+   枠線のボタン(停止など)は薄めるまま——地が元から無いので、ここに塗りを
+   当てると「無効のときだけ塗られる」という逆の形になってしまう */
+/* 待機分岐の選択肢。人の操作を待っている唯一のボタンなので、強調ではなく
+   注意の色で塗る。載せる文字は地の色にする——注意色は明るい配色では濃く、
+   暗い配色では明るいので、地を載せるとどちらでも反転して読める */
+button.primary.waiting { background:var(--warn); color:var(--bg);
+  border-color:transparent; }
+button.primary:disabled {
+  opacity:1; background:var(--surface-2); color:var(--muted);
+  border-color:var(--line-strong);
+}
+button.danger { border-color:var(--err); color:var(--err); }
+/* キーボード操作でも今どこにいるか分かるようにする */
+button:focus-visible, input:focus-visible, select:focus-visible,
+.tab:focus-visible, .proc:focus-visible, .blk:focus-visible {
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+input, select { font:inherit; padding:3px 7px;
+  border:1px solid var(--line-strong);
+  border-radius:6px; background:var(--bg); color:var(--ink); }
+input[type=number] { width:88px; }
+label.f { display:flex; flex-direction:column; gap:3px; font-size:var(--fs-sub);
+  color:var(--muted); margin-bottom:8px; }
+/* 項目名+値のペアを2組ずつ1行に並べる(行数が奇数でも最後の1組が
+   崩れない。auto-flow の row 方向で4列を順に埋めるだけで、
+   dt1,dd1,dt2,dd2 → dt3,dd3,dt4,dd4 … と自然にペアが揃う) */
+.kv { display:grid;
+  grid-template-columns:max-content 1fr;
+  column-gap:14px; row-gap:2px; font-size:var(--fs-body); }
+.kv dt { color:var(--muted); margin-right:8px; align-self:start; }
+.kv dd { margin:0; font-variant-numeric:tabular-nums; }
+/* 値が2つ以上ある項目(ずれの最大)は、親を見出しだけの行にし、子は字下げして
+   他の項目と同じ2列に並べる(名前=左・値=右。2026-08-08 ユーザー指摘) */
+.kv dt.kvhead { grid-column:1 / -1; }
+.kv dt.kvsub { padding-left:14px; }
+/* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
+.prenote { font-size:var(--fs-body); color:var(--ink); background:var(--accent-soft);
+           border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
+           padding:6px 10px; margin-bottom:9px; }
+/* 実行が始まったら沈める。押す前に読むものなので、実行中は役目を終えている
+   (6文字の案内が画面でいちばん大きい色面のまま残っていた)。高さは変えない
+   ので位置は動かない。opacity は使わない——地と文字が両方薄くなるため */
+.prenote.dim { background:transparent; border-left-color:var(--line);
+               color:var(--muted); }
+.prenote b { color:var(--accent); font-weight:700; margin-right:6px; }
+.msg { border-radius:7px; padding:6px 10px; font-size:var(--fs-body); margin-top:8px;
+       display:flex; align-items:flex-start; gap:8px; }
+.msgtext { flex:1; min-width:0; }
+.msgclose { flex:none; border:0; background:transparent; color:inherit;
+            cursor:pointer; font-size:var(--fs-glyph); line-height:1; padding:0 2px;
+            opacity:.65; }
+.msgclose:hover { opacity:1; }
+.msgclose:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.msg.warn { background:var(--warn-bg); color:var(--warn); }
+.msg.err { background:var(--err-bg); color:var(--err); }
+.msg.ok { background:var(--ok-bg); color:var(--ok); }
+/* 成功の一言(押したボタンのそばに数秒だけ)。行の中の席なので、出ても
+   消えても他の行の位置が動かない */
+.okflash { color:var(--ok); font-size:var(--fs-body); white-space:nowrap;
+  opacity:0; transition:opacity .3s; }
+.okflash.on { opacity:1; }
+.tl-wrap { overflow-x:auto; }
+/* 部品グリッドは縦横ともこの領域の中でスクロールする(高さは fitPartGrid が
+   画面内に収まるよう設定)。横バーが表の最下端ではなく領域の下端に出る */
+.v-part .tl-wrap { overflow:auto; }
+/* 行の追加(＋)と削除(×)。字形の幅に任せると不揃いになるので同じ幅に */
+table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
+/* 再生位置(.play)を中で絶対配置するので、基準をここにする。
+   指定を忘れると画面全体を基準にしてしまい、まったく違う場所に出る。
+   マーク・帯・再生位置はすべて %(親要素幅に対する割合)で置いているので、
+   幅そのものは固定 px を持たずパネル幅にそのまま追従する。レーンの
+   タイムラインは横スクロールさせない(部品エディタのグリッドとは別扱い。
+   2026-08-07 決定) */
+.tl { position:relative; }
+.lane .tl-wrap { overflow-x:visible; }
+.tlrow { display:grid; grid-template-columns:56px 1fr; align-items:center;
+  margin-bottom:4px; }
+.tlrow .nm { color:var(--muted); text-align:right; padding-right:10px;
+  font-size:var(--fs-sub); font-weight:600; }
+.track { position:relative; height:18px; border-radius:4px;
+  background:var(--surface-2); }
+.span { position:absolute; top:3px; height:12px; border-radius:2px; min-width:2px; }
+/* 再生位置。線1本だと速いときに見失うので、通り過ぎた範囲を暗くして
+   「どこまで進んだか」も同時に示す(進捗バーの役目を兼ねる)。
+   先端だけ赤い線にして、今どこかを一目で分かるようにする */
+.play { position:absolute; top:0; bottom:26px; left:56px; width:0;
+  pointer-events:none; background:color-mix(in srgb, var(--ink) 22%, transparent);
+  border-right:2px solid var(--err); border-radius:3px 0 0 3px; }
+.marks { position:relative; height:20px; margin-left:56px; }
+.marks span { position:absolute; top:0; font-size:var(--fs-sub); font-weight:700;
+  color:var(--accent); border-left:2px solid var(--accent); padding-left:5px;
+  white-space:nowrap; line-height:18px; }
+/* 右端付近のラベルは、文字を罫線の左側へ反転させて枠内に収める
+   (手順末尾のラベルは left:100% になり、右向きのままだと枠外へはみ出す) */
+.marks span.flip { border-left:0; border-right:2px solid var(--accent);
+  padding-left:0; padding-right:5px; transform:translateX(-100%); }
+.axis { position:relative; height:22px; margin-left:56px; }
+.axis i { position:absolute; top:0; border-left:1px solid var(--line); height:6px; }
+.axis span { position:absolute; top:8px; transform:translateX(-50%);
+  color:var(--muted); font-size:var(--fs-tight); font-variant-numeric:tabular-nums; }
+/* --- 編集 --- */
+.pal { border:1px dashed var(--line); border-radius:7px; padding:3px 9px;
+  margin-bottom:5px; color:var(--muted); cursor:pointer; font-size:var(--fs-body); }
+.pal:hover { border-color:var(--accent); color:var(--accent); }
+.blocks { display:flex; flex-direction:column; gap:4px; }
+.blk { border:1px solid var(--line); border-left:4px solid var(--muted);
+  border-radius:7px; padding:4px 9px; cursor:pointer; font-size:var(--fs-body); }
+.blk:hover { border-color:var(--accent); }
+.blk.sel { outline:2px solid var(--accent); outline-offset:1px; }
+/* 一時的に外したブロック/行。消さずに「今は無いもの」として見せる */
+.off > .lbl, .blk.off .p, .blk.off > span:not(.en), tr.off td.b .tg,
+tr.off td.ax input, tr.off td.fn { opacity:.38; }
+.blk.off, .nest.off > .head { text-decoration:line-through;
+  text-decoration-thickness:1px; }
+.blk { position:relative; }
+/* 有効が通常なので、入っているチェックは目立たせない。
+   外したもの(=今は無いもの)だけがはっきり見えるようにする */
+.en { float:right; margin-left:8px; cursor:pointer; }
+/* ブロック右端の削除ボタン。誤爆しないよう普段は薄く、ブロックに乗せた時だけ
+   はっきり出す(有効チェックと同じ出し方) */
+.delx { float:right; margin-left:6px; border:0; background:transparent;
+  color:var(--muted); opacity:.28; cursor:pointer;
+  padding:2px 3px; border-radius:4px; }
+.delx svg { display:block; }
+.blk:hover .delx, .nest > .head:hover .delx, .delx:focus-visible { opacity:1; }
+.delx:hover { background:var(--err-bg); color:var(--err); }
+.delx.cpy:hover { background:var(--accent-soft); color:var(--accent); }
+/* 区切り停止の予約中。押した本人に「効いている」と伝われば十分なので
+   文字を足さずボタン自身の見た目を変える */
+/* 予約中のボタン。ラベル自身が「予約を取り消す」と名乗るので、記号は
+   足さない(以前は ⏳ を付けていたが、Windows ではこれだけがカラー絵文字に
+   なり、他の記号 ▶ ⟳ ◼ ⏹ ⧉ ↩ が単色なのと揃わなかった) */
+button.armed { border-color:var(--warn); color:var(--warn);
+  background:var(--warn-bg); font-weight:700; }
+/* ブロックのドラッグつまみ */
+.bgrab { color:var(--muted); opacity:.3; cursor:grab; user-select:none;
+  font-size:var(--fs-sub); margin-right:6px; touch-action:none; }
+.blk:hover .bgrab, .nest > .head:hover .bgrab { opacity:.9; }
+.blk.dragging, .nest.dragging { opacity:.35; }
+#palette .pal { touch-action:none; }
+/* 手動操作のコントローラー図。押している間だけ色が付く */
+#padfig .fs { fill:var(--accent-soft); stroke:var(--line); cursor:pointer; }
+#padfig .figc:hover .fs { stroke:var(--accent); }
+#padfig .figc.on .fs { fill:var(--accent-fill); }
+/* 押している間はキートップの文字も反転させる(地が濃色になるため、
+   そのままだと押した瞬間に文字が読めなくなる。部品表の ON セルと同じ扱い) */
+#padfig .figc.on .ft { fill:var(--on-fill); }
+#padfig .ft { fill:var(--ink); font-size:var(--fs-name); text-anchor:middle;
+  pointer-events:none; font-weight:700; }
+.en input { vertical-align:-1px; opacity:.28; }
+.en input:checked { opacity:.28; }
+.en input:not(:checked) { opacity:1; outline:2px solid var(--warn);
+  outline-offset:1px; border-radius:2px; }
+.blk:hover .en input, .nest > .head:hover .en input,
+.en input:focus-visible { opacity:1; }
+/* 有効チェック。寸法や配置は指定せず既定のまま素直に並べ、行ボタンとの
+   誤クリック防止の余白(当たり判定の無い死帯)だけを右マージンで足す */
+table.grid td.ops input[type=checkbox] { opacity:.28; margin-right:16px; }
+table.grid td.ops input[type=checkbox]:not(:checked) { opacity:1;
+  outline:2px solid var(--warn); outline-offset:1px; }
+table.grid tr:hover td.ops input[type=checkbox] { opacity:1; }
+.blk .p { color:var(--accent); font-weight:700; }
+/* 覚え書き。手順の中身ではないので控えめに、でも読めるように */
+.note { color:var(--muted); font-size:var(--fs-sub); margin-left:10px;
+  font-weight:400; }
+/* 手順ブロックの帯。色を持つのは「そこへ飛べる」「中身が別にある」
+   「中に含む」もので、入力そのものは灰色(どの入力かは行の文字が
+   言っているので、色では分けない)。「待つ」だけ帯を出さない——
+   帯が切れることが、上から読んだときの区切りになる(幅は残すので
+   位置は動かない) */
+.blk.k-wait { border-left-color:transparent; }
+.blk.k-label { border-left-color:var(--accent); }
+.blk.k-part, .blk.k-call { border-left-color:var(--cat-part); }
+.blk.k-loop, .blk.k-counter_branch, .blk.k-wait_branch {
+  border-left-color:var(--cat-loop); }
+/* 下の余白は、くり返し・分岐の「中」ではなく「後ろ」へ落とすための帯でも
+   ある(中の並びはこの余白の上で終わる)。狙えない細さだと、入れ子が最後に
+   あるフローで末尾へ挿せなくなるため、少し広くとる */
+.nest { border:1px solid var(--cat-loop); border-radius:8px; padding:5px 7px 12px;
+  margin:2px 0; }
+.nest > .head { color:var(--cat-loop); font-weight:700; font-size:var(--fs-body);
+  margin-bottom:5px; cursor:pointer; border-radius:4px; padding:1px 3px; }
+.nest > .head:hover { background:var(--accent-soft); }
+/* 選択中は下線ではなく枠で示す(ブロックの選択表示と同じ見え方に揃える) */
+.nest.sel { outline:2px solid var(--accent); outline-offset:1px; }
+.nest .blocks { margin-left:9px; }
+.arm { border-left:2px dashed var(--cat-loop); padding-left:7px; margin:4px 0; }
+.arm > .t { color:var(--muted); font-size:var(--fs-sub); margin-bottom:3px; }
+table.grid { border-collapse:collapse; font-size:var(--fs-body);
+  font-variant-numeric:tabular-nums; }
+table.grid th, table.grid td { border:1px solid var(--line); padding:0; }
+table.grid th { background:var(--accent-soft); color:var(--accent); padding:2px 4px;
+  font-weight:700; }
+/* 数値・文字の入力欄の見た目。チェックボックスは対象外(width:52px が
+   当たると 13px の箱の周りに見えない当たり判定と余白ができる) */
+table.grid td input:not([type=checkbox]) { border:0; border-radius:0;
+  background:transparent; width:52px; text-align:center; padding:2px 3px; }
+table.grid td input:focus { outline:2px solid var(--accent); outline-offset:-2px; }
+/* 数値セルの縦コピー。表計算と同じ「右下の■を下へ引く」操作 */
+table.grid td.ax { position:relative; }
+.fill { position:absolute; right:0; bottom:0; width:8px; height:8px;
+  background:var(--accent); border:1px solid var(--surface);
+  cursor:ns-resize; display:none; touch-action:none; z-index:2; }
+table.grid td.ax:focus-within .fill, table.grid td.ax:hover .fill
+  { display:block; }
+table.grid td.ax.fillmark { outline:2px dashed var(--accent);
+  outline-offset:-2px; }
+/* 押す/押さないは2値なのでクリックで切り替える。押していない側は空欄にして、
+   押している所だけが目に入るようにする(タイムラインで入力のある区間だけ
+   色を付けているのと同じ理由。全セルに ON/OFF が並ぶと形が読めなくなる) */
+table.grid td.b { padding:0; width:30px; }
+table.grid td.b .tg { display:block; width:100%; height:23px; border:0;
+  border-radius:0; background:transparent; padding:0; font-size:var(--fs-tight);
+  letter-spacing:.04em; color:var(--muted); cursor:pointer; }
+table.grid td.b .tg:hover { background:var(--accent-soft); }
+table.grid td.b .tg.on { background:var(--accent-fill); color:var(--on-fill);
+  font-weight:700; }
+table.grid th.grp, table.grid td.grp { border-left:2px solid var(--muted); }
+/* 列を縮めて潰すより、はみ出させて横に送る方が読める。
+   横に送ってもどのフレームの行か分かるよう、左端は貼り付けておく */
+table.grid { width:max-content; }
+table.grid th, table.grid td { white-space:nowrap; }
+table.grid th.b, table.grid td.b { width:30px; min-width:30px; }
+/* 数値列は number 入力の上下ボタン(右端)のぶん少し広くとる */
+table.grid th.ax, table.grid td.ax { width:66px; min-width:66px; }
+table.grid td.ax input { width:60px; }
+/* フレーム列: 4桁-4桁(例 1234-5678)までは幅を固定してチラつかせない。
+   5桁以上になったときだけ自然に広がる */
+table.grid th.fn, table.grid td.fn { min-width:76px; }
+table.grid th.ops, table.grid td.ops { white-space:nowrap;
+  text-align:left; padding-left:2px; }
+table.grid th.fn, table.grid td.fn:first-child {
+  position:sticky; left:0; z-index:3; background:var(--surface); }
+/* テーマは data-theme 属性で切り替わるため、OS 設定(prefers-color-scheme)
+   ではなくテーマ変数から縞色を作る(OS=ライトのままダーク系テーマを選ぶと
+   左端列の縞だけ明るく浮いていた) */
+table.grid tr.alt td.fn:first-child {
+  background:var(--surface-2); }
+table.grid th.gh { background:var(--surface); color:var(--muted); font-weight:400;
+  font-size:var(--fs-tight); letter-spacing:.06em; padding:1px 4px; text-align:left;
+  /* 2段ヘッダの上段。下段(top:18px)と貼り付き位置を分ける(同じ top:0 だと
+     縦スクロールで下段が上段に重なり、まとまりの見出しが消える) */
+  top:0; height:18px; box-sizing:border-box; }
+table.grid tr.alt td { background:rgba(128,128,128,.10); }
+/* ポインタのある行(と入力中の行)を丸ごとハイライトする。左右に長い表で
+   「この数値の行は何フレーム目か」を目で追うときの行ズレ防止(2026-08-04
+   ユーザー要望)。薄い重ねなので ON セルの色や縞はそのまま読める */
+table.grid tr:hover td, table.grid tr:focus-within td {
+  background:color-mix(in srgb, var(--accent) 12%, transparent); }
+/* 左端のフレーム番号列は横スクロールの上に浮く(sticky)ため、下が透けない
+   不透明色でハイライトする */
+table.grid tr:hover td.fn:first-child,
+table.grid tr:focus-within td.fn:first-child {
+  background:color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+table.grid td.ax input { color:var(--ink); font-variant-numeric:tabular-nums; }
+/* ヘッダはデータセルより上に描く。フレーム番号列のデータセル(z-index:3)より
+   低いと、縦スクロール時に番号がヘッダへ透けて写る */
+table.grid th { position:sticky; top:18px; z-index:4; }
+table.grid th.fn { z-index:5; }   /* 角セル(縦横両方の固定が交差する) */
+table.grid td.ax input { text-align:right; }
+table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
+  background:var(--surface-2); }
+.hint { color:var(--muted); font-size:var(--fs-sub); margin-top:8px; line-height:1.7; }
+/* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレ)は、間を詰めてひとまとまりに */
+.hint + .hint { margin-top:2px; }
+/* 注釈行の中の「項目名 値」。項目どうしは余白で切り、値は本文の色にする
+   (単色の1行に「・」で連ねると、どこまでが値なのか読めない。2026-08-08) */
+.stat { display:inline-flex; align-items:baseline; gap:6px; margin-right:22px; }
+.stat:last-child { margin-right:0; }
+.statv { color:var(--ink); font-variant-numeric:tabular-nums; }
+/* 中身が空の注釈行は、余白だけを占めない(実行していないときの ETA 行) */
+.hint:empty { display:none; }
+/* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない)。
+   中は注釈行と同じ「項目どうしは余白で切る」作法(以前は全角空白1つで
+   区切っていて、どこまでが1つの値なのか読み取れなかった) */
+.tlprog { float:right; color:var(--accent); font-weight:700;
+  letter-spacing:0; font-variant-numeric:tabular-nums; }
+.tlprog .stat { margin-right:14px; }
+.tlprog .stat:last-child { margin-right:0; }
+/* 日が変わったところに出す日付。行そのものではないので薄く、左に寄せる */
+.logday { color:var(--muted); font-size:var(--fs-tight); margin:6px 0 2px;
+  letter-spacing:.04em; }
+.logday:first-child { margin-top:0; }
+/* ログ。件数が増えるので高さを決めて中でスクロールさせる */
+.logs { height:230px; overflow-y:auto; background:var(--surface-2);
+  border:1px solid var(--line); border-radius:8px; padding:6px 8px;
+  font-size:var(--fs-sub); line-height:1.65;
+  font-family:"Consolas","Courier New",monospace; }
+/* 新しい行に追従している間、上端で行が半端に切れる。切れ目には「上に続きが
+   ある」という手がかりの価値があるが、読む対象ではない場所に読めない字が
+   残るという害もある。上端だけ薄くすると、手がかりを残して半端な字が消える
+   (高さは変えないので位置は動かない)。地色を重ねる手は採らない——枠の地と
+   同じ色を持ち回ることになり、配色を切り替えたときに合わなくなる。
+   いちばん古い行まで戻ったときは外す(ログは異常の原因を読む場所なので、
+   先頭の1行が常に霞んでいては困る) */
+.logs.scrolled { mask-image:linear-gradient(to bottom, transparent 0, #000 16px);
+  -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 16px); }
+.logline .ldev { color:var(--accent); flex:none; min-width:2em; }
+.logline { display:flex; gap:10px; padding:1px 2px; border-radius:4px;
+  white-space:pre-wrap; }
+.logline .lt { color:var(--muted); flex:none; }
+.logline.warn { background:var(--warn-bg); color:var(--warn); }
+.logline.err { background:var(--err-bg); color:var(--err); font-weight:700; }
+/* 実行中の手順名。一覧で別の手順を選んでいても「今動いているのはどれか」が
+   分かるようにする(選択と実行対象は別物) */
+.nowplaying { display:flex; align-items:center; gap:7px; margin-bottom:9px;
+  padding:6px 10px; border-radius:8px;
+  background:var(--ok-bg); color:var(--ok); font-size:var(--fs-body); }
+.nowplaying b { font-size:var(--fs-name); }
+.playmark { color:var(--ok); font-size:var(--fs-sub); }
+/* 入力値を勝手に直したセルの一瞬の強調(partmsg の説明とセットで出す) */
+table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
+/* 実行中の行に付く印(一覧の中でどれが動いているか) */
+.proc .playmark { margin-left:4px; }
+/* 手動操作中はカード全体を縁取って、終い忘れに気づけるようにする */
+/* 対象を切り替えている間は、図を薄くして触れなくする(押せてしまうと、
+   その入力がどちらの装置へ行ったのか言えない) */
+#padfig.busy { opacity:.45; pointer-events:none; }
+#manualcard.on { border-color:var(--ok); box-shadow:0 0 0 2px var(--ok-bg); }
+#manualcard.on h2::after { content:' ● 操作中'; color:var(--ok);
+  font-weight:700; letter-spacing:0; }
+/* 実行中の手順を編集したときの注意書き */
+.editwarn { margin-top:7px; }

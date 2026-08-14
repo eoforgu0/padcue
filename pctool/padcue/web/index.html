@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>padcue</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <h1>padcue</h1>
+  <div class="tabs">
+    <!-- button にするのはキーボードで画面を切り替えられるようにするため
+         (span だと Tab キーで到達できず、focus-visible の枠も死んでいた) -->
+    <button class="tab on" data-view="home">実行・監視</button>
+    <button class="tab" data-view="flow">手順を編集</button>
+    <button class="tab" data-view="part">部品を編集</button>
+  </div>
+  <!-- 手動操作中の印。手動操作のカードは「実行・監視」にしか無いが、
+       入力は別のタブへ移っても送られ続ける(手順書 5-7b の定めどおり)。
+       終い忘れを防ぐための印がタブを移ると消えていたので、どの画面にいても
+       見えるここに出す。押せばその場で終えられる -->
+  <button id="manualbadge" class="chip ok" style="display:none"
+          title="手動操作が続いています(この画面の入力が装置へ送られます)。押すと終了します">
+    ● 手動操作中</button>
+  <!-- 設定の入口は1つ。◐(配色だけ)と ⚙ を並べると、配色を探す人が
+       ⚙ の中を開けることになる(同じ意味は同じ形。原則 §5) -->
+  <div class="setmenu">
+    <button id="setbtn" class="iconbtn" title="通知と配色"
+            aria-haspopup="true" aria-expanded="false">⚙</button>
+    <div id="setlist" class="menu setpanel" style="display:none">
+      <div class="setsec">通知</div>
+      <!-- 「いつ」を行に、「どう知らせるか」を列に取る(世間の通知設定と
+           同じ形)。音と点滅は別々に選べる — 片方だけ・両方・どちらも切、が
+           場面ごとに要る(2026-08-08 ユーザー要望)。中身は JS で組む -->
+      <div class="ngrid" id="notifygrid"></div>
+      <div class="setsec line">キーボード</div>
+      <div class="setrow">
+        <label><input type="checkbox" id="hotkeys">ファンクションキーを使う</label>
+      </div>
+      <!-- どのキーが何をするかは、入切を決めるこの場所でしか読まれない -->
+      <div class="sethint">
+        F9 = 両方を今すぐ止める ／ F10 = まとめて周回実行<br>
+        連結しているときだけ効きます(受け付けはビープ音)
+      </div>
+      <div class="setsec line">配色</div>
+      <div id="themelist">
+        <button data-t="auto">自動(OS に合わせる)</button>
+        <button data-t="ai-light">藍 ライト</button>
+        <button data-t="ai-dark">藍 ダーク</button>
+        <button data-t="sumi-light">墨 ライト(色を抑える)</button>
+        <button data-t="sumi-dark">墨 ダーク(色を抑える)</button>
+        <button data-t="kohaku-light">琥珀 ライト(暖色)</button>
+        <button data-t="kohaku-dark">琥珀 ダーク(暖色・夜間向け)</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="home">
+  <!-- ホーム(左ペイン: 手順の一覧と装置の台帳) -->
+  <div class="stack v-home">
+    <!-- 実行対象の選択はレーンの手順プルダウン(運転席の設定行)の仕事。
+         手順の在庫管理(並べ替え・フォルダ・表示選別)は「手順を編集」の
+         仕事なので、ホームに手順一覧カードは置かない(原則 §1 系) -->
+    <div class="card">
+      <h2>装置</h2>
+      <div id="devlist"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" id="devadd"
+                title="LAN から装置を探して、まだ登録していないものを登録します">
+          ＋ 装置を追加</button>
+      </div>
+      <div id="devaddbox" style="display:none"></div>
+      <!-- devmsg = このカードの操作(追加/接続先の確認/名前変更/登録解除)の
+           結果。次の操作まで残す -->
+      <div id="devmsg"></div>
+      <!-- 台数で言うことが変わる。0台のときに「2台目を用意したら」と出ていた
+           (1台も無いのに次の話をしていた)。文面は renderDevices が入れる -->
+      <div class="hint" id="devhint" style="display:none"></div>
+    </div>
+    <!-- Switch 本体の一覧。マイコンを挿すと本体が名乗る識別子を記録するので、
+         ここで名前を付けられる(名前は識別子に付く=マイコンを挿し替えても
+         本体に付いていく)。確認済みの本体が1台もなければカードごと出さない -->
+    <div class="card" id="consolecard" style="display:none">
+      <h2>Switch 本体</h2>
+      <div id="consolelist"></div>
+      <div id="consolemsg"></div>
+    </div>
+    <!-- プリセット = 盤面(連結・装置×手順×周回×開始位置・合流の選択肢)のスナップ
+         ショット。2台以上のときだけ出る。保存の作法は上部バー側に一本化
+         (原則 §4。連結の有無に関わらずそこにある)。ここは一覧と改名・
+         削除・呼び出しだけ(原則 §3) -->
+    <div class="card" id="formcard" style="display:none">
+      <h2>プリセット</h2>
+      <div id="formlist"></div>
+      <div id="formmsg"></div>
+    </div>
+  </div>
+  <div class="stack v-home">
+    <!-- 上部バー: 「2台にまたがること」だけを置く唯一の場所(原則 §2)。
+         1台で閉じること(手順・周回・開始と終了予定・停止)はレーンが持つ。
+         連結すると連結の語彙(まとめて開始・自動合流・両方停止・開始ズレ)が
+         ここに現れ、外すと語彙ごと消える(案C の中核。モードを覚えさせない)。
+         プリセット=2台ぶんの割り当てに名前を付けたもの、すなわち「またがる
+         もの」なので、連結の有無に関わらずここに残る(原則 §4: 割り当てを
+         編集する場所のそばで保存する) -->
+    <div class="card" id="coupler" style="display:none">
+      <div class="row">
+        <!-- 連結の入口と出口は同じ左端に置く。以前は「外す」が停止ボタンの
+             右隣にあり、急いで止めたい場面で押し間違えると、押したかった
+             停止ボタンごと画面から消えていた(連結の語彙がまとめて消えるため) -->
+        <button id="clink"
+                title="まとめて開始・自動合流・連動停止・選択肢を両方へ同時に送る、は連結したときにだけ現れます">⧉ 連結する</button>
+        <span class="lbl linkonly">⧉ 連結</span>
+        <button class="small linkonly" id="cunlink"
+                title="連結を外しても、いま走っている組の連動は変わりません(連動は開始のされ方で決まります)。次の開始から独立になります">連結を外す</button>
+        <span class="sep-v linkonly"></span>
+        <span class="chip" id="cformation" style="display:none"
+              title="呼び出したプリセットの名前"></span>
+        <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
+        <span class="chip" id="cforminfo" style="display:none"></span>
+        <!-- 保存は2つ。押す前に何が起きるか名前で分かるように、使用中は
+             「上書き保存」と名乗り、別名で残す道を隣に出す(原則 §5) -->
+        <button class="small" id="cformsave">プリセットへ保存</button>
+        <button class="small" id="cformsaveas" style="display:none"
+                title="いまの割り当てを、別の名前の新しいプリセットとして保存します">
+          別名で保存…</button>
+        <span class="sep-v linkonly"></span>
+        <!-- レーンと同じく、実行の2つ・停止の2つをそれぞれ囲う -->
+        <span class="btngrp linkonly">
+          <button class="primary" id="crun1"
+                  title="両方へ転送してから続けて開始します(1回ずつ)。開始ズレは数十ms級">▶ 1回実行</button>
+          <button class="primary" id="crun"
+                  title="各レーンの周回数で、両方まとめて開始します">⟳ 周回実行</button>
+        </span>
+        <span class="sep-v linkonly"></span>
+        <span class="btngrp linkonly">
+          <button id="cstopg"
+                  title="どちらも、今の周を最後までやってから止まります">◼ 両方を今の周で止める</button>
+          <button class="danger" id="cstopi"
+                  title="どちらも、その場で全ボタンを離して止まります">⏹ 両方を今すぐ止める</button>
+        </span>
+      </div>
+      <div class="row linkonly" style="margin-top:7px">
+        <label class="hint" style="display:flex;gap:5px;align-items:center;margin:0"
+               title="両方が待機分岐に着いたら、右の選択肢を自動で選んで同時に進めます。片方の異常(装置の異常報告・約5秒見えない)では相方も止めます">
+          <input type="checkbox" id="cauto">自動合流</label>
+        <label title="自動合流が選ぶ側。プリセットにも保存されます">進む先
+          <select id="carm"></select></label>
+        <button id="coneshot"
+                title="次の合流だけ自動を保留して、両方そろったところで人が選びます。もう一度押すと取り消します">次の合流は自分で選ぶ(1回だけ)</button>
+        <span class="sep-v"></span>
+        <span class="lbl">選択肢を両方へ同時に送る</span>
+        <span id="cbotharms" class="row" style="margin:0;gap:6px"></span>
+        <!-- 正常に送れたことは、押したそばに数秒だけ出して自ら消える。
+             毎回メッセージ欄が増えると、そのたびに下の行がずれる -->
+        <span id="cokmsg" class="okflash"></span>
+      </div>
+      <!-- cmsg = 連動停止の理由と再開、ワンショットの案内(状態から毎秒作る) -->
+      <div id="cmsg" class="linkonly"></div>
+      <!-- cactmsg = このバーの操作の結果のうち、残すもの(失敗・警告)。
+           成功はボタンのそばに出して数秒で自ら消える(cokmsg)。連結して
+           いなくてもプリセットの保存に失敗すればここに出るので、消さない -->
+      <div id="cactmsg"></div>
+      <!-- 組の開始時刻と終了予定(終わりが決まるときだけ)。開始ズレの上に、
+           同じ注釈行の作法で置く。どちらも「組」があって初めて成り立つ値
+           なので、連結していないときは出さない(各装置の開始と終了予定は
+           レーンが自分で出す) -->
+      <div class="hint linkonly" id="ceta"></div>
+      <div class="hint linkonly" id="chint"></div>
+    </div>
+    <!-- 練習(模擬)と実機が台帳に混ざっているときの注意。押し間違いで
+         実機が動く事故を防ぐ(2台化で生まれた組み合わせ) -->
+    <div id="mixwarn" style="display:none"></div>
+    <!-- 装置台数に関わらず、常にレーン(原則 §1 系: 1台と2台は同型)。
+         接続・診断・登録解除は装置カード(格納庫)側の開閉式詳細へ移した -->
+    <div class="lanes" id="lanes"></div>
+    <div class="card" id="manualcard">
+      <h2>手動操作(PC 経由)</h2>
+      <div class="row">
+        <!-- 対象は装置2台以上のときだけ出る。手動操作は一度に1台 -->
+        <label id="manualdevwrap" style="display:none"
+               title="どの装置を手で動かすかを選びます(一度に1台)">対象
+          <select id="manualdev"></select></label>
+        <button id="manual">手動操作を開始</button>
+        <span id="manualchip" class="chip">停止中</span>
+        <button id="rec">● 記録を開始</button>
+        <span id="recchip" class="chip"></span>
+        <button id="recsave" style="display:none">部品として保存</button>
+        <span id="padname" class="hint"></span>
+      </div>
+      <!-- manualmsg = このカードの操作(手動操作/記録/保存)の結果。
+           視線が記録ボタンの近くにあるとき、結果も同じ場所に出す -->
+      <div id="manualmsg"></div>
+      <!-- ptmsg = 手動操作の送達エラー(継続状態)。manualmsg と分ける:
+           共用すると保存結果に上書きされた継続エラーが再表示されず、
+           届いていないのに正常の見た目になる(2026-08-06 レビュー)。
+           状態表示なので × は付けない(直れば自動で消える) -->
+      <div id="ptmsg" class="msg err" style="display:none"></div>
+      <div class="hint" id="keymap">
+        PC に繋いだゲームパッド、またはキーボードで操作します。キーボードの
+        ときは、この画面をクリックしてから操作してください。<br>
+        キー割り当て: 左スティック=<b>WASD</b> / 右スティック=<b>矢印</b> /
+        十字キー=<b>TFGH</b> /
+        A=<b>L</b> B=<b>K</b> X=<b>O</b> Y=<b>I</b> /
+        L=<b>Q</b> R=<b>E</b> ZL=<b>1</b> ZR=<b>2</b> /
+        ＋=<b>Enter</b> −=<b>Backspace</b>
+      </div>
+      <div id="padfig" style="display:none">
+        <svg viewBox="0 0 560 300" width="560" height="300"
+             style="max-width:100%;touch-action:none;user-select:none">
+          <!-- 肩ボタン(上端) -->
+          <g class="figc" data-b="ZL"><rect class="fs" x="48" y="4" width="86" height="26" rx="8"/><text class="ft" x="91" y="22">ZL</text></g>
+          <g class="figc" data-b="L"><rect class="fs" x="140" y="4" width="86" height="26" rx="8"/><text class="ft" x="183" y="22">L</text></g>
+          <g class="figc" data-b="R"><rect class="fs" x="334" y="4" width="86" height="26" rx="8"/><text class="ft" x="377" y="22">R</text></g>
+          <g class="figc" data-b="ZR"><rect class="fs" x="426" y="4" width="86" height="26" rx="8"/><text class="ft" x="469" y="22">ZR</text></g>
+          <!-- 本体 -->
+          <rect x="28" y="42" width="504" height="180" rx="88"
+                fill="none" stroke="var(--line)" stroke-width="2"/>
+          <!-- 左スティック(外周は見た目のみ。矢印=倒す、中央=押し込み) -->
+          <circle cx="140" cy="110" r="30" fill="none" stroke="var(--line)"/>
+          <g class="figc" data-s="ly,2047"><polygon class="fs" points="128,78 152,78 140,58"/><title>左スティック上</title></g>
+          <g class="figc" data-s="ly,-2048"><polygon class="fs" points="128,142 152,142 140,162"/><title>左スティック下</title></g>
+          <g class="figc" data-s="lx,-2048"><polygon class="fs" points="108,98 108,122 88,110"/><title>左スティック左</title></g>
+          <g class="figc" data-s="lx,2047"><polygon class="fs" points="172,98 172,122 192,110"/><title>左スティック右</title></g>
+          <g class="figc" data-b="LS"><circle class="fs" cx="140" cy="110" r="13"/><title>スティック押し込み(LS)</title></g>
+          <!-- 十字キー -->
+          <g class="figc" data-b="DU"><rect class="fs" x="196" y="152" width="26" height="26" rx="4"/><text class="ft" x="209" y="170">▲</text></g>
+          <g class="figc" data-b="DD"><rect class="fs" x="196" y="204" width="26" height="26" rx="4"/><text class="ft" x="209" y="222">▼</text></g>
+          <g class="figc" data-b="DL"><rect class="fs" x="170" y="178" width="26" height="26" rx="4"/><text class="ft" x="183" y="196">◀</text></g>
+          <g class="figc" data-b="DR"><rect class="fs" x="222" y="178" width="26" height="26" rx="4"/><text class="ft" x="235" y="196">▶</text></g>
+          <!-- −/+・キャプチャ・ホーム -->
+          <g class="figc" data-b="MINUS"><circle class="fs" cx="250" cy="85" r="10"/><text class="ft" x="250" y="90">−</text></g>
+          <g class="figc" data-b="PLUS"><circle class="fs" cx="310" cy="85" r="10"/><text class="ft" x="310" y="90">＋</text></g>
+          <g class="figc" data-b="CAPTURE"><rect class="fs" x="242" y="118" width="18" height="18" rx="4"/><text class="ft" x="251" y="131">◎</text></g>
+          <g class="figc" data-b="HOME"><circle class="fs" cx="310" cy="127" r="11"/><text class="ft" x="310" y="132">⌂</text></g>
+          <!-- ABXY -->
+          <g class="figc" data-b="X"><circle class="fs" cx="420" cy="76" r="17"/><text class="ft" x="420" y="82">X</text></g>
+          <g class="figc" data-b="Y"><circle class="fs" cx="386" cy="110" r="17"/><text class="ft" x="386" y="116">Y</text></g>
+          <g class="figc" data-b="A"><circle class="fs" cx="454" cy="110" r="17"/><text class="ft" x="454" y="116">A</text></g>
+          <g class="figc" data-b="B"><circle class="fs" cx="420" cy="144" r="17"/><text class="ft" x="420" y="150">B</text></g>
+          <!-- 右スティック -->
+          <circle cx="330" cy="185" r="30" fill="none" stroke="var(--line)"/>
+          <!-- 右スティックは視点操作に使うことが多く、最大まで倒すと
+               速すぎて狙えない。半分の倒し具合にしてある -->
+          <g class="figc" data-s="ry,1024"><polygon class="fs" points="318,153 342,153 330,133"/><title>右スティック上(半分)</title></g>
+          <g class="figc" data-s="ry,-1024"><polygon class="fs" points="318,217 342,217 330,237"/><title>右スティック下(半分)</title></g>
+          <g class="figc" data-s="rx,-1024"><polygon class="fs" points="298,173 298,197 278,185"/><title>右スティック左(半分)</title></g>
+          <g class="figc" data-s="rx,1024"><polygon class="fs" points="362,173 362,197 382,185"/><title>右スティック右(半分)</title></g>
+          <g class="figc" data-b="RS"><circle class="fs" cx="330" cy="185" r="13"/><title>スティック押し込み(RS)</title></g>
+        </svg>
+        <div class="hint">押している間だけ入力されます。同時押しとジャイロは
+          キーボードかゲームパッドで</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>ログ</h2>
+      <div class="row" style="margin-bottom:7px">
+        <label class="hint" style="display:flex;gap:5px;align-items:center">
+          <input type="checkbox" id="logfollow" checked>新しい行に追従
+        </label>
+        <!-- 装置が2台以上のときだけ出る絞り込み(1台なら区別する意味がない) -->
+        <label class="hint" id="logdevwrap"
+               style="display:none;gap:5px;align-items:center">装置
+          <select id="logdev"><option value="">すべて</option></select>
+        </label>
+        <button class="small" id="logclear"
+                title="保存しているログをすべて消します(元に戻せません)">
+          ログを消す</button>
+        <span id="logmsg" class="hint"></span>
+      </div>
+      <div class="logs" id="logs">(なし)</div>
+    </div>
+  </div>
+
+  <!-- 手順を編集 -->
+  <div class="card v-flow" style="display:none">
+    <h2>手順を選ぶ</h2>
+    <div id="flowlist"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="small" id="newflow">＋ 新規</button>
+      <button class="small" id="newfolder">＋ フォルダ</button>
+    </div>
+    <h2 style="margin-top:14px">追加するブロック</h2>
+    <div id="palette"></div>
+  </div>
+  <div class="card v-flow" style="display:none">
+    <div class="ebar">
+      <div class="row">
+        <button class="primary" id="saveflow">保存</button>
+        <span id="flowinfo" class="chip"></span>
+      </div>
+      <div id="flowmsg"></div>
+    </div>
+    <div id="flowbody"></div>
+  </div>
+  <div class="card v-flow" style="display:none">
+    <h2 id="propshead">選択中のブロック</h2>
+    <div id="props"></div>
+    <div class="hint">
+      追加: 左の一覧をクリック / 置きたい場所へドラッグ<br>
+      並べ替え: ⠿ をドラッグ(Alt+↑/↓ でも可)<br>
+      Esc: 選択を外す(この欄が手順の設定に戻ります)
+    </div>
+  </div>
+
+  <!-- 部品を編集 -->
+  <div class="card v-part" style="display:none">
+    <h2>部品を選ぶ</h2>
+    <div id="partlist"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="small" id="newpart">＋ 新規</button>
+    </div>
+  </div>
+  <div class="card v-part" style="display:none">
+    <div class="ebar">
+      <div class="row">
+        <button class="primary" id="savepart">保存</button>
+        <span id="partinfo" class="chip"></span>
+        <span class="sep-v"></span>
+        <label class="hint" style="display:flex;gap:5px;align-items:center">末尾に
+          <input type="number" id="bulkn" value="1" min="1" max="10000"
+                 style="width:76px" title="まとめて足す/減らすフレーム数">
+          フレーム</label>
+        <button class="small" id="addrow">足す</button>
+        <button class="small" id="delrow">減らす</button>
+        <span class="sep-v"></span>
+        <label class="hint" style="display:flex;gap:5px;align-items:center">
+          <input type="checkbox" id="showmotion" checked>ジャイロ・加速度の列も出す
+        </label>
+      </div>
+      <div id="partmsg"></div>
+    </div>
+    <div class="hint">
+      1 行が 1 フレーム。ボタンは<b>クリックで切り替え</b>(ドラッグでまとめて塗れます)<br>
+      キーボード: Enter / Tab でセル移動(下端で1行増える)、
+      <b>Alt+Insert</b> で上に1行挿入、<b>Alt+Delete</b> でその行を削除
+    </div>
+    <div class="tl-wrap"><table class="grid" id="parttable"></table></div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

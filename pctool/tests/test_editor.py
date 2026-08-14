@@ -169,11 +169,11 @@ def test_new_and_delete_part(server, proj):
 
 
 def test_editor_page_contains_editing_ui(server):
-    with urllib.request.urlopen(server + "/", timeout=5) as r:
-        html = r.read().decode("utf-8")
+    from tests.conftest import page_assets
+    page = page_assets(server)
     for token in ["手順を編集", "部品を編集", "追加するブロック",
                   "周回で分岐", "savepart", "saveflow"]:
-        assert token in html
+        assert token in page
 
 
 # ---- 画面の作り(UX 点検で直した箇所の固定) ----
@@ -195,7 +195,8 @@ def test_page_has_no_duplicate_ids(server):
 
 
 def test_page_guards_unsaved_edits(server):
-    with urllib.request.urlopen(server + "/", timeout=5) as r:
-        html = r.read().decode("utf-8")
-    assert "confirmDiscard" in html and "beforeunload" in html
-    assert "focus-visible" in html      # キーボード操作でも位置が分かる
+    from padcue.gui import web_asset
+    js = web_asset("app.js")
+    assert "confirmDiscard" in js and "beforeunload" in js
+    # キーボード操作でも位置が分かる(見た目なので CSS 側)
+    assert "focus-visible" in web_asset("app.css")

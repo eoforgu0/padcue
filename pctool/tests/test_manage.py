@@ -551,8 +551,9 @@ def test_gui_button_bits_match_binfmt():
     """
     import re
 
-    from padcue.gui import PAGE
-    m = re.search(r"const BTN_BITS = \[(.*?)\];", PAGE, re.S)
+    from padcue.gui import web_asset
+    js = web_asset("app.js")
+    m = re.search(r"const BTN_BITS = \[(.*?)\];", js, re.S)
     assert m, "BTN_BITS が見つかりません"
     names = re.findall(r"'([A-Z]+)'", m.group(1))
     expect = [name for name, _bit in

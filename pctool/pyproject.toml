@@ -27,6 +27,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["padcue"]
 
+# 画面そのもの(HTML / CSS / JS)。pip install したときも同梱する
+[tool.setuptools.package-data]
+padcue = ["web/*"]
+
 # pytest の設定はリポジトリ直下の pytest.ini が正本(pythonpath も
 # norecursedirs も、リポジトリルートを基準にしないと書けないため)。
 # ここに書くと `cd pctool` で叩いたときだけ別条件になる。

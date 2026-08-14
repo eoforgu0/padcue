@@ -808,14 +808,14 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
         wait_state(page, "待機中", timeout_ms=20000)
-        page.wait_for_function("() => document.title !== 'pademu'",
+        page.wait_for_function("() => document.title !== 'padcue'",
                                timeout=8000)
         assert "実行が終わりました" in page.title(), page.title()
         # 画面に戻れば必ず消える(消せない表示を残さない)
         page.evaluate("() => document.dispatchEvent("
                       "  new Event('visibilitychange'))")
         page.wait_for_timeout(200)
-        assert page.title() == "pademu", f"点滅が止まらない: {page.title()!r}"
+        assert page.title() == "padcue", f"点滅が止まらない: {page.title()!r}"
     c.check("実行が終わると通知が届き、画面に戻ると消える(新設)",
             t_notify_on_finish)
 
@@ -851,7 +851,7 @@ def run_all(c: Checker, page, proj: Project, dev: MockDevice,
         ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
         page.wait_for_timeout(2500)      # 見張りの周期を十分に跨ぐ
-        assert page.title() == "pademu", \
+        assert page.title() == "padcue", \
             f"自分で止めたのに知らせが出た: {page.title()!r}"
         ln.locator(".lloops").fill("1")
         # 既定(音で知らせる)へ戻す

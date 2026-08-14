@@ -12,7 +12,9 @@ import re
 
 import pytest
 
-from padcue.gui import PAGE
+from padcue.gui import web_asset
+
+CSS = web_asset("app.css")
 
 
 def _lum(hexcol: str) -> float:
@@ -106,10 +108,10 @@ def _delta_e(c1: str, c2: str) -> float:
 
 def _themes() -> dict[str, dict[str, str]]:
     out = {}
-    for m in re.finditer(r"\[data-theme=\"([\w-]+)\"\] \{(.*?)\}", PAGE, re.S):
+    for m in re.finditer(r"\[data-theme=\"([\w-]+)\"\] \{(.*?)\}", CSS, re.S):
         out[m.group(1)] = dict(
             re.findall(r"--([\w-]+):(#[0-9a-fA-F]{3,6})", m.group(2)))
-    m = re.search(r":root, \[data-theme=\"ai-light\"\] \{(.*?)\}", PAGE, re.S)
+    m = re.search(r":root, \[data-theme=\"ai-light\"\] \{(.*?)\}", CSS, re.S)
     assert m, ":root の配色が見つかりません"
     out["ai-light"] = dict(
         re.findall(r"--([\w-]+):(#[0-9a-fA-F]{3,6})", m.group(1)))

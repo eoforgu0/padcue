@@ -19,6 +19,21 @@ REPO = Path(__file__).resolve().parents[2]
 CORE = REPO / "firmware" / "components" / "pademu_core"
 
 
+def page_assets(base: str) -> str:
+    """画面を構成する資産(HTML + CSS + JS)をつなげた文字列。
+
+    資産が gui.py の中の1本の文字列だった頃は、`/` を取れば全部入っていた。
+    実ファイルへ分けたので、「画面のどこかにこの語があること」を見る検査は
+    ここを通す(どのファイルにあるかまで問うなら web_asset を直接読む)。
+    """
+    import urllib.request
+    parts = []
+    for path in ("/", "/app.css", "/app.js"):
+        with urllib.request.urlopen(base + path, timeout=5) as r:
+            parts.append(r.read().decode("utf-8"))
+    return "\n".join(parts)
+
+
 def find_gcc() -> str | None:
     """ホスト用の gcc を探す。WinLibs を winget で入れた場所も見る。"""
     if shutil.which("gcc"):

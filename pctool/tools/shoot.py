@@ -15,13 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _localonly import lock_to_mock
 from playwright.sync_api import sync_playwright
 
 from padcue import gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
-
-from _localonly import lock_to_mock
 
 DEMO = {
     "素材周回": {
