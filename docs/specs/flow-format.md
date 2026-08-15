@@ -89,9 +89,10 @@ Excel を前提とした機能は置かない。CSV/JSON は汎用形式とし�
 - これにより **wait_branch のネスト・直列複数配置を自然に許容**する。上限はセグ
   メント数(255)と実行データ RAM プール(全セグメント合算 128KB)で、コンパイラが超
   過をエラーにする
-- **AWAIT イベント**(procedure-format v3: timeout_frames u32 / on_timeout u8 =
-  abort|腕番号 / 腕→次セグメント表はメタデータ): デバイスは全ニュートラル化して
-  AWAITING 状態で待機し、`SELECT <segment, expected_hash>` で次セグメントへ。
+- **AWAIT イベント**(procedure-format.md の AWAIT レコード: timeout_frames u32 /
+  on_timeout u8 = abort|腕番号 / 腕→次セグメント表はメタデータ): デバイスは全
+  ニュートラル化して AWAITING 状態で待機し、`SELECT <segment, expected_hash>`
+  で次セグメントへ。
   **SEGEND**(next: セグメント番号 | セッション境界)はセグメント間の即時連鎖
   (待機なし・O(1)、タイミング非影響)
 - **セッション周回(loop_n)との関係**: 「1周」= 入口セグメントからセッション境界

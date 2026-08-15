@@ -221,7 +221,7 @@ def parse(text: str) -> dict[str, Proc]:
                             "(生値 -32768..32767。フレーム数を書くとその長さだけ"
                             "回して自動で止まる。省略 = 次に変えるまで続く)")
             # 軸の対応は GP=gx=ひねり(ロール) / GY=gy=上下(ピッチ) /
-            # GR=gz=水平(ヨー)。実機確認は GY と GR(procon-protocol.md §5)
+            # GR=gz=水平(ヨー)。実機確認は GY と GR(glossary.md §2)
             gp = _parse_int(tok[1], lineno, "ジャイロひねり(生値)", -32768, 32767)
             gy = _parse_int(tok[2], lineno, "ジャイロ上下(生値)", -32768, 32767)
             gr = _parse_int(tok[3], lineno, "ジャイロ水平(生値)", -32768, 32767)

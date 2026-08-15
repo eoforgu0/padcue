@@ -3,7 +3,7 @@
 実機キャプチャで観測された初期化シーケンス(docs/design/procon-protocol.md §8)を
 そのまま再生し、デバイス応答を仕様に照らして検証する。
 デバイス実装(C)とは「出力レポートを渡し、応答バイト列を受け取る」だけで接続するため、
-USB スタックなしで到着前に検証できる。
+USB スタックなしで検証できる。
 """
 from __future__ import annotations
 
@@ -175,7 +175,7 @@ def unpack_stick(b: bytes) -> tuple[int, int]:
 
 
 def unpack_stick_calibration(b: bytes, left: bool) -> dict:
-    """スティック較正 9 バイトを展開する(spi_flash_notes の順序)。"""
+    """スティック較正 9 バイトを展開する(procon-protocol.md §7 の並び)。"""
     vals = []
     for i in range(0, 9, 3):
         vals.extend(unpack_stick(b[i:i + 3]))

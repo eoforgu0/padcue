@@ -720,7 +720,7 @@ function renderFlow(dirty, keepProps) {
     info.className = 'chip warn';
   }
 }
-// フォルダ(配列順)→フォルダ外の順に描く(VSCode のエクスプローラ風。計画 B)
+// フォルダ(配列順)→フォルダ外の順に描く(VSCode のエクスプローラ風)
 function renderFlowList() {
   const box = document.getElementById('flowlist');
   box.textContent = '';
@@ -815,7 +815,7 @@ function renderFolderRow(f) {
   return d;
 }
 
-// ---- フォルダ・非表示の保存(手順一覧の整理。計画 A/B) ----
+// ---- フォルダ・非表示の保存(手順一覧の整理) ----
 function cloneFolders() {
   return (state.proc_folders || []).map(f =>
     ({name: f.name, open: f.open, items: [...f.items]}));

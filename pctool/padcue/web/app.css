@@ -77,7 +77,7 @@
   --line:#cbcccd; --line-strong:#909192; --muted:#68696b; --ink:#262728;
   /* 彩度 0.28 倍だと、帯として隣り合う muted との色差が 9.9 しかない
      (10 未満は並べて判別が難しい)。系統の性格を保てる範囲で 1.4 倍だけ
-     戻し、12.7 にしてある(D-3 で入力の帯が muted になったため) */
+     戻し、12.7 にしてある(入力の帯が muted になったため) */
   --accent:#4a6380; --accent-fill:#436081; --accent-soft:#e8ebef;
   --err:#aa3528; --err-fill:#a82417; --warn:#906406; --ok:#016548;
   --err-bg:#ffebe7; --warn-bg:#fbeedb; --ok-bg:#e1f6ec;
@@ -417,16 +417,16 @@ button.primary:hover:not(:disabled) {
 button.danger:hover:not(:disabled) { background:var(--err-bg); }
 button.small { padding:2px 8px; font-size:var(--fs-body); }
 button:disabled { opacity:.45; cursor:not-allowed; }
-/* 塗りのボタン(実行)は、薄めるのではなく中立色の塗りへ置き換える。
-   薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
-   塗り=ボタンの形は残るので「押せるボタンが減った」と読み違えない。
-   枠線のボタン(停止など)は薄めるまま——地が元から無いので、ここに塗りを
-   当てると「無効のときだけ塗られる」という逆の形になってしまう */
 /* 待機分岐の選択肢。人の操作を待っている唯一のボタンなので、強調ではなく
    注意の色で塗る。載せる文字は地の色にする——注意色は明るい配色では濃く、
    暗い配色では明るいので、地を載せるとどちらでも反転して読める */
 button.primary.waiting { background:var(--warn); color:var(--bg);
   border-color:transparent; }
+/* 塗りのボタン(実行)は、薄めるのではなく中立色の塗りへ置き換える。
+   薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
+   塗り=ボタンの形は残るので「押せるボタンが減った」と読み違えない。
+   枠線のボタン(停止など)は薄めるまま——地が元から無いので、ここに塗りを
+   当てると「無効のときだけ塗られる」という逆の形になってしまう */
 button.primary:disabled {
   opacity:1; background:var(--surface-2); color:var(--muted);
   border-color:var(--line-strong);
@@ -548,11 +548,10 @@ tr.off td.ax input, tr.off td.fn { opacity:.38; }
 .blk:hover .delx, .nest > .head:hover .delx, .delx:focus-visible { opacity:1; }
 .delx:hover { background:var(--err-bg); color:var(--err); }
 .delx.cpy:hover { background:var(--accent-soft); color:var(--accent); }
-/* 区切り停止の予約中。押した本人に「効いている」と伝われば十分なので
-   文字を足さずボタン自身の見た目を変える */
-/* 予約中のボタン。ラベル自身が「予約を取り消す」と名乗るので、記号は
-   足さない(以前は ⏳ を付けていたが、Windows ではこれだけがカラー絵文字に
-   なり、他の記号 ▶ ⟳ ◼ ⏹ ⧉ ↩ が単色なのと揃わなかった) */
+/* 区切り停止の予約中。押した本人に「効いている」と伝われば十分なので、
+   文字を足さずボタン自身の見た目を変える。ラベル自身が「予約を取り消す」と
+   名乗るので記号も足さない(以前は ⏳ を付けていたが、Windows ではこれだけが
+   カラー絵文字になり、他の記号 ▶ ⟳ ◼ ⏹ ⧉ ↩ が単色なのと揃わなかった) */
 button.armed { border-color:var(--warn); color:var(--warn);
   background:var(--warn-bg); font-weight:700; }
 /* ブロックのドラッグつまみ */
@@ -731,10 +730,10 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 .nowplaying b { font-size:var(--fs-name); }
 /* 入力値を勝手に直したセルの一瞬の強調(partmsg の説明とセットで出す) */
 table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
-/* 手動操作中はカード全体を縁取って、終い忘れに気づけるようにする */
 /* 対象を切り替えている間は、図を薄くして触れなくする(押せてしまうと、
    その入力がどちらの装置へ行ったのか言えない) */
 #padfig.busy { opacity:.45; pointer-events:none; }
+/* 手動操作中はカード全体を縁取って、終い忘れに気づけるようにする */
 #manualcard.on { border-color:var(--ok); box-shadow:0 0 0 2px var(--ok-bg); }
 #manualcard.on h2::after { content:' ● 操作中'; color:var(--ok);
   font-weight:700; letter-spacing:0; }

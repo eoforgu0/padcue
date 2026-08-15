@@ -64,8 +64,6 @@ for (const t of document.querySelectorAll('.tab')) {
   };
 }
 
-// ============ ホーム ============
-// 一覧に出す短い理由(長い説明は chip の title で見せる)
 // ============ 配色 ============
 // 「自動」は OS の設定に追従する(prefers-color-scheme)。それ以外は
 // data-theme を html に立てて CSS 変数を差し替えるだけ

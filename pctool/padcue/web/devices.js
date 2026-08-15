@@ -4,7 +4,7 @@
 
 'use strict';
 
-// ============ 装置の台帳(登録・本体の確認・名前変更)とヘッダの状態チップ ============
+// ============ 装置の台帳(登録・本体の確認・名前変更) ============
 // 丸印は「その装置が使える状態か」だけを言う。実行中・選択待ちといった
 // 生きた実行状態は運転席(レーン)の仕事で、ここには並べない(原則 §1 系。
 // 以前は選択待ちで黄になり、格納庫が運転席と二重になっていた)。
@@ -40,7 +40,7 @@ const devAutoKey = new Map();  // 装置名 → 直近に自動で開いた異�
 function devFlagKey(d) {
   // 未接続もここに含める(対処の場所を自ら名乗るため行は自動で開く)。
   // ただし赤い縁取りは異常のときだけ——色は「人が何かする必要がある」
-  // ことに取っておく(C-2)
+  // ことに取っておく(原則 §5)
   if (d.error) return 'off:' + d.error;
   if (d.state === 'ERROR') return 'err';
   if ('pair_step' in d && (d.pair_step === 1 || d.pair_step === 2)) return 'pair';
@@ -569,7 +569,7 @@ function armRow(d, dev, errBox) {
   for (let i = 0; i < (d.await_arms || names.length); i++) {
     const label = (names[i] || `選択肢${i + 1}`) + (dev ? `(${dev} へ)` : '');
     // 押せるボタンが画面に他にもある中で、「いま人を待っているのはこれ」
-    // と分かるようにする(C-1)。塗りは注意色、文字はその配色の地の色
+    // と分かるようにする(原則 §5)。塗りは注意色、文字はその配色の地の色
     const b = el('button', 'primary waiting', label);
     b.onclick = async () => {
       const r = await api('/api/select', 'POST', {arm: i, dev});

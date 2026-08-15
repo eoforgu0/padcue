@@ -15,7 +15,7 @@ let partData = null, partName = null, partDirty = false;
 // 実行・監視向けの手順一覧(平置き)の並びを作る。「手順を編集」タブの
 // フォルダ表示と同じ考え方で「フォルダ(配列順)→フォルダ外」に並べるが、
 // ここではフォルダの入れ物そのものは出さず、順序だけ反映する
-// (計画 B「実行・監視の一覧は平置きのまま」)
+// (実行・監視の一覧は平置きのまま)
 function orderedProcs() {
   if (!state) return [];
   const byName = new Map(state.procedures.map(p => [p.name, p]));
@@ -31,7 +31,7 @@ function orderedProcs() {
   return out;
 }
 // 実行・監視の一覧・レーンの手順プルダウンが使う「見える手順」
-// (計画 A「目のトグルで実行・監視の一覧から除外」)
+// (目のトグルで実行・監視の一覧から外せる)
 function visibleProcs() { return orderedProcs().filter(p => !p.hidden); }
 
 // ボタンの一覧は、画面に並べる組(BTN_GROUPS)を正本にして、そこから作る。

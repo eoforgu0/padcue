@@ -1,4 +1,4 @@
-"""駐機タイムアウト(procedure-format v3 の timeout_frames / on_timeout)。
+"""駐機タイムアウト(AWAIT レコードの timeout_frames / on_timeout)。
 
 flow-format §7 に書かれながら実機・mock とも数えていなかった乖離(計画 §1)を
 P4 で解消した。ここは mock の検査。実機は同じ規則を supervisor(100ms 周期)で

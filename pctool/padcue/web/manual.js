@@ -245,7 +245,7 @@ document.getElementById('rec').onclick = async () => {
   const save = document.getElementById('recsave');
   if (!recOn) {
     // 手動操作が動いていないと記録できない。押しても失敗するだけの状態は
-    // ボタンを disabled にして理由を title で示す(3020 行付近)ので、ここでは
+    // ボタンを disabled にして理由を title で示す(renderManual)ので、ここでは
     // 断り文は出さない。disabled を外して直接呼ばれた場合の保険としてのみ黙って戻る
     if (!manualOn) return;
     const r = await api('/api/record', 'POST', {action: 'start'});
@@ -324,8 +324,9 @@ setInterval(() => {
   polling = true;
   refresh().finally(() => { polling = false; });
 }, 1000);
-// 手順・部品タブにいる間も状態は取り続ける。ヘッダの装置チップ(2台以上の
-// とき)をどのタブでも新鮮に保つため。実機への負担はない(接続の維持と
+// 手順・部品タブにいる間も状態は取り続ける。戻ってきたときに古い state から
+// 描き始めないため(装置パネルは実行・監視タブにしか無いので、その描画の
+// ためではない)。実機への負担はない(接続の維持と
 // 収集はサーバ側のプールが毎秒行っていて、/api/state はキャッシュ即答)
 setInterval(() => {
   if (view === 'home' || polling) return;

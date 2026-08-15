@@ -19,7 +19,7 @@
 #define STICK_CENTER    2048
 #define STICK_MAX_DELTA 2047
 #define STICK_MIN_DELTA 2048
-// IMU 較正: 原点 0・標準感度。実機到着後に見直す(procon-protocol.md §9)
+// IMU 較正: 原点 0・標準感度で固定する(procon-protocol.md §5 の決着)
 #define IMU_ACC_SENS    16384
 #define IMU_GYRO_SENS   13371
 

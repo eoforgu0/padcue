@@ -46,7 +46,7 @@ def test_gyro_axis_labels_agree_between_dsl_and_screen():
     """ジャイロ3軸の呼び名が、テキスト DSL と画面で一致していること。
 
     軸の対応は GP=gx=ひねり(ロール) / GY=gy=上下(ピッチ) / GR=gz=水平(ヨー)。
-    実機確認済みは GY と GR(docs/design/procon-protocol.md §5)。この対応は
+    実機確認済みは GY と GR(docs/glossary.md §2)。この対応は
     ワイヤの並びで決まっていて入れ替えられないのに、呼び名は DSL のヘルプと
     画面で別々に書かれている。実際 2026-08-15 の外部レビューまで、DSL 側
     (と仕様書)が gp と gy を取り違えたままだった —— そのとおりに書くと

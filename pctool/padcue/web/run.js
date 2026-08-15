@@ -142,7 +142,7 @@ async function laneRun(lane, loops) {
   refresh();
 }
 
-// 区切り停止の予約表示(1台時の setStopgArmed と同じ規則をレーンで)
+// 区切り停止の予約表示
 function setLaneStopgArmed(lane, armed) {
   lane.stopg.classList.toggle('armed', armed);
   const label = armed ? '↩ 止める予約を取り消す' : '◼ 今の周で止める';
@@ -243,7 +243,7 @@ function updateLane(lane, d) {
   const awaiting = !!d.awaiting;
   const runName = (running || awaiting) ? (d.proc || '') : '';
   // 外周のリング。人の操作を待っている(黄)・装置が異常を報告している(赤)
-  // ときだけ出す。つながっていないだけでは出さない(C-2 と同じ理由)。
+  // ときだけ出す。つながっていないだけでは出さない(原則 §5 と同じ理由)。
   //
   // **連結して走っている間は、レーンには出さない**(2026-08-15 指摘)。
   // そのときの選択は上部バーの「選択肢を両方へ同時に送る」で行うので、
@@ -313,7 +313,7 @@ function updateLane(lane, d) {
     showIn(lane.msg, '', '');       // 異常が解けたら消す
   }
   syncLaneProc(lane, d, runName);
-  // ボタンの抑止(1台時の renderStatus と同じ規則)
+  // ボタンの抑止
   const stateBusy = d.state === 'RUNNING' || d.state === 'AWAITING';
   const busy = running || awaiting || stateBusy;
   const blocked = blockedReason(d);

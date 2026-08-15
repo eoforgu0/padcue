@@ -76,7 +76,7 @@ static _Atomic uint32_t s_await_gen;
 
 // **IRAM_ATTR は必須**。この関数は割り込み(on_alarm → stop_engine_from_isr)
 // から呼ばれる。タイマー割り込みはフラッシュ操作中も止めない設定
-// (CONFIG_GPTIMER_ISR_CACHE_SAFE)なので、フラッシュ上に置かれていると
+// (CONFIG_GPTIMER_ISR_IRAM_SAFE)なので、フラッシュ上に置かれていると
 // 「フラッシュのキャッシュが切られている最中に、フラッシュ上の命令を読む」
 // ことになり、その瞬間にパニックして再起動する。
 // 実機で実行の 3% がこれで落ちていた(2026-08-02。実行終了時に到達するため
@@ -438,8 +438,8 @@ void app_engine_stop(bool graceful) {
         return;
     }
     // 即時停止: フラグだけでは次のアラームまで効かないため、タイマーを止めて
-    // その場で実行状態を落とす(USB タスクは stop_pending / running を見て
-    // ただちにニュートラルを送る)
+    // その場で実行状態を落とす(USB タスクは app_engine_snapshot_at() を
+    // 通すので、実行中でなくなればただちに全ニュートラルが返る)
     atomic_store_explicit(&s_stop_now, true, memory_order_release);
     if (atomic_load_explicit(&s_running, memory_order_acquire)) {
         gptimer_stop(s_timer);
@@ -542,7 +542,7 @@ esp_err_t app_engine_select(uint8_t arm) {
     return gptimer_start(s_timer);
 }
 
-// ---- 駐機タイムアウト(procedure-format v3 の timeout_frames/on_timeout) ----
+// ---- 駐機タイムアウト(AWAIT レコードの timeout_frames / on_timeout) ----
 // 駐機中は精度タイマー(gptimer)を止めてあるため、経過は esp_timer の
 // 実時間で数える(秒スケールの保険なので µs 精度は要らない)。
 // supervisor(100ms 周期)から呼ばれる。駐機中は gptimer が止まっていて

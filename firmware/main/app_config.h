@@ -3,6 +3,6 @@
 
 #define PADEMU_FW_VERSION "0.3.0"
 
-// M5Stack AtomS3 Lite(2026-07 調査。実機到着時に要確認)
+// M5Stack AtomS3 Lite(2026-07 調査、実機で確認済み)
 #define PADEMU_PIN_LED    35   // WS2812C-2020 ×1
 #define PADEMU_PIN_BUTTON 41   // 前面ボタン、押下で LOW

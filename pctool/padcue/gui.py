@@ -3,7 +3,7 @@
     padcue gui
 
 デバイスに繋がっていなくてもコンパイルとタイムライン確認はできる
-(実機到着前でも手順を作って検証できるようにするため)。
+(実機が無くても手順を作って検証できるようにするため)。
 
 このファイル中の「原則 §N」は docs/design/gui-principles.md の節を指す。
 画面の見た目・文言・配置は、すべてそこから説明できる状態を保つこと。
@@ -52,7 +52,7 @@ _STATIC = {
 
 
 def web_asset(name: str) -> str:
-    """画面の資産(index.html / app.css / app.js)を読む。
+    """画面の資産(index.html / app.css / 各 JS)を読む。
 
     検査もここを通す。以前は資産が gui.py 内の1本の文字列だったため、
     検査が正規表現でこそぎ取っており、書式を少し変えると黙って空振りした。
@@ -892,8 +892,9 @@ class _Handler(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     fmts.append({"name": fname, "error": "読めません"})
             out["formations"] = fmts
-        # 互換: 従来の1台形は devices[0] の写し(P2-2 の画面切替まで
-        # 既存 JS を支える)
+        # 互換: 従来の1台形(device / device_error / on_device)は
+        # devices[0] の写し。画面はレーンだけを見るので使っていないが、
+        # CLI(--device 省略時)と検査がこの形を読む
         if devices:
             first = devices[0]
             link0 = links[0]

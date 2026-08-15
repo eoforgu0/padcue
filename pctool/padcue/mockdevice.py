@@ -2,7 +2,7 @@
 
 ファームウェアの制御サーバ(firmware/main/app_ctrl.c)と同じプロトコルを話す。
 手順の保存・実行・進捗・ログ・異常を模擬し、実行は仮想時計で早送りできる。
-これにより GUI とワークフロー全体を到着前に完成させられる。
+これにより GUI とワークフロー全体を実機なしで動かせる。
 """
 from __future__ import annotations
 
@@ -556,7 +556,7 @@ class MockDevice:
                 # 待機分岐があれば、そのフレームに達したら選択待ちで止まる
                 "await_at": await_rel,
                 "await_arms": await_arms,
-                # 駐機タイムアウト(procedure-format v3)。0 = 無期限
+                # 駐機タイムアウト(AWAIT レコード)。0 = 無期限
                 "await_timeout": await_timeout,
                 "await_on_timeout": await_on_timeout,
                 "await_since": 0.0,

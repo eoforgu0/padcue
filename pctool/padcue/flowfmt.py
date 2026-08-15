@@ -1,7 +1,7 @@
 """フロー構造化データ(procedures/*.flow.json)の読み込みとコンパイル(flow-format.md)。
 
-段階1の対応範囲: label / stick / press / hold / release / wait / loop / part / call。
-counter_branch / wait_branch は段階2・3で追加済み。
+扱うノード種別は _NODE_KEYS のとおり: label / stick / gyro / press / hold /
+release / wait / loop / part / call / counter_branch / wait_branch。
 """
 from __future__ import annotations
 

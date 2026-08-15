@@ -71,17 +71,18 @@ void app_engine_snapshot(pademu_state_t *out);
 void app_engine_snapshot_at(pademu_state_t *out, uint64_t *pub_us_out);
 uint64_t app_engine_now_us(void);
 
-// 即時停止が要求されている(まだ完了していない)か。USB タスクが安全側へ倒す判断に使う
+// 区切り停止(いまの周回を終えたら止める)の予約中か
+bool app_engine_stop_graceful_armed(void);
 
 // ---- 待機分岐 ----
 // 待機分岐で止まっているか(止まっている間は全ニュートラルを出し続ける)
-bool app_engine_stop_graceful_armed(void);  // 区切り停止の予約中か
 bool app_engine_is_awaiting(void);
 uint8_t app_engine_await_arm_count(void);
 // 駐機の通し番号(起動から単調増加・1始まり)。SELECT の宛先照合に使う。
 // 実行をまたいでもリセットしない(前の実行宛ての古い選択との偶然一致を防ぐ)
 uint32_t app_engine_await_gen(void);
-// 腕を選んで再開する。待っていた時間ぶん以降の予定時刻がずれる
+// 腕を選んで再開する。待っている間はタイマーを止めてあるので、待った時間は
+// エンジンの時計から丸ごと抜ける = 以降の予定時刻はずらさない(app_engine.c)
 esp_err_t app_engine_select(uint8_t arm);
 // 駐機タイムアウトの監視(supervisor から 100ms ごとに呼ぶ)。
 // timeout_frames を超えたら on_timeout に従う(0=中断、1..n=その腕へ)
