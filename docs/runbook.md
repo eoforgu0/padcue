@@ -44,10 +44,10 @@
 ### 0-2. PC 側が動くことを確認する
 
 ここから先、コマンドは **PowerShell** に貼り付けます
-(`C:\path\to\padded` は、このリポジトリを置いた場所に読み替えてください)。
+(`C:\path\to\padcue` は、このリポジトリを置いた場所に読み替えてください)。
 
 ```powershell
-cd C:\path\to\padded
+cd C:\path\to\padcue
 python -m pytest -q
 ```
 
@@ -94,7 +94,7 @@ PowerShell を開いて、上から順に貼り付けてください。
 ```powershell
 Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue
 . C:\path\to\esp-idf\export.ps1
-cd C:\path\to\padded\firmware
+cd C:\path\to\padcue\firmware
 idf.py --version
 ```
 
@@ -236,7 +236,7 @@ USB を開始します(ここでシリアルのログは終わります)
 **コマンドで済ませたい場合**(GUI を使わずに確認したいとき)
 
 ```powershell
-cd C:\path\to\padded
+cd C:\path\to\padcue
 $env:PYTHONPATH = "pctool"
 python -m padcue device auto     # 探して接続先を覚える
 python -m padcue status          # 状態を表示
@@ -766,11 +766,11 @@ Switch 側の**ゼロ点自動較正**に「センサーのずれ」として吸
 
 ```powershell
 （1-1 の PowerShell で）
-cd C:\path\to\padded\firmware
+cd C:\path\to\padcue\firmware
 idf.py build
 
 （別の端末で）
-cd C:\path\to\padded\pctool
+cd C:\path\to\padcue\pctool
 python -m padcue ota
 ```
 
