@@ -21,6 +21,13 @@ from pathlib import Path
 
 from padcue.project import Project
 
+# 「つながらない相手」を演じさせる宛先。RFC 5737 の TEST-NET-1 から採る。
+# 私有帯(10/8・192.168/16)は社内網や VPN の配下では実在ホストになりうるので
+# 使わない。_localonly.forbid_remote() が loopback 以外を止めるので実際には
+# パケットは出ないが、歯止めが1枚でも欠けたときに外へ届く値を書かない
+# (2026-08-15。tests 側は 719e2f0 で統一済みだったが、ここが漏れていた)
+UNREACHABLE = "192.0.2.1"
+
 FLOWS = {
     "素材周回": {
         "schema": 1, "name": "素材周回", "pre": "拠点前",

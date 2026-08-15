@@ -7,6 +7,7 @@ from __future__ import annotations
 from padcue.mockdevice import MockDevice
 
 from ._harness import (
+    UNREACHABLE,
     Checker,
     chip_text,
     dev_row,
@@ -156,7 +157,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         は×で閉じられる(旧 t_msg_close の移行先)。
         """
         row = open_dev_row(page)
-        row.locator(".devhost").fill("10.255.255.1")
+        row.locator(".devhost").fill(UNREACHABLE)
         row.locator("button", has_text="接続").click()
         wait_state(page, "未接続", timeout_ms=12000)
         # 結論はレーン(中立色のチップ)、理由は装置カードの行(C-2)。
@@ -195,7 +196,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
 
     def t_dev_bad_host_recovers():
         row = open_dev_row(page)
-        row.locator(".devhost").fill("10.255.255.1")
+        row.locator(".devhost").fill(UNREACHABLE)
         row.locator("button", has_text="接続").click()
         wait_state(page, "未接続", timeout_ms=12000)
         # 応答しない相手に定期取得を投げ続けても、操作がその後ろで詰まらないこと
