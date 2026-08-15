@@ -130,13 +130,11 @@ html, body { height:100%; }
 body { margin:0; background:var(--bg); color:var(--ink); font-size:var(--fs-field);
   font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",Meiryo,sans-serif;
   overflow:hidden; display:flex; flex-direction:column; }
+/* position:relative は、この中に絶対配置で開く物(設定パネル)の基準にする */
 header { display:flex; align-items:center; gap:10px; padding:9px 18px;
   border-bottom:1px solid var(--line); background:var(--surface); flex-wrap:wrap;
-  flex:none; }
+  flex:none; position:relative; }
 header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
-/* 装置の状態と接続先は同じことなので1つの枠にまとめる。
-   状態だけ左端に離れていると、何の状態なのか・どこで直すのかが分からない */
-header { position:relative; }
 /* ⚙ = この画面そのものの設定(通知・配色)。運転席にも格納庫にも属さない
    ものはヘッダに置く(設計原則 §1)。設定の入口は1つに保つ */
 .setmenu { margin-left:auto; position:relative; }
@@ -319,13 +317,14 @@ main > .card { min-width:0; }
 .stack { display:flex; flex-direction:column; gap:14px; }
 /* 行全体は「押せるもの」ではない(掴む・選ぶ・アイコンで操作、が同居する)。
    指差しは実際に何か起きる所=名前(選択)とアイコンにだけ付ける */
-.proc { border:1px solid var(--line); border-radius:8px; padding:7px 10px;
+/* 3列: 掴む所 / 名前と注釈 / アイコン */
+.proc { display:grid; grid-template-columns:14px 1fr auto;
+  column-gap:6px; align-items:center;
+  border:1px solid var(--line); border-radius:8px; padding:7px 10px;
   margin-bottom:5px; }
 .proc b, .proc .meta { cursor:pointer; }
 .proc:hover { border-color:var(--accent); }
 .proc.sel { border-color:var(--accent); background:var(--accent-soft); }
-.proc { display:grid; grid-template-columns:14px 1fr auto;
-  column-gap:6px; align-items:center; }
 .proc b { font-size:var(--fs-name); }
 .proc .meta { grid-column:2 / -1; color:var(--muted); font-size:var(--fs-sub);
   margin-top:2px; }
@@ -526,8 +525,10 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
   margin-bottom:5px; color:var(--muted); cursor:pointer; font-size:var(--fs-body); }
 .pal:hover { border-color:var(--accent); color:var(--accent); }
 .blocks { display:flex; flex-direction:column; gap:4px; }
+/* position:relative は、この中に絶対配置で置く物(右端の削除ボタン)の基準 */
 .blk { border:1px solid var(--line); border-left:4px solid var(--muted);
-  border-radius:7px; padding:4px 9px; cursor:pointer; font-size:var(--fs-body); }
+  border-radius:7px; padding:4px 9px; cursor:pointer; font-size:var(--fs-body);
+  position:relative; }
 .blk:hover { border-color:var(--accent); }
 .blk.sel { outline:2px solid var(--accent); outline-offset:1px; }
 /* 一時的に外したブロック/行。消さずに「今は無いもの」として見せる */
@@ -535,7 +536,6 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
 tr.off td.ax input, tr.off td.fn { opacity:.38; }
 .blk.off, .nest.off > .head { text-decoration:line-through;
   text-decoration-thickness:1px; }
-.blk { position:relative; }
 /* 有効が通常なので、入っているチェックは目立たせない。
    外したもの(=今は無いもの)だけがはっきり見えるようにする */
 .en { float:right; margin-left:8px; cursor:pointer; }
@@ -646,7 +646,8 @@ table.grid th, table.grid td { white-space:nowrap; }
 table.grid th.b, table.grid td.b { width:30px; min-width:30px; }
 /* 数値列は number 入力の上下ボタン(右端)のぶん少し広くとる */
 table.grid th.ax, table.grid td.ax { width:66px; min-width:66px; }
-table.grid td.ax input { width:60px; }
+table.grid td.ax input { width:60px; text-align:right;
+  color:var(--ink); font-variant-numeric:tabular-nums; }
 /* フレーム列: 4桁-4桁(例 1234-5678)までは幅を固定してチラつかせない。
    5桁以上になったときだけ自然に広がる */
 table.grid th.fn, table.grid td.fn { min-width:76px; }
@@ -675,12 +676,10 @@ table.grid tr:hover td, table.grid tr:focus-within td {
 table.grid tr:hover td.fn:first-child,
 table.grid tr:focus-within td.fn:first-child {
   background:color-mix(in srgb, var(--accent) 12%, var(--surface)); }
-table.grid td.ax input { color:var(--ink); font-variant-numeric:tabular-nums; }
 /* ヘッダはデータセルより上に描く。フレーム番号列のデータセル(z-index:3)より
    低いと、縦スクロール時に番号がヘッダへ透けて写る */
 table.grid th { position:sticky; top:18px; z-index:4; }
 table.grid th.fn { z-index:5; }   /* 角セル(縦横両方の固定が交差する) */
-table.grid td.ax input { text-align:right; }
 table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
   background:var(--surface-2); }
 .hint { color:var(--muted); font-size:var(--fs-sub); margin-top:8px; line-height:1.7; }
