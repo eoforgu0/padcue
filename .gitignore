@@ -10,6 +10,10 @@ firmware/managed_components/
 __pycache__/
 *.pyc
 .pytest_cache/
+# ruff は .ruff_cache/.gitignore(中身は *)を自分で書くので黙って無視される。
+# それに頼らずここにも書く — 書き出す前の一瞬や、そのファイルを消した状態で
+# 追跡候補に現れるうえ、.pytest_cache だけ明示されているのは揃っていない
+.ruff_cache/
 
 # プロジェクト作業物(手順のコンパイル結果と接続先設定は環境依存)
 build/
@@ -20,6 +24,9 @@ padcue.json.bak
 .hosttest/
 logs.jsonl
 runstate.json
+# 置き換え用の一時ファイル(coupler._save_runstate)。正常終了すれば残らないが、
+# 書き込み中に落ちたときに残る — そのクラッシュこそが一時ファイルを使う理由
+runstate.json.tmp
 gui_server.json
 uicheck/
 runbook_walk/
