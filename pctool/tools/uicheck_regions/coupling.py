@@ -67,7 +67,7 @@ def run_coupling(c: Checker, page, proj: Project,
             assert ng not in bar, f"連結していないのに「{ng}」が出ている"
         body = page.locator("#lanes").inner_text()
         assert "連結して開始" not in body, "連結の語彙がレーンに漏れている"
-    c.check("連結する前は、入口とプリセットの保存だけが残る(新設)",
+    c.check("連結する前は、入口とプリセットの保存だけが残る",
             t_cta_only_before_link)
 
     def t_link_shows_bar():
@@ -507,7 +507,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
         row_icon(page, "#formlist", "いつものC", 1).click()
         page.wait_for_timeout(600)
         prompt_value[0] = "自動テスト"
-    c.check("プリセット: 別名で保存すると元を残して新しく作れる(新設)",
+    c.check("プリセット: 別名で保存すると元を残して新しく作れる",
             t_formation_save_as)
 
     def t_solo_formation():
@@ -561,7 +561,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             "() => document.querySelector('#coupler').classList"
             ".contains('linked')", timeout=8000)
         prompt_value[0] = "自動テスト"
-    c.check("プリセット: 連結していなくても保存でき「単独」として残る(新設)",
+    c.check("プリセット: 連結していなくても保存でき「単独」として残る",
             t_solo_formation)
 
     def t_f10_starts_together():

@@ -115,9 +115,8 @@ def run_procedures(c: Checker, page):
         自己完結する。原則 §2)。
 
         以前は一覧に▶印を付けて「動いているのはどれか」を選択と区別して
-        示し、他の手順を選んでも進行表示が重ならないことを別に確かめて
-        いた(旧 t_now_playing・t_other_selected_no_overlay)。新配置では
-        選択欄そのものが実行中の手順に同期して固定され(かつ実行中は
+        示し、他の手順を選んでも進行表示が重ならないことを別に確かめていた。
+        いまは選択欄そのものが実行中の手順に同期して固定され(かつ実行中は
         disabled で選び直せない)ため、「他の手順を選んで進行が重なる」
         という事態自体が起こり得ない。ここでは、その固定と抑止だけを見る。
         """
@@ -224,7 +223,7 @@ def run_look_and_alerts(c: Checker, page):
             "読み込み直しで手順の選択が一覧の先頭に戻る"
         lane(page).locator(".lproc").select_option(before)
         page.wait_for_timeout(600)
-    c.check("読み込み直しても手順の選択が残る(新設)",
+    c.check("読み込み直しても手順の選択が残る",
             t_lane_proc_survives_reload)
 
     def t_notify_settings():
@@ -265,7 +264,7 @@ def run_look_and_alerts(c: Checker, page):
         page.wait_for_timeout(150)
         assert lane(page).locator(".lproc").input_value() == sel_before, \
             "通知設定の読み込み直しで手順の選択が変わった"
-    c.check("通知は場面ごとに音と点滅を別々に選べ、選択が残る(新設)",
+    c.check("通知は場面ごとに音と点滅を別々に選べ、選択が残る",
             t_notify_settings)
 
     def t_hotkeys_off_by_default():
@@ -295,7 +294,7 @@ def run_look_and_alerts(c: Checker, page):
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(150)
-    c.check("ファンクションキーは既定で切、⚙ で入切できる(新設)",
+    c.check("ファンクションキーは既定で切、⚙ で入切できる",
             t_hotkeys_off_by_default)
 
     def t_notify_on_finish():
@@ -323,11 +322,11 @@ def run_look_and_alerts(c: Checker, page):
                       "  new Event('visibilitychange'))")
         page.wait_for_timeout(200)
         assert page.title() == "padcue", f"点滅が止まらない: {page.title()!r}"
-    c.check("実行が終わると通知が届き、画面に戻ると消える(新設)",
+    c.check("実行が終わると通知が届き、画面に戻ると消える",
             t_notify_on_finish)
 
     def t_favicon_marks_notice():
-        """知らせが出ている間はタブのアイコンにも印が付くこと(新設)。
+        """知らせが出ている間はタブのアイコンにも印が付くこと。
 
         別のタブを見ていると、タブ名は幅で切れて読めないことがある。
         アイコンはタブが見えている限り目に入るので、そこでも知らせる。
@@ -344,7 +343,7 @@ def run_look_and_alerts(c: Checker, page):
         page.evaluate("() => stopBlink()")
         page.wait_for_timeout(200)
         assert page.evaluate(icon) == idle, "知らせが消えてもアイコンが戻らない"
-    c.check("知らせが出るとタブのアイコンにも印が付く(新設)",
+    c.check("知らせが出るとタブのアイコンにも印が付く",
             t_favicon_marks_notice)
 
     def t_notify_silent_on_manual_stop():
@@ -368,7 +367,7 @@ def run_look_and_alerts(c: Checker, page):
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(150)
-    c.check("今すぐ止めるでは通知しない(新設)", t_notify_silent_on_manual_stop)
+    c.check("今すぐ止めるでは通知しない", t_notify_silent_on_manual_stop)
 
 
 def run_stop_and_partial(c: Checker, page):

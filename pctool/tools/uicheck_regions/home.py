@@ -7,7 +7,7 @@ from ._harness import Checker, chip_text, lane, wait_state
 def run_home(c: Checker, page):
     """実行・監視の画面(1台のときのレーン)。"""
     # ================= 実行・監視 =================
-    # 常時レーン化(D構造改修)後の1台系検査。装置台数に関わらず常にレーン
+    # 常時レーン化した後の1台系検査。装置台数に関わらず常にレーン
     # (原則 §1 系「1台と2台は同型」)なので、ここは #lanes .lane が1本だけの
     # 状態を前提に、run_multi/run_coupling と同じ流儀(lane()・has_text)で
     # レーンを操作する。接続・診断は装置カードの開閉式詳細(dev_row)側。
@@ -18,7 +18,7 @@ def run_home(c: Checker, page):
 
         原則 §1 系「1台と2台は同型」の1台側の土台。台数で構造を変えない、
         という前提がまず崩れていないかをここで確かめ、以降の検査はその上に
-        乗る(新設)。
+        乗る。
         """
         assert page.locator("#lanes .lane").count() == 1, "レーンが1本出ていない"
         ln = lane(page)
@@ -39,5 +39,5 @@ def run_home(c: Checker, page):
         wait_state(page, "実行中")
         ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-    c.check("1台構成でもレーンが1本出て、実行・停止・開始ラベルが従来どおり働く(新設)",
+    c.check("1台構成でもレーンが1本出て、実行・停止・開始ラベルが従来どおり働く",
             t_lane_smoke)

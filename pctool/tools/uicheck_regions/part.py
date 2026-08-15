@@ -494,7 +494,7 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
         page.wait_for_timeout(700)
 
     def t_keyboard_insert_delete():
-        """Alt+Insert で上に1行挿し、Alt+Delete でその行を削れること(新設)。
+        """Alt+Insert で上に1行挿し、Alt+Delete でその行を削れること。
 
         末尾への追加は下端の Enter/Tab が持っていたが、途中を足す・削るは
         マウスでしかできなかった(行末の ＋/× はタブ順から外してあるため)。
@@ -537,7 +537,7 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
         page.keyboard.press("Escape")
         page.click("#savepart")
         page.wait_for_timeout(700)
-    c.check("Alt+Insert / Alt+Delete で途中に行を挿せる・削れる(新設)",
+    c.check("Alt+Insert / Alt+Delete で途中に行を挿せる・削れる",
             t_keyboard_insert_delete)
 
     c.check("Enter/Tab でセル移動、下端は自動で1フレーム追加",

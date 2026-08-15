@@ -16,7 +16,7 @@ from ._harness import (
 
 def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
               prompt_value: list, dialogs: list):
-    """装置2台のレーン画面(案C・P2-2b)。
+    """装置2台のレーン画面(案C)。
 
     装置は台帳へ直接書いて登録する(GUI の「＋装置を追加」は LAN 探索が
     要るが、検査では探索を mock 1台に固定しているため通らない。登録 API の
@@ -196,7 +196,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         page.wait_for_function(
             "() => state.devices[0].state === 'IDLE'", timeout=8000)
         page.select_option("#manualdev", "2P")
-    c.check("手動操作中でも対象を切り替えられる(新設)",
+    c.check("手動操作中でも対象を切り替えられる",
             t_manual_switch_target_while_on)
 
     def t_lane_resume_refreshes_on_return():
@@ -348,14 +348,14 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         wait_lane_state(page, 1, "未接続", timeout_ms=15000)
         # 対処(接続先の確認・探す)は装置パネル側にあるので、レーンには
         # 結論(チップ「未接続」)だけが出る(原則 §1)。装置行が自動で
-        # 開いて赤くなる導線は t_disconnected が見ている
+        # 開く導線は t_disconnected が見ている
         assert lane_chip(page, 1) == "未接続", "レーンのチップが未接続にならない"
         assert lane_at(page, 1).locator("button", has_text="1回実行") \
             .is_disabled(), "未接続なのに実行が押せる"
         assert lane_chip(page, 0) == "待機中", "2P の未接続が 1P に波及"
         assert lane_at(page, 0).locator("button", has_text="1回実行") \
             .is_enabled(), "2P 未接続で 1P の操作まで塞がった"
-    c.check("未接続のレーンだけが赤くなり、相方は無傷",
+    c.check("未接続になるのは片方のレーンだけで、相方は無傷",
             t_unreachable_lane_isolated)
 
     def t_remove_returns_to_solo():

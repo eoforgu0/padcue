@@ -59,7 +59,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         row.locator(".devtoggle").click()
         page.wait_for_timeout(300)
         assert "open" not in (row.get_attribute("class") or ""), "閉じたのに開いたまま"
-    c.check("装置行の詳細が開閉でき、診断 kv が全て見える(新設)", t_dev_row_kv)
+    c.check("装置行の詳細が開閉でき、診断 kv が全て見える", t_dev_row_kv)
 
     def t_dev_id_beside_name():
         """ID は名前の右(何の ID かが読み取れる)。下段は繋がる本体だけ。"""
@@ -70,7 +70,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         if meta.is_visible():
             assert "ID " not in meta.inner_text(), \
                 f"下段にも ID が出ている: {meta.inner_text()!r}"
-    c.check("装置の ID は名前の右に出る(新設)", t_dev_id_beside_name)
+    c.check("装置の ID は名前の右に出る", t_dev_id_beside_name)
 
     def t_lane_eta():
         """実行中のレーンに、開始時刻と終了予定(周回が有限なら)が出ること。"""
@@ -95,7 +95,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
             "() => ![...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
         ln.locator(".lloops").fill("0")
-    c.check("実行中は開始時刻と終了予定が出る(新設)", t_lane_eta)
+    c.check("実行中は開始時刻と終了予定が出る", t_lane_eta)
 
     def t_pairing_warning():
         """登録未完(本体が新規ペアリングを再要求し続けている)を注入すると、
@@ -129,7 +129,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
 
     def t_dev_host_shows_current():
         """今どこに繋ごうとしているかが装置行の欄に見えること
-        (placeholder ではなく値。旧「探す」検査群の移行先その1)。
+        (placeholder ではなく値)。
         """
         row = open_dev_row(page)
         val = row.locator(".devhost").input_value()
@@ -151,16 +151,16 @@ def run_devices(c: Checker, page, dev: MockDevice):
     c.check("接続先を空で保存しようとすると断られる", t_dev_empty_host_refused)
 
     def t_dev_find_and_connect():
-        """「探す」で装置を見つけて接続先にできる(装置行の詳細から効く。
-        旧「探す」検査群の移行先その2)。変更した場合は欄の値が変わるだけで
-        文は出ない(原則 §5)。維持した場合の文(見た目に変化が無いため残す)
-        は×で閉じられる(旧 t_msg_close の移行先)。
+        """「探す」で装置を見つけて接続先にできる(装置行の詳細から効く)。
+
+        変更した場合は欄の値が変わるだけで文は出ない(原則 §5)。維持した
+        場合の文(見た目に変化が無いため残す)は×で閉じられる。
         """
         row = open_dev_row(page)
         row.locator(".devhost").fill(UNREACHABLE)
         row.locator("button", has_text="接続").click()
         wait_state(page, "未接続", timeout_ms=12000)
-        # 結論はレーン(中立色のチップ)、理由は装置カードの行(C-2)。
+        # 結論はレーン(中立色のチップ)、理由は装置カードの行(原則 §1)。
         # つながっていないだけなら赤くしない——2台目を外して1台で回すのは
         # 正常な使い方で、異常ではない
         assert not text(page, "#lanes .lane .lmsg"), \
@@ -251,5 +251,5 @@ def run_disconnected(c: Checker, page, dev: MockDevice):
         page.wait_for_timeout(300)
         assert "open" in (row.get_attribute("class") or ""), \
             "チップをクリックしても装置行が開かない"
-    c.check("未接続: 装置行が自動で開いて赤くなり、チップから装置行へ飛べる(新設)",
+    c.check("未接続: 装置行が自動で開き(赤くはしない)、チップから装置行へ飛べる",
             t_disconnected)

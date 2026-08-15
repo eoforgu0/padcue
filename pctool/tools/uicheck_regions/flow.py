@@ -534,7 +534,7 @@ def run_flow_branch_and_folders(c: Checker, page, proj: Project, prompt_value: l
     c.check("手順の新規作成と削除", t_new_and_delete_flow)
 
     def t_proc_hide_toggle():
-        """目のトグルで実行・監視の一覧から消え、戻せること(計画 A)。"""
+        """目のトグルで実行・監視の一覧から消え、戻せること。"""
         target = "選んで進む"
         row_icon(page, "#flowlist", target, 3).click()   # 目(隠す)
         page.wait_for_timeout(500)
@@ -558,7 +558,7 @@ def run_flow_branch_and_folders(c: Checker, page, proj: Project, prompt_value: l
     c.check("目のトグルで実行・監視の一覧から消え、戻せる", t_proc_hide_toggle)
 
     def t_proc_folder_dnd():
-        """フォルダに入れて開閉でき、改名・解体が効くこと(計画 B)。"""
+        """フォルダに入れて開閉でき、改名・解体が効くこと。"""
         prompt_value[0] = "テスト置き場"
         page.click("#newfolder")
         page.wait_for_timeout(600)
