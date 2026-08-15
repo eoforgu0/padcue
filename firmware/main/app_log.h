@@ -25,6 +25,10 @@ typedef enum {
     APP_LOG_USB_MOUNT,
     APP_LOG_USB_UMOUNT,
     APP_LOG_USB_SUSPEND,
+    // この2つは**どこからも発報していない**。番号は app_log.c の KIND_NAMES と
+    // 位置で対応していて、詰めると以降の種別が全てずれる(装置に溜まったまま
+    // OTA した記録が別の名前で読まれる)。応答の取りこぼしは STATUS の
+    // dropped_replies が、WiFi の切断は再接続が黙って引き受けている
     APP_LOG_REPLY_DROPPED,
     APP_LOG_WIFI_LOST,
     APP_LOG_WIFI_UP,

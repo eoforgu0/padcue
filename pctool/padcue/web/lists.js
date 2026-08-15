@@ -166,6 +166,8 @@ const LOG_JA = {
   USB_MOUNT:     () => 'Switch に認識されました(USB 接続)',
   USB_UMOUNT:    () => 'Switch との USB 接続が切れました',
   USB_SUSPEND:   () => 'USB がサスペンドしました(本体スリープの疑い)',
+  // この2つは装置が発報していない(firmware/main/app_log.h に理由)。
+  // 種別の一覧を欠かさないために残す
   REPLY_DROPPED: (a) => `⚠ Switch への応答を取りこぼしました(累計 ${a} 件)`,
   WIFI_LOST:     () => 'WiFi が切れました',
   WIFI_UP:       () => 'WiFi につながりました',
