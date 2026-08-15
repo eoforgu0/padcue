@@ -170,7 +170,7 @@ def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
         for name in ("選んで進む", "周回で変える"):
             ln.locator(".lproc").select_option(name)
             # 図の追従は毎秒の状態取得に乗るので、出るまで待つ(固定待ちは
-            # 取りこぼす。2026-08-06 実測)
+            # 取りこぼす)
             page.wait_for_function(
                 "() => document.querySelectorAll("
                 "  '#lanes .lane .ltl .tlrow .nm').length > 0", timeout=4000)

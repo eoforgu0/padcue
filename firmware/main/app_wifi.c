@@ -23,7 +23,7 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         xEventGroupClearBits(s_eg, CONNECTED_BIT);
         // 理由を必ず出す。これが無いと「繋がらない」しか分からず、
         // パスワード違いなのか電波が届いていないのかを切り分けられない
-        // (2026-08-02 に実際にこれで詰まった)
+        // (これが無いと詰まる)
         wifi_event_sta_disconnected_t *d = data;
         uint8_t r = d ? d->reason : 0;
         const char *why =
@@ -98,7 +98,7 @@ esp_err_t app_wifi_start(void)
     // 省電力を切る。既定(WIFI_PS_MIN_MODEM)のままだとビーコン間隔ごとに
     // 眠るため、こちらから送るパケットが落ちる・数百 ms 遅れる。
     // 実測で ping の 86% が落ち、応答が最大 1.1 秒まで伸びて PC から
-    // 事実上つながらなかった(2026-07-30)。USB/ドック給電なので節電の
+    // 事実上つながらなかった。USB/ドック給電なので節電の
     // 理由がなく、制御リンクは応答性が全てなので常時受信にする
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     return ESP_OK;

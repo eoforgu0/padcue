@@ -83,7 +83,7 @@ def run_part_editor(c: Checker, page, proj: Project):
         """保存すると全ての列が書かれること(書かない列=直前のまま を無くす)。"""
         page.click("#savepart")
         page.wait_for_timeout(1000)
-        # 保存成功は文で知らせない(2026-08-04)。バッジが「保存済み」になり、
+        # 保存成功は文で知らせない。バッジが「保存済み」になり、
         # 一瞬光る(flash クラス)ことが「ちゃんと押せた」の合図
         assert text(page, "#partmsg") == "", text(page, "#partmsg")
         assert text(page, "#partinfo") == "保存済み", text(page, "#partinfo")
@@ -327,7 +327,7 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
 
         破線=未確定の見た目どおりに動くこと(Excel のフィルハンドルと同じ)。
         広げすぎても、縮めてから離せば縮めた範囲しかコピーされない
-        (2026-08-04 ユーザー指摘。以前は動かすそばから確定していた)。
+        (以前は動かすそばから確定していた)。
         """
         col = page.evaluate("() => PART_COLS.indexOf('LX')")
 

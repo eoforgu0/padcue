@@ -367,7 +367,7 @@ def test_update_device_does_not_clobber_other_writers(tmp_path):
     """古い cfg を持ったままの update_device が、他所の変更を消さないこと。
 
     例: GUI が「探す」の走査中(古い cfg を保持)に、別端末で device add した
-    2P の登録が、走査後の host 控え直しで消える事故(2026-08-05 レビュー)。
+    2P の登録が、走査後の host 控え直しで消える事故。
     """
     p = Project(tmp_path)
     stale = p.load_config()                  # 古いスナップショット

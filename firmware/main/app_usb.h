@@ -48,7 +48,7 @@ uint8_t app_usb_pair_step(void);   // 直近のペアリングフェーズ(0=未
 uint8_t app_usb_input_mode(void);  // 本体が設定した入力モード(0x30=通常)
 
 // 送出まわりの実測値。「割り込みは定刻だったが実際の出力は遅れた」を
-// 見逃さないための計器一式(2026-08-04 監査で追加)
+// 見逃さないための計器一式
 typedef struct {
     uint32_t dropped_replies;   // キューに積めず/再送しきれず捨てた応答(0 であるべき)
     uint32_t failed_replies;    // 送出に失敗して再送した回数(0 であるべき)

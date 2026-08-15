@@ -156,7 +156,7 @@ def walk(page, proj, dev, prompt):
     row = open_dev_row(page)
     kv = row.locator(".kv").inner_text()
     # 「USB」は語をやめた——「未接続」が PC↔装置 と 装置↔Switch の2つの
-    # 別概念に当たっていたので、後者は相手を明示した言い方にした(2026-08-12)
+    # 別概念に当たっていたので、後者は相手を明示した言い方にした
     for want in ("ファーム", "方式", "Switch との接続"):
         if want not in kv:
             note(f"runbook 2 の確認表にある「{want}」が装置行の詳細に出ていない")
@@ -316,7 +316,7 @@ def walk(page, proj, dev, prompt):
         page.click("#savepart")
         page.wait_for_timeout(1200)
         # 保存の成功は文で出ない(バッジが「保存済み」になり一瞬光る仕様。
-        # 2026-08-04 ユーザー指示)。文が出るのはエラーのときだけ
+        # 文が出るのはエラーのときだけ
         pm = txt(page, "#partmsg")
         badge = txt(page, "#partinfo")
         print("     保存の結果: 文=", pm or "(なし)", "／バッジ=", badge)

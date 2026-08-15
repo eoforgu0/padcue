@@ -165,7 +165,7 @@ def _client(args) -> DeviceClient:
     控えた IP で繋がらなければ LAN 内を探すが、控え直すのは**同じ個体**
     (ID が一致する応答)だけ。以前は「実際に繋がった最初の1台」へ黙って
     乗り換えていたが、2台環境では意図しない実機を操作する事故になるため
-    廃止した(2026-08-04 P1)。--host 指定は照合なしの直結(復旧用の逃げ道)。
+    廃止した。--host 指定は照合なしの直結(復旧用の逃げ道)。
     """
     p = _project(args)
     cfg = p.load_config()
@@ -380,7 +380,7 @@ def cmd_stop(args) -> int:
 
 
 def _print_pairing(st: dict) -> None:
-    """ペアリングの観測値を表示する(2026-08-06 の教訓)。
+    """ペアリングの観測値を表示する。
 
     本体側にこの個体の登録記録が無いと、本体は新規ペアリング(フェーズ
     0x01)を再要求し続け、完了するまで**全ての入力を無視する**。それが
@@ -736,7 +736,7 @@ def cmd_mock(args) -> int:
     d = MockDevice(host="127.0.0.1", port=args.port, speed=args.speed,
                    device_id=args.id)
     # 本体(TCP)の待ち受けに失敗したら偽の成功を表示しない(排他 bind に
-    # したため、二重起動はここで確実に失敗する。2026-08-05 レビュー)
+    # したため、二重起動はここで確実に失敗する)
     try:
         port = d.start()
     except OSError:
@@ -855,7 +855,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     # Windows のコンソール(cp932)では µ などの文字で print が
-    # UnicodeEncodeError になり、status 表示が途中で落ちる(2026-08-06 実測)。
+    # UnicodeEncodeError になり、status 表示が途中で落ちる。
     # 表せない文字だけ置換に落とし、表示は最後まで出す
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):

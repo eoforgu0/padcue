@@ -25,7 +25,7 @@ from padcue.project import Project
 # 私有帯(10/8・192.168/16)は社内網や VPN の配下では実在ホストになりうるので
 # 使わない。_localonly.forbid_remote() が loopback 以外を止めるので実際には
 # パケットは出ないが、歯止めが1枚でも欠けたときに外へ届く値を書かない
-# (2026-08-15。tests 側は 719e2f0 で統一済みだったが、ここが漏れていた)
+# (tests 側は 719e2f0 で統一済みだったが、ここが漏れていた)
 UNREACHABLE = "192.0.2.1"
 
 FLOWS = {

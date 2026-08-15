@@ -314,7 +314,7 @@ def run_flow_list(c: Checker, page, proj: Project, prompt_value: list):
         props = text(page, "#props")
         assert "長さ" in props, f"ジャイロに長さの欄が無い: {props!r}"
         assert "0 = 次に変えるまで" in props, props
-        # ゆらぎは入れるか否かだけ(幅・間隔は既定に固定。2026-08-02 変更)
+        # ゆらぎは入れるか否かだけ(幅・間隔は既定に固定)
         assert "ゆらぎを入れる" in props, f"ゆらぎの入切が無い: {props!r}"
         assert "ゆらぎ幅" not in props, f"細かい欄が残っている: {props!r}"
         assert "ゆらぎ1回の長さ" not in props, f"細かい欄が残っている: {props!r}"
@@ -379,7 +379,7 @@ def run_flow_list(c: Checker, page, proj: Project, prompt_value: list):
 
         フレーム数は保存後の再コンパイル結果(プロジェクト側)で確かめる。
         以前は保存メッセージの「(N フレーム)」を読んでいたが、正常系の
-        保存メッセージは廃止された(2026-08-04)ため、データ源を直接見る。
+        保存メッセージは廃止されたため、データ源を直接見る。
         """
         def total_frames():
             r = proj.build_safe("素材周回")[0]

@@ -47,7 +47,7 @@ static const char *TAG = "ctrl";
 
 // パケット緩衝の大きさ。以前は理論上の最大(65535)を送受で2本取っていたが、
 // 手順バッファ 96KB と合わせて約 229KB になり、WiFi/USB を足すと内蔵 RAM
-// (約 320KB)に収まらず malloc が失敗して起動できなかった(2026-07-30 実機)。
+// (約 320KB)に収まらず malloc が失敗して起動できなかった。
 // 大きな転送(手順の PUT・OTA)はすべて分割して送るので、1パケットは小さくてよい。
 // 8KB = 転送チャンク 4KB + JSON + 余裕
 #define MAX_FRAME 8192
@@ -155,7 +155,7 @@ static int cmd_hello(int sock) {
     cJSON_AddStringToObject(j, "magic", "pademu");
     // 個体識別子。探索(UDP)と同じ値を TCP でも名乗ることで、PC 側が
     // 「いま繋がっている相手は登録したあの個体か」を接続のたびに照合できる
-    // (2台運用で IP が入れ替わっても取り違えない。2026-08-04 P1)
+    // (2台運用で IP が入れ替わっても取り違えない)
     cJSON_AddStringToObject(j, "id", app_discover_device_id());
     cJSON_AddStringToObject(j, "fw", PADEMU_FW_VERSION);
     cJSON_AddNumberToObject(j, "schema", PADEMU_SCHEMA_VERSION);
@@ -337,7 +337,7 @@ static int cmd_status(int sock) {
                           app_engine_stop_graceful_armed());
     cJSON_AddNumberToObject(j, "await_arms", app_engine_await_arm_count());
     cJSON_AddNumberToObject(j, "await_gen", app_engine_await_gen());
-    // ペアリング・入力モード・手動操作の可観測化(2026-08-06 の教訓:
+    // ペアリング・入力モード・手動操作の可観測化(
     // 「ハンドシェイク完全・カウンタ健全なのに本体が入力を無視する」状態
     // (=コントローラー登録の未完)を外から切り分けられなかった)
     cJSON_AddNumberToObject(j, "pair_reqs", app_usb_pair_reqs());
@@ -438,7 +438,7 @@ static int cmd_config(int sock, cJSON *req) {
         return send_frame(sock, T_CONFIG | T_RESP, NULL, NULL, 0);
     }
     // WiFi 設定を NVS へ保存する(次回起動から有効。app_wifi は NVS を最優先で読む)。
-    // ビルド設定(sdkconfig)は作り直しで消え、実際に 2026-08-02 に WiFi 設定が
+    // ビルド設定(sdkconfig)は作り直しで消えるため、WiFi 設定が
     // 消えたファームを書き込んで実機がネットワークから消えた。稼働中の実機へ
     // 無線で保存しておけば、以後どんなビルドを書き込んでも接続は失われない
     if ((strcmp(key->valuestring, "wifi_ssid") == 0
@@ -563,7 +563,7 @@ static int cmd_select(int sock, cJSON *req) {
     }
     // 世代照合(任意): gen は「この実行で何回目の駐機か」。一致しない SELECT は
     // 別の駐機に宛てた古い指示なので拒否する(2台の自動合流で、遅れて届いた
-    // 選択が次の周回の駐機を誤って進める事故を防ぐ。2026-08-04 P1)。
+    // 選択が次の周回の駐機を誤って進める事故を防ぐ)。
     // gen なしの SELECT は従来どおり受ける(1台運用・手動操作の互換)
     cJSON *gen = cJSON_GetObjectItem(req, "gen");
     if (cJSON_IsNumber(gen)
@@ -664,7 +664,7 @@ static int s_listen_sock = -1;
 //
 // 実機は同時に1つしか相手にできないので、これが無いと「先に繋いだ側が
 // 黙っている間、他は一切つながらない」ことになる。無通信の待ち時間を
-// 180 秒に延ばした結果、締め出しが最大3分に伸びてしまった(2026-08-02)。
+// 180 秒に延ばした結果、締め出しが最大3分に伸びてしまった。
 // 実際の使い方(操作画面を開いたまま CLI で更新する等)では、あとから
 // 明示的に繋ぎに来た方を使いたいので、譲る方が理にかなう
 static bool someone_else_waiting(void) {
@@ -774,7 +774,7 @@ static void ctrl_task(void *arg) {
             // 応答が止まった PC に制御チャネルを占有させないための保険。
             // 30 秒は短すぎた: 画面が手順/部品タブにいる間や、ブラウザのタブが
             // 裏に回って setInterval が間引かれる間は状態取得が止まるため、
-            // ふつうに使っていても切断が起きていた(2026-08-02 ユーザー報告)。
+            // ふつうに使っていても切断が起きていた。
             // PC 側も無通信が続かないよう定期的に叩くようにしたうえで、
             // ここは十分長く取る(死んだ PC は KEEPALIVE でも検出できる)
             struct timeval tv = { .tv_sec = 180, .tv_usec = 0 };

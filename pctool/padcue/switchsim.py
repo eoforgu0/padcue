@@ -38,7 +38,7 @@ def _sub(packet_no: int, subcmd: int, args: bytes = b"") -> bytes:
 # 実測キャプチャで観測された 0x6080 先頭 6 バイト(IMU 水平オフセットの既定値)
 IMU_HORIZ_OFFSET = bytes([0x50, 0xFD, 0x00, 0x00, 0xC6, 0x0F])
 # 0x01(有線ペアリング)の引数(実測の全バイト。bypass_procon_log.txt)。
-# 構造の解読(2026-08-06): [0]=フェーズ 0x04(既知本体の記録手渡し)
+# 構造の解読: [0]=フェーズ 0x04(既知本体の記録手渡し)
 # [1..6]=本体 BT MAC(LE) [7..9]=00 04 3C [10..]=ASCII "Nintendo Switch"
 # +ゼロ埋め+鍵とみられる末尾 7 バイト。
 # 以前はここを [3C]+"Nintendo Switch" に縮約していたが、フェーズ別応答の

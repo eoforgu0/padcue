@@ -32,7 +32,7 @@
       <div class="setsec">通知</div>
       <!-- 「いつ」を行に、「どう知らせるか」を列に取る(世間の通知設定と
            同じ形)。音と点滅は別々に選べる — 片方だけ・両方・どちらも切、が
-           場面ごとに要る(2026-08-08 ユーザー要望)。中身は JS で組む -->
+           場面ごとに要る。中身は JS で組む -->
       <div class="ngrid" id="notifygrid"></div>
       <div class="setsec line">キーボード</div>
       <div class="setrow">
@@ -195,7 +195,7 @@
       <div id="manualmsg"></div>
       <!-- ptmsg = 手動操作の送達エラー(継続状態)。manualmsg と分ける:
            共用すると保存結果に上書きされた継続エラーが再表示されず、
-           届いていないのに正常の見た目になる(2026-08-06 レビュー)。
+           届いていないのに正常の見た目になる。
            状態表示なので × は付けない(直れば自動で消える) -->
       <div id="ptmsg" class="msg err" style="display:none"></div>
       <div class="hint" id="keymap">

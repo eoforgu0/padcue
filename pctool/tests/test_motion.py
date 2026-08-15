@@ -70,7 +70,7 @@ def test_part_blank_accel_keeps_gravity(tmp_path):
 def test_part_explicit_zero_accel_is_respected(tmp_path):
     """明示的に 0 と書いたら、部品の間は 0(生値をそのまま送る原則)。
 
-    部品を抜けたあとは静止値へ戻る(2026-08-02: 部品の状態を外へ漏らさない)。
+    部品を抜けたあとは静止値へ戻る(部品の状態を外へ漏らさない)。
     """
     p = make(tmp_path, {"p": [{"type": "part", "ref": "こ"},
                               {"type": "wait", "frames": 5}]},
@@ -327,7 +327,7 @@ def test_capacity_warning(tmp_path):
         [w.msg for w in c.warnings]
 
 
-# ---------------- 間欠ゆらぎ(実測 2026-08-01 の方式) ----------------
+# ---------------- 間欠ゆらぎ(実測 の方式) ----------------
 
 def _segments(events, axis, upto):
     """(値, 長さ) の並びに直す。"""

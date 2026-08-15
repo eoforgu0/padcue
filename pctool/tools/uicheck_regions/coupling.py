@@ -89,7 +89,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "廃止した「もう一回(同じ条件)」ボタンが残っている"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
         # #chint は実測(開始ズレ)だけ。ホットキーの凡例は入切を決める ⚙ にある
-        # ——値の位置に別の話が地続きで並ぶ形をやめた(2026-08-08 指摘)
+        # ——値の位置に別の話が地続きで並ぶ形をやめた
         hint = page.locator("#chint").inner_text()
         assert "F9" not in hint and "F10" not in hint, \
             f"ホットキーの凡例が #chint に残っている: {hint}"
@@ -209,7 +209,7 @@ def run_coupling(c: Checker, page, proj: Project,
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
         assert "だけ進める" in lane_at(page, 0).locator(".soloadv").inner_text()
         # そろって進んだことは知らせない。チップが「実行中」へ戻るので状態で
-        # 分かる(2026-08-15 指摘: 一瞬で消える文は読み切れず、細かい数字が
+        # 分かる(一瞬で消える文は読み切れず、細かい数字が
         # 要るならログを見ればよい)。ズレが大きいときだけ #cactmsg に残る
         page.wait_for_function(
             "() => {"
@@ -239,7 +239,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "(state.devices || []).slice(0, 2).every(d => d.awaiting)"), \
             "ワンショット中なのに自動で選ばれた"
         assert "両方そろいました" in page.locator("#cmsg").inner_text()
-        # 光らせる場所と押す場所を一致させる(2026-08-15 指摘)。連結中の
+        # 光らせる場所と押す場所を一致させる。連結中の
         # 選択は上部バーで行うので、レーンには黄色の枠を出さない
         assert page.locator("#lanes .lane.needs").count() == 0, \
             "連結中の選択待ちでレーンが光っている(押す物はバーにある)"
@@ -247,7 +247,7 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "needs" in cls_both, "選択肢のまわりが光っていない"
         # 人を待っている唯一のボタンなので、レーンの選択肢と同じ姿
         # (注意色で塗る・同じ大きさ)。名前に「(両方へ)」は付けない
-        # ——すぐ左の見出しが「選択肢を両方へ同時に送る」(2026-08-15 指摘)
+        # ——すぐ左の見出しが「選択肢を両方へ同時に送る」
         arm = page.locator("#cbotharms button", has_text="出た").first
         cls = arm.get_attribute("class") or ""
         assert "waiting" in cls and "primary" in cls, cls
@@ -255,7 +255,7 @@ def run_coupling(c: Checker, page, proj: Project,
         assert arm.inner_text().strip() == "出た", arm.inner_text()
         arm.click()
         # 正常・軽量・自分で押した操作の成功は、ボタンのそばに数秒だけ出て
-        # 自ら消える(毎回メッセージの席が増えて下の行がずれない。2026-08-08)
+        # 自ら消える(毎回メッセージの席が増えて下の行がずれない)
         page.wait_for_function(
             "() => document.getElementById('cokmsg')"
             ".textContent.includes('送りました')", timeout=8000)
@@ -433,7 +433,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             "() => document.querySelector('#cforminfo').textContent"
             " === '未保存の変更'", timeout=8000)
         # 呼び出しはたたんだままでも押せる(一番よく使う操作が開閉の奥に
-        # あると面倒。2026-08-08 指摘)
+        # あると面倒)
         crow = form_row(page, "いつもの")
         if "open" in (crow.get_attribute("class") or ""):
             crow.locator(".devtoggle").click()
@@ -442,7 +442,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             "たたむと「呼び出す」が押せない"
         crow.locator("button", has_text="呼び出す").click()
         page.wait_for_timeout(700)
-        # 押しても開閉は変わらない(ボタンと開閉は別の機能。2026-08-08 指摘)
+        # 押しても開閉は変わらない(ボタンと開閉は別の機能)
         cls = form_row(page, "いつもの").get_attribute("class") or ""
         assert "open" not in cls, \
             "呼び出すボタンで詳細が勝手に開いた"

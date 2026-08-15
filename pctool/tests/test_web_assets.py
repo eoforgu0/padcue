@@ -13,7 +13,7 @@ def test_gui_button_bits_match_binfmt():
     """GUI(JS)のビット表が送信データのビット順と一致すること。
 
     表示順(BUTTONS)から作ると、DU が PLUS に化けるなどビット8以降の
-    全ボタンが別ボタンとして送られる(2026-08-01 に実機で発生)。
+    全ボタンが別ボタンとして送られる(実機で起きる)。
     """
     js = web_asset("manual.js")
     m = re.search(r"const BTN_BITS = \[(.*?)\];", js, re.S)
@@ -48,7 +48,7 @@ def test_gyro_axis_labels_agree_between_dsl_and_screen():
     軸の対応は GP=gx=ひねり(ロール) / GY=gy=上下(ピッチ) / GR=gz=水平(ヨー)。
     実機確認済みは GY と GR(docs/glossary.md §2)。この対応は
     ワイヤの並びで決まっていて入れ替えられないのに、呼び名は DSL のヘルプと
-    画面で別々に書かれている。実際 2026-08-15 の外部レビューまで、DSL 側
+    画面で別々に書かれている。実際に以前は DSL 側
     (と仕様書)が gp と gy を取り違えたままだった —— そのとおりに書くと
     「上下に振る」つもりで未確認のロール軸が動く。
     """

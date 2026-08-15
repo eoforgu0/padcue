@@ -29,7 +29,7 @@ const char *app_discover_device_id(void) {
 
 // 名前で呼べるようにする。ホスト名は個体別(pademu-<MAC下4桁>)。
 // 固定名 "pademu" だと2台目を同じ LAN に置いた時に名前が衝突し、
-// どちらに繋がるか不定になる(2026-08-04 2台化 P1)
+// どちらに繋がるか不定になる
 static void start_mdns(void) {
     esp_err_t err = mdns_init();
     if (err != ESP_OK) {

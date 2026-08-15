@@ -223,7 +223,7 @@ function renderPart() {
           markPartDirty(true);
           if (c === 'rep') renderFrameNumbers();
         };
-        // キーボード移動(2026-08-04 すり合わせ済みの割り当て):
+        // キーボード移動:
         //   Enter=下のセルへ(下端なら1フレーム足して続行)
         //   Shift+Enter=上のセルへ(上端では動かない)
         //   Tab/Shift+Tab=右/左(折り返しは DOM 順で自然に起きる。右下角のみ特別)
@@ -405,7 +405,7 @@ function renderPart() {
 // 部品グリッドの縦横スクロールは、ページではなく**グリッド領域(メインコン
 // テンツ)自身**が持つ。表全体を包む素の overflow-x:auto だと、横スクロール
 // バーが「表の最下端」に付き、表が長いと一番下までスクロールしないと横に
-// 動かせない(2026-08-04 ユーザー指摘)。領域の高さを画面内に収めることで、
+// 動かせない。領域の高さを画面内に収めることで、
 // 横バーは常に見えている領域の下端に出る(ヘッダ+左ペイン+メインの
 // 一般的なアプリレイアウトと同じ)
 function fitPartGrid() {
@@ -471,7 +471,7 @@ function appendPartRow() {
 // データ(partData)に書くのはドラッグを終えた時点の範囲に対してのみ。
 // Excel などのフィルハンドルと同じ: 途中で範囲を広げすぎても、縮めてから
 // 離せば縮めた範囲だけが確定する(以前は動かすそばから確定していて、
-// 破線=未確定という見た目と実動作が食い違っていた。2026-08-04 ユーザー指摘)
+// 破線=未確定という見た目と実動作が食い違っていた)
 function fillPreviewClear() {
   if (!fillDrag || fillDrag.pa == null) return;
   for (let r = fillDrag.pa; r <= fillDrag.pb; r++) {
@@ -579,7 +579,7 @@ document.getElementById('savepart').onclick = async () => {
   const r = await api('/api/part/save', 'POST',
     {name: partName, header, rows});
   // 正常に保存できたことは文で知らせない(バッジが「保存済み」になり一瞬
-  // 光る。2026-08-04 ユーザー指示)。エラーは必ず読ませたいので従来どおり
+  // 光る)。エラーは必ず読ませたいので従来どおり
   show('partmsg', 'err', r.error || '');
   if (!r.error) { markPartDirty(false); flashChip('partinfo'); refresh(); }
 };

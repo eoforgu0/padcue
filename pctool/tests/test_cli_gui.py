@@ -160,7 +160,7 @@ def test_gui_push_and_run(guiserver):
 
 
 def test_gui_logs_resolve_run_start_name(guiserver):
-    """開始ログのハッシュがサーバ側で手順名に復元されること(2026-08-04)。
+    """開始ログのハッシュがサーバ側で手順名に復元されること。
 
     実機のログは文字列を持てないので RUN_START はハッシュ(b/c)だけを運ぶ。
     GUI サーバが取り出し時に一覧と突き合わせ、name を付けて保存する。

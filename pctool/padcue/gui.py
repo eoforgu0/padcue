@@ -418,7 +418,7 @@ class _Handler(BaseHTTPRequestHandler):
             found = discover(timeout=float(body.get("timeout", 1.5)))
             # 追跡するのは登録した個体(ID一致)だけ。ID 未学習の初回のみ、
             # 相手が名乗る ID を問わず接続確認して採用する(黙って別個体へ
-            # 乗り換えない。2026-08-04 P1)
+            # 乗り換えない)
             want_id = dev0.get("id", "")
             # ID学習済みなら本人(完全一致)のみ。未学習なら実機のみを
             # 対象にし、実機を差し置いて mock を採用しない(127.0.0.1 は
@@ -483,8 +483,8 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/device_rename":
             old = body.get("old") or ""
             # 連結実行の運転記録は装置名で追っている。実行中に改名すると
-            # 監視(連動停止・自動合流)が黙って対象を見失う(2026-08-06
-            # レビュー)。止まってからの改名は従来どおり自由
+            # 監視(連動停止・自動合流)が黙って対象を見失う。
+            # 止まってからの改名は従来どおり自由
             snap = self._coupler().snapshot()
             crun = snap.get("run")
             if crun and crun.get("active") and old in crun.get("members", []):
@@ -510,7 +510,7 @@ class _Handler(BaseHTTPRequestHandler):
             return {"ok": True, "message": msg} if ok else {"error": msg}
         if path == "/api/console_name":
             # 本体(Switch)に名前を付ける。キーは本体識別子(USB ペアリング
-            # 引数。本体ごとに固有・安定を実測で確認 2026-08-06)なので、
+            # 引数。本体ごとに固有・安定であることを実測で確認)なので、
             # マイコンをどっちに挿し替えても名前は本体に付いていく
             key = (body.get("host_info") or "").strip()
             if not key:

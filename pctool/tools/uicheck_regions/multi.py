@@ -65,7 +65,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             assert lane_at(page, i).locator(".lproc").count() == 1, "手順の選択が無い"
             assert lane_at(page, i).locator(".lloops").count() == 1, "周回の欄が無い"
             # 小見出しは「タイムライン」だけ。レーン=実行の場所なので、
-            # 「実行」の見出しは面積を食うだけだった(2026-08-08 指摘)
+            # 「実行」の見出しは面積を食うだけだった
             subhs = lane_at(page, i).locator(".subh").all_inner_texts()
             assert subhs == ["タイムライン"], subhs
     c.check("レーンは装置名入りのボタンと実行一式を持つ", t_lane_layout)
@@ -171,7 +171,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
     c.check("手動操作は選んだ装置だけに届く", t_manual_targets_selected_device)
 
     def t_manual_switch_target_while_on():
-        """手動操作を続けたまま対象を替えられること(2026-08-08 要望)。
+        """手動操作を続けたまま対象を替えられること。
 
         内部では「前の装置を終える → 次で始める」だが、使う側からは選び直す
         だけに見える。図は閉じずに薄くなり、前の装置は必ず中立へ戻る。
@@ -205,7 +205,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
         ラベルの追加だけではボタン入力(blob)が変わらずハッシュが同じに
         なりうるため、syncLaneTimeline のハッシュ一致キャッシュだけに頼ると
-        古い開始ラベルのままになる(2026-08-06 に実際に起きたバグ)。タブへ
+        古い開始ラベルのままになる。タブへ
         戻ったこと自体で読み直す作りになっているかを確かめる。
         """
         assert lane_at(page, 0).locator(".lproc").input_value() == "素材周回", \
@@ -293,7 +293,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         assert "ID " not in page.locator("#consolelist .meta").first \
             .inner_text(), "下段にも ID が出ている"
         # 接続中の判定は devicepool の収集(最大1秒)を待つ必要がある。
-        # 即時 assert だと境界で稀に落ちる(2026-08-07 に実際に発生)
+        # 即時 assert だと境界で稀に落ちる
         page.wait_for_function(
             "() => document.getElementById('consolelist')"
             ".textContent.includes('1P が接続中')", timeout=8000)

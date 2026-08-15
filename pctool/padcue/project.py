@@ -92,7 +92,7 @@ class Project:
         return self._migrate_config(cfg)
 
     def _migrate_config(self, cfg: dict) -> dict:
-        """旧形式(host/port 単一)を装置台帳(devices)へ移行する(2026-08-04 P1)。
+        """旧形式(host/port 単一)を装置台帳(devices)へ移行する。
 
         - devices: [{id(MAC・保存キー), name(表示名), host, port}] を正とする
         - 旧キー host/port は devices[0] の写しとして併記し続ける(移行期間中の
@@ -110,7 +110,7 @@ class Project:
                               "port": int(cfg.get("port", DEFAULT_PORT))}]
             self.save_config(cfg)
         # 本体の名前(consoles)のキーを、ペアリング引数の先頭8バイトから
-        # 本体 MAC の6バイトへ移す(2026-08-12)。8バイトには先頭のフェーズ
+        # 本体 MAC の6バイトへ移す。8バイトには先頭のフェーズ
         # 番号と末尾のフェーズ依存バイトが混ざっていて、同じ本体でも登録の
         # 前後で別キーになり、付けた名前が引き継がれなかった
         cons = cfg.get("consoles")
@@ -192,7 +192,7 @@ class Project:
 
     # 書き込みは単一ライタに直列化する。装置2台のログを別スレッドが並行して
     # 追記すると、追記と間引き(全読み・全書き)が競合して行が消えるため
-    # (2026-08-04 2台化 P1。今までは GUI の単一 lock が偶然守っていた)
+    # (以前は GUI の単一 lock が偶然守っていた)
     _log_write_lock = threading.Lock()
 
     def append_logs(self, entries: list[dict], dev: str = "") -> None:

@@ -199,7 +199,7 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
 
 def test_manual_restart_solo_not_auto_joined(env):
     """人為停止 → その装置でソロ実行を開始しても、相方がまだ連結実行中の
-    自動合流に誤って巻き込まれない(2026-08-07 レビュー)。
+    自動合流に誤って巻き込まれない。
 
     駐機の追跡が「連結実行のメンバーとして駐機したか」を区別していないと、
     人為停止後にソロ再開した装置の駐機まで『2台そろった』と誤認し、独立の
@@ -241,7 +241,7 @@ def test_transient_error_does_not_end_run(env):
 
     数時間の周回では WiFi の単発タイムアウトが毎周の駐機窓に重なる。
     以前は busy 判定に猶予がなく、1回の失敗で「相方は完走した」と誤認して
-    駐機側を止めていた(2026-08-06 レビューで確定した実バグ)。
+    駐機側を止めていた。
     """
     _proj, _d1, _d2, base = env
     wait_ready(base)
@@ -283,7 +283,7 @@ def test_solo_progress_ignores_oneshot(env):
 
     ワンショットは「合流の腕を人が選ぶ」ための保留で、相方のいないソロ進行
     には合流が無い。保留すると解除経路(両方へ同時に選ぶ = 両方の駐機が必要)
-    も無く、恒久停止になる(2026-08-06 レビュー)。
+    も無く、恒久停止になる。
     """
     _proj, _d1, _d2, base = env
     wait_ready(base)

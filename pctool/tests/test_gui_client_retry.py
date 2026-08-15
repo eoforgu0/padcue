@@ -1,6 +1,6 @@
 """装置リンク(DeviceLink.call)の接続の持ち回しと、切れたときのやり直し。
 
-実際に起きた不具合(2026-08-02): 実機が応答を返さない(TimeoutError)と、
+実際に起きた不具合: 実機が応答を返さない(TimeoutError)と、
 本来の理由が RuntimeError("generator didn't stop after throw()") に化けて、
 端末に例外の山が出ていた。原因は contextmanager の中で 2 回目の yield を
 していたこと。P2-1 で接続管理は devicepool.DeviceLink に一本化されたが、
@@ -96,7 +96,7 @@ def test_disconnect_after_sending_is_not_retried(link):
     実機は同時1接続・後着優先なので、相方の接続に横取りされて
     「送った直後に切れる」のは普通に起きる。ここで RUN を送り直すと
     BUSY で拒まれ、呼び出し元は「拒否された」と受け取って、実際には
-    走っている装置を監視の外に置いてしまう(2026-08-15 のレビュー)。
+    走っている装置を監視の外に置いてしまう。
     """
     _FakeClient.fail_first = ConnectionResetError("closed by peer")
     with pytest.raises(ConnectionError):

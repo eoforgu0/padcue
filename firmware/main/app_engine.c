@@ -79,7 +79,7 @@ static _Atomic uint32_t s_await_gen;
 // (CONFIG_GPTIMER_ISR_IRAM_SAFE)なので、フラッシュ上に置かれていると
 // 「フラッシュのキャッシュが切られている最中に、フラッシュ上の命令を読む」
 // ことになり、その瞬間にパニックして再起動する。
-// 実機で実行の 3% がこれで落ちていた(2026-08-02。実行終了時に到達するため
+// 実機で実行の 3% がこれで落ちていた(実行終了時に到達するため
 // 完了ログも残らず、USB が切れて Switch にはコントローラー選択画面が出た)
 static void IRAM_ATTR neutral_state(pademu_state_t *st) {
     pademu_state_neutral(st);   // 加速度は重力ぶんが入る(0 埋めは自由落下になる)
@@ -87,7 +87,7 @@ static void IRAM_ATTR neutral_state(pademu_state_t *st) {
 
 // 単一書き手(ISR)。読み手は seq が偶数かつ前後一致であることを確認する。
 // 公開した時刻も一緒に持たせる。これが無いと「割り込みは定刻だったが、
-// 実際に USB へ渡すまでに遅れた」という区間を誰も測れない(2026-08-04 監査)
+// 実際に USB へ渡すまでに遅れた」という区間を誰も測れない
 static void IRAM_ATTR publish_state(const pademu_state_t *st) {
     // 時刻は esp_timer(システム共通の64bit µs)で取る。
     // GPTimer のカウンタは実行開始のたびに 0 に戻され、停止すると止まるので、
@@ -153,7 +153,7 @@ static bool IRAM_ATTR advance_to_next_emission(void) {
             // 選択待ちの公開(s_awaiting)は予定時刻のアラームで行う。
             // 進捗もここで公開する。しないと、END を跨いだ直後に AWAIT へ
             // 到達したとき完了周回数が古いままになり、駐機中の中断ログが
-            // 1 周少ない値で残る(2026-08-04 レビュー指摘)
+            // 1 周少ない値で残る
             s_pending = s_engine.state;
             s_pending_abs_frame = abs;
             s_pending_is_await = true;
@@ -214,7 +214,7 @@ static bool IRAM_ATTR on_alarm(gptimer_handle_t timer,
     // 割り込みが遅れて入ればその分だけ大きくなる。
     // 最大値は **しきい値と無関係に常に**更新する。しきい値超えのときだけ
     // 記録すると、たとえば毎回 150µs 遅れていても「0 件・最大 0µs」と出て
-    // しまい、「遅れていないと思っていた」の原因そのものになる(2026-08-04)
+    // しまい、「遅れていないと思っていた」の原因そのものになる
     uint64_t due = s_start_us + (uint64_t)s_pending_abs_frame * s_period_ns / 1000;
     if (edata->count_value > due) {
         uint32_t late = (uint32_t)(edata->count_value - due);
@@ -395,7 +395,7 @@ esp_err_t app_engine_start(const uint8_t *data, size_t len, uint32_t session_loo
     atomic_store(&s_pub_done, 0);
     // s_await_gen は実行をまたいでも 0 に戻さない(起動からの通し番号)。
     // 実行ごとに戻すと「前の実行の1回目の駐機」宛ての遅れた SELECT が、
-    // 「新しい実行の1回目の駐機」と偶然一致して通ってしまう(2026-08-05)
+    // 「新しい実行の1回目の駐機」と偶然一致して通ってしまう
     atomic_store(&s_status, APP_ENGINE_RUNNING);
     s_graceful_armed = false;
     s_graceful_passes = 0;
@@ -505,7 +505,7 @@ esp_err_t app_engine_select(uint8_t arm) {
     // 駐機中はアラームが鳴らないため、区切り停止の取り消し(cancel)をしても
     // ISR の else 分岐(控えの破棄)が走っていない。ここで捨てないと、
     // 「予約→取り消し→選択で再開→再予約」のとき古い控えの周回数と比較して
-    // 周回の途中で止まってしまう(2026-08-04 レビュー指摘)。
+    // 周回の途中で止まってしまう。
     // タイマー停止中なので ISR と競合しない
     if (!atomic_load_explicit(&s_stop_graceful, memory_order_acquire)) {
         s_graceful_armed = false;
@@ -516,7 +516,7 @@ esp_err_t app_engine_select(uint8_t arm) {
     // 再開後の最初の入力がその時間だけ遅れて出る)。
     // 以前はここで実時間を測って加算するつもりのコードが書かれていたが、
     // カウンタが止まっている以上その値は必ず 0 で、動いていなかった。
-    // 「測っているつもりで測っていない」コードは残さない(2026-08-04)
+    // 「測っているつもりで測っていない」コードは残さない
     pademu_err_t perr = pademu_engine_select(&s_engine, arm, 0);
     if (perr != PADEMU_OK) {
         // 腕が不正など。入場券(awaiting)を戻さないと、エンジンは駐機した
@@ -609,7 +609,7 @@ void app_engine_get_progress(app_engine_progress_t *out) {
     // **停止後も読む**: 停止はタイマーを止めるだけでカウンタは凍結される
     // (次の実行開始で 0 に戻る)ので、凍結値がそのまま「中断した時点」になる。
     // 以前は実行中しか読まなかったため、停止→終了ログの順で必ず素通りし、
-    // 中断ログが「最後の状態変化のフレーム」に化けていた(2026-08-04 指摘)
+    // 中断ログが「最後の状態変化のフレーム」に化けていた
     uint64_t fe = atomic_load(&s_frames_elapsed);
     uint64_t now_us = 0;
     if (gptimer_get_raw_count(s_timer, &now_us) == ESP_OK

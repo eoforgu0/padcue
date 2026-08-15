@@ -42,7 +42,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
             assert want in keys, f"{want} の行が無い: {keys}"
         kv_text = row.locator(".kv").inner_text()
         assert "有効化済み" in kv_text, f"ジャイロの値が読めない: {kv_text!r}"
-        # 1項目=1つの値。値の中に項目名を書かない(2026-08-08 指摘)
+        # 1項目=1つの値。値の中に項目名を書かない
         assert "bInterval=" not in kv_text, \
             f"値の中に項目名が残っている: {kv_text!r}"
         # 値が2つある項目は、親が見出しだけの行になり、子は字下げして
@@ -82,7 +82,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
             "() => [...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
         eta = ln.locator(".hint .stat")
-        # 項目名と値は別の席(単色の1行に連ねない。2026-08-08 指摘)
+        # 項目名と値は別の席(単色の1行に連ねない)
         assert eta.count() == 2, eta.all_inner_texts()
         assert "残り" in eta.nth(1).inner_text(), eta.nth(1).inner_text()
         # 値の中の「(残り …)」の手前は詰めない
@@ -102,7 +102,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         レーンのチップに ⚠ が付き、装置行が自動で開いて赤くなり、診断 kv に
         理由が出ること(結論はチップ、原因と対処は装置行。原則 §1)。この
         状態は接続・ジャイロが正常のまま全入力が無視されるため、表示が
-        無いと外から切り分けられない(2026-08-06)。
+        無いと外から切り分けられない。
         """
         row = dev_row(page)
         dev.pair_state(reqs=29, step=0x01)
@@ -214,7 +214,7 @@ def run_disconnected(c: Checker, page, dev: MockDevice):
     def t_disconnected():
         """未接続にすると装置行が自動で開き、レーンのチップは「未接続」になる。
 
-        ただし**赤くはしない**(2026-08-12 の原則改定)。つながっていないだけ
+        ただし**赤くはしない**。つながっていないだけ
         なら中立色で、使えないことは形(押せないボタン)が示す。赤は実行して
         届かなかったときだけ。理由の文は装置カードの行に出す(結論はレーン、
         原因と対処は装置カード。原則 §1)。

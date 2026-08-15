@@ -47,7 +47,7 @@ class Coupler:
         self._parked_gen: dict[str, int] = {}      # 装置名 -> その駐機の世代
         self._late_warned: dict[str, int] = {}     # 装置名 -> 警告済みの駐機世代
         # 片送りに終わった SELECT の再送待ち: 装置名 -> (世代, 腕)。
-        # 放置すると到達順の対応が1周ずれる(2026-08-06 レビュー)
+        # 放置すると到達順の対応が1周ずれる
         self._select_retry: dict[str, tuple] = {}
         self._idle_since: float | None = None     # 全員停止を最初に見た時刻
         # 見張りが落ちた直近の理由。同じ理由で記録が溢れないよう
@@ -198,7 +198,7 @@ class Coupler:
             except DeviceError as e:
                 # 装置が明確に拒否した(BUSY 等)。応答喪失と違い、走って
                 # いるとしてもそれは別の要求の実行なので取り込まない
-                # (2026-08-06 レビュー: STATUS で確認すると先客の実行を
+                # (STATUS で確認すると先客の実行を
                 # 自分の連結実行と誤認する)
                 self._rollback_started(started)
                 return {"error": f"{p['dev']} が開始を受け付けませんでした"
@@ -209,7 +209,7 @@ class Coupler:
                 # RUN は再送できない(非冪等)。実際に走ったかを STATUS で
                 # 確定する。1回で諦めず数回試す(確認まで失敗したときに
                 # 「走っていない」と断定すると、実は走っている装置が監視の
-                # 外で回り続ける。2026-08-06 レビュー)
+                # 外で回り続ける)
                 really = None
                 for _ in range(3):
                     try:
@@ -442,7 +442,7 @@ class Coupler:
         # 駐機は全ニュートラルで停止済み相当なので、見つけ次第すぐ止める。
         # 対象は**その連動停止で実際に区切り停止を送った装置(pending)**に
         # 限る。記録は次の連結開始まで残るため、無条件だと何日も後の独立
-        # (レーン)実行の区切り停止まで即時停止してしまう(2026-08-06 レビュー)
+        # (レーン)実行の区切り停止まで即時停止してしまう
         if run and not active and run.get("linked_stop") \
                 and run["linked_stop"].get("pending"):
             pending = list(run["linked_stop"]["pending"])
@@ -482,7 +482,7 @@ class Coupler:
         # あとで独立にソロ実行を始められる(§0.1)——その駐機まで拾うと、
         # 「連結実行の相方の駐機」と「無関係なソロ実行の駐機」がたまたま
         # 重なっただけで『2台そろった』と誤認し、無関係なソロ実行へ勝手に
-        # SELECT を送ってしまう(2026-08-07 レビューで実証したバグ)
+        # SELECT を送ってしまう
         for link in links:
             name = link.cfg.get("name")
             st = link.status
@@ -531,8 +531,8 @@ class Coupler:
             return
         # 一過性の収集エラー(GONE_S 未満)は「見えない」だけで生死不明。
         # busy 判定に混ぜると、1回のタイムアウトで「完走した」「相方が
-        # 消えた」と誤認する(数時間の周回では毎周この窓を通る。2026-08-06
-        # レビュー)。判定は次の周期へ持ち越す(本当の異常なら GONE_S 経過後
+        # 消えた」と誤認する(数時間の周回では毎周この窓を通る)。
+        # 判定は次の周期へ持ち越す(本当の異常なら GONE_S 経過後
         # に上の anomaly が拾う)
         for link in links:
             name = link.cfg.get("name")
@@ -571,7 +571,7 @@ class Coupler:
                     # ワンショットは「合流の腕を人が選ぶ」ための保留で、
                     # 相方のいないソロ進行には合流が無い。保留すると解除
                     # 経路(両方へ同時に選ぶ)も無く恒久停止になるため、
-                    # ソロでは無視して進める(2026-08-06 レビュー)
+                    # ソロでは無視して進める
                     if cfgc["auto_join"]:
                         self._auto_select([link], run, cfgc["arm"], solo=True)
                 else:
@@ -660,7 +660,7 @@ class Coupler:
             if cur and cur.get("active"):
                 # 「そろって進んだ直後」の緑表示と、ズレの常時表示に使う。
                 # 相方待ち超過の警告は合流できた時点で古い(残すと以後の
-                # 相方待ちがずっと黄色に見える。2026-08-06 レビュー)
+                # 相方待ちがずっと黄色に見える)
                 cur["last_join"] = {"at": _now(), "skew_ms": skew_ms,
                                     "auto": auto, "solo": solo}
                 cur.pop("late", None)
@@ -724,7 +724,7 @@ class Coupler:
             done = int(run["laps_done"].get(name, 0))
             # 区切り停止(graceful)は今の周を最後まで走ってから止まるので、
             # その周も「済み」に数える。即時停止・原因装置は周の途中 = 未了
-            # (2026-08-06 レビュー: ここを数えないと再開で1周やり直す)
+            # (ここを数えないと再開で1周やり直す)
             if modes.get(name) == "graceful":
                 done += 1
             remain[name] = max(0, loops - done) if loops else 0

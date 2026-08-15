@@ -9,7 +9,7 @@ rem  "Terminate batch job (Y/N)?" - either answer just ends it
 rem  (the tool has already shut down cleanly at that point).
 rem  The prompt itself cannot be suppressed; it is a fixed cmd.exe
 rem  behavior for Ctrl+C during a running .bat file. We accept it
-rem  to keep everything in one window (decision 2026-08-01).
+rem  to keep everything in one window.
 rem
 rem  NOTE: keep this file ASCII-only. cmd.exe parses it with the
 rem  console code page, so non-ASCII bytes can corrupt the commands.

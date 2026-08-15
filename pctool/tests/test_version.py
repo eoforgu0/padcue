@@ -41,7 +41,7 @@ def _firmware_version() -> str:
 
 
 def _changelog_version() -> str:
-    """CHANGELOG の一番上の版見出し(`## v0.3.0 — 2026-08-15`)。"""
+    """CHANGELOG の一番上の版見出し(`## vX.Y.Z — 日付`)。"""
     m = re.search(r'^## v(\d+\.\d+\.\d+)', CHANGELOG.read_text(encoding="utf-8"),
                   re.M)
     assert m, "CHANGELOG.md に `## vX.Y.Z` の見出しが無い"

@@ -454,7 +454,7 @@ function renderProps() {
   };
   // ゆらぎは入れるか入れないかだけ。幅・1回の長さ・間隔は実測で決めた既定
   // (±7 / 2F / 60F)に固定する。細かく触る必要が無いのに欄を並べると、
-  // 何を入れるべきか読み解く手間だけが増える(2026-08-02 ユーザー指摘)
+  // 何を入れるべきか読み解く手間だけが増える
   const swayFlag = () => {
     const lab = el('label', 'f');
     const cb = el('input'); cb.type = 'checkbox';
@@ -625,11 +625,11 @@ function newNode(type) {
     case 'stick': return {type, side: 'L', x: 0, y: 0, frames: 0};
     // 長さの既定 30F(半秒)。0 にすると次に変えるまで回り続ける。
     // ゆらぎは既定オン・間欠方式(幅7・長さ2F・間隔60F)。一定値だと Switch 側の
-    // ゼロ点自動較正に吸収されて回転が止まるため。実測(2026-08-01):
+    // ゼロ点自動較正に吸収されて回転が止まるため。実測:
     // 「静止」判定の境界は隣接2値の差13(絶対閾値)→ 平均を厳密に保つ対称対の
     // 最小は ±7。素の値の保持は 60F まで安全(90F で較正が入り始める)→ 間隔60。
     // 逸脱を最小にするのは、未知の非線形補正があっても平均のずれを最小に
-    // するため(ユーザー指摘・実証 2026-08-01)
+    // するため
     case 'gyro': return {type, gp: 0, gy: 0, gr: 0, frames: 30,
                          sway: SWAY.width, sway_period: SWAY.period,
                          sway_interval: SWAY.interval};
@@ -1114,7 +1114,7 @@ document.getElementById('saveflow').onclick = async () => {
   if (r.compile_error) { show('flowmsg', 'err', '保存しましたが変換できません: ' + r.compile_error); }
   else {
     // 正常に保存できたことは文で知らせない(バッジが「保存済み」になり
-    // 一瞬光る。2026-08-04 ユーザー指示)。警告だけは読ませたいので文で出す
+    // 一瞬光る)。警告だけは読ませたいので文で出す
     const w = (r.warnings || []).map(x => `${x.line}番目: ${x.msg}`).join(' / ');
     show('flowmsg', 'warn', w ? `警告 — ${w}` : '');
   }

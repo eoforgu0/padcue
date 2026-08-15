@@ -115,7 +115,7 @@ class MockDevice:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Windows の SO_REUSEADDR は「使用中のポートへの二重 bind」まで通して
         # しまい、2つ目の mock が同じポートで黙って壊れる。排他 bind にして
-        # 衝突を即エラーにする(2026-08-04 2台化 P1)
+        # 衝突を即エラーにする
         if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self._sock.setsockopt(socket.SOL_SOCKET,
                                   socket.SO_EXCLUSIVEADDRUSE, 1)
@@ -229,7 +229,7 @@ class MockDevice:
         実機(app_ctrl.c handle_client)と同じく、現クライアントが約1秒無通信の
         間に新しい接続が来たら現接続を手放す(後着優先の横取り)。この挙動が
         mock に無いと、2台化で最も危険な「収集と操作の接続奪い合い」故障を
-        テストで再現できない(2026-08-04 P1)。奪った接続を返す(無ければ None)。
+        テストで再現できない。奪った接続を返す(無ければ None)。
         """
         buf = b""
         while not self._stop:
@@ -298,7 +298,7 @@ class MockDevice:
             if (r.get("await_at") is not None
                     and r["frames"] >= r["await_at"]):
                 # 実機は周回のたびに待機分岐で毎回駐機する。次の駐機点は
-                # SELECT で進める(自動合流の検証土台。2026-08-05 レビュー)
+                # SELECT で進める(自動合流の検証土台)
                 r["awaiting"] = True
                 self._await_gen += 1
                 r["frames"] = r["await_at"]

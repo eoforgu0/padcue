@@ -15,7 +15,7 @@ extern "C" {
 #define APP_DISCOVER_PROBE "PADEMU?"
 #define APP_DISCOVER_MAGIC "pademu"
 // mDNS ホスト名の接頭辞。実際の名前は個体別に pademu-<MAC下4桁>.local
-// (固定名だと2台目と衝突するため。2026-08-04)
+// (固定名だと2台目と衝突するため)
 #define APP_DISCOVER_HOSTNAME "pademu"
 
 esp_err_t app_discover_start(void);

@@ -249,7 +249,7 @@ def test_part_state_does_not_leak_after_part(tmp_path):
     """部品の最後の行の入力が、部品を抜けた後まで残らないこと。
 
     残ると「手順のどこにも書いていない入力」が最後まで押しっぱなしになる
-    (2026-08-02 ユーザー指摘)。
+。
     """
     root = make_project(tmp_path, {
         "main": {"schema": 1, "name": "main", "body": [

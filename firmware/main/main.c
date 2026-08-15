@@ -137,7 +137,7 @@ static void supervisor_task(void *arg)
         // 逆向きのレベル同期: タイムアウトの自動進行はエンジンを直接再開
         // するため、状態機械が AWAITING のまま残る(RUNNING の書き手は
         // cmd_run/cmd_select だけ)。走っているのに選択待ち表示のままだと
-        // PC の表示も SELECT の可否も食い違う(2026-08-06 レビュー)
+        // PC の表示も SELECT の可否も食い違う
         if (app_state_get() == APP_STATE_AWAITING
             && app_engine_is_running() && !app_engine_is_awaiting()) {
             app_state_set(APP_STATE_RUNNING);
@@ -163,7 +163,7 @@ static void supervisor_task(void *arg)
         // 必ず結果に応じて着地させる。以前は running の true→false エッジで
         // しか反映しなかったため、1ポーリング窓(100ms)より短い実行や開始
         // 直後の異常では true を一度も標本化できず、RUNNING が永久に残った
-        // (2026-07-31 実機で発生。実行も停止もできなくなる)。
+        // (実機で起きる。実行も停止もできなくなる)。
         // 条件を app_state 基準にしたので、ERROR ラッチ(USB切断時など)を
         // ここが上書きして消してしまうこともなくなる
         if ((st == APP_STATE_RUNNING || st == APP_STATE_AWAITING)

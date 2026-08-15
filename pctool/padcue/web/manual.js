@@ -78,7 +78,7 @@ function paintManual() {
   const fig = document.getElementById('padfig');
   fig.style.display = manualOn ? '' : 'none';
   // 切り替えの間は図を薄くして触れなくする。図ごと閉じると、対象を替える
-  // たびにパネルが開閉して画面が跳ねる(2026-08-08 ユーザー要望)
+  // たびにパネルが開閉して画面が跳ねる
   fig.classList.toggle('busy', manualSwitching);
   document.getElementById('manualcard').classList.toggle('on', manualOn);
   // ヘッダの印はどのタブでも見える(入力はタブを移っても送られ続けるので、
@@ -185,7 +185,7 @@ let ptBusy = false;
 // 手動操作の送達エラーは「継続状態」として #ptmsg に直接出す(メッセージ欄
 // #manualmsg と共用しない。保存結果に上書きされて再表示されない事故を防ぐ)。
 // 直れば自動で消える。以前はエラーを一切見ておらず、装置へ届いていないのに
-// 「操作中」の見た目のままになっていた(2026-08-06 監査)
+// 「操作中」の見た目のままになっていた
 function ptError(text) {
   const box = document.getElementById('ptmsg');
   if (!text) { box.style.display = 'none'; box.textContent = ''; return; }
@@ -294,7 +294,7 @@ async function refresh() {
   // ここを try/catch で書くと catch が一度も動かず、失敗した応答を
   // そのまま state に入れてしまう —— 以降 state.procedures が無いので
   // 描画が途中で止まり、しかも「古い」ことは名乗らないまま画面は
-  // 前の値を出し続ける(2026-08-15 のレビューで発覚)。
+  // 前の値を出し続ける。
   // 画面サーバに届かないときは、前の値を残したまま薄くして補間を止める
   if (!got || got.error) {
     setStale(true);

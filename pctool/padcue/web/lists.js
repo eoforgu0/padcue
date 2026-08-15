@@ -15,7 +15,7 @@ const dropLine = (() => { const d = document.createElement('div');
 // click までは止めないので、これが無いと「掴んで動かしただけ」なのに、つまみ
 // から親へ伝わった click が行の onclick(手順を開く・フォルダを開閉する)まで
 // 走ってしまう。フォルダの並べ替えでは、その開閉が古い並びを保存し直して
-// 動かしたはずの順番が元へ戻っていた(2026-08-07 監査)
+// 動かしたはずの順番が元へ戻っていた
 function bindDragClickGuard(handle) {
   handle.addEventListener('click', e => {
     if (!handle._dragged) return;

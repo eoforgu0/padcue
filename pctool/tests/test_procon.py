@@ -57,7 +57,7 @@ def test_player_lights_callback(device):
     assert (val, calls) == (0x01, 1)
 
 
-# 2026-08-06 の実測: 本体側にこの個体の登録記録が無いと、本体は新規ペアリング
+# 実測: 本体側にこの個体の登録記録が無いと、本体は新規ペアリング
 # (arg[0]=0x01 + 本体 BT MAC(LE))を送ってくる。旧実装は全フェーズに固定
 # 0x03 を返しており、これが完了しないと本体はコントローラー登録を行わず
 # **全ての入力を無視する**(自動・手動とも Switch 無反応の根因)。
@@ -70,7 +70,7 @@ def test_pairing_phase1_returns_own_mac(device):
     """新規ペアリング開始(arg 0x01)に、自機 MAC(LE)を名乗り返すこと。
 
     固定 0x03 応答では本体が同じ要求を 100〜400ms 間隔で再送し続け、
-    登録未完のまま入力が無視される(2026-08-06 の実測)。"""
+    登録未完のまま入力が無視される(実測)。"""
     run_handshake(device)
     reply = device.send_output(
         bytes([0x01, 0x00]) + bytes(8) + bytes([0x01]) + PAIR_PHASE1_SWITCH2)
@@ -268,7 +268,7 @@ def test_verify_reply_detects_violation():
         verify_reply(exp, None)
 
 
-# ---- USB 送出の仲裁(レビュー指摘 B)----
+# ---- USB 送出の仲裁 ----
 
 def test_replies_are_never_dropped_under_load(device):
     """定期入力レポートを送り続けながらサブコマンドを連投しても応答が落ちないこと。

@@ -56,7 +56,7 @@ typedef struct {
     uint8_t host_info[8];
     uint8_t host_info_len;
     bool host_info_seen;
-    // ペアリングの可観測化(2026-08-06 の「登録未完で全入力無視」障害の教訓。
+    // ペアリングの可観測化(「登録未完で全入力無視」の障害に備える。
     // これが無いと breadcrumb=完全・カウンタ健全のまま操作だけが効かない
     // 状態を外から切り分けられない)
     uint8_t pair_reqs;        // 0x01 を受けた累計(255 で飽和)

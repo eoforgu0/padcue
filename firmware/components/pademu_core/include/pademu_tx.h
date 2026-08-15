@@ -1,6 +1,6 @@
 // pademu_tx: IN エンドポイント送出の仲裁(USB 非依存の純粋C)
 //
-// 問題(レビュー指摘 B): TinyUSB の tud_hid_report() は前の転送が完了していない
+// 問題: TinyUSB の tud_hid_report() は前の転送が完了していない
 // と false を返して**レポートを黙って捨てる**(内部キューを持たない)。
 // プロコン方式では定期送出の 0x30 入力レポートと、ホストのサブコマンドに対する
 // 0x21/0x81 応答が単一の IN エンドポイントを共有する。応答が捨てられると
@@ -62,7 +62,7 @@ bool pademu_tx_push_reply(pademu_tx_t *tx, const uint8_t *data, size_t len);
 //
 // **応答はまだキューから取り出さない**。送出の成否が分かってから
 // pademu_tx_commit() を呼ぶこと。取り出してから送出に失敗すると、その応答は
-// どこにも残らず数にも入らないまま消える(2026-08-04 監査の指摘)。
+// どこにも残らず数にも入らないまま消える。
 size_t pademu_tx_next(pademu_tx_t *tx, pademu_tx_build_fn build, void *ctx,
                       const pademu_state_t *st, uint8_t *out);
 

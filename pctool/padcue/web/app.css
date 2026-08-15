@@ -26,7 +26,7 @@
    **分類の色は意味の色より控えめにする**(彩度 18 前後)。くり返し・
    分岐の枠は当初 41.7 あり、注意(52.7)に匹敵する目立ち方だった——
    入れ子であることは枠の形と見出しの文字が既に言っているので、平常の
-   構造表示にその水準の色は要らない(2026-08-12 ユーザー指摘)。細い線は
+   構造表示にその水準の色は要らない。細い線は
    色みが立ちにくいので下げすぎると灰に見えるが、そこは許容した——
    ティール等へ色相を変える案も撮って比べたうえで、黄緑を残す判断
 
@@ -100,7 +100,7 @@
   color-scheme:light;
   /* 中立の彩度は、生成規則の 3.4 倍そのままだと地が 9.7(他系統は
      0.6〜4.8)まで上がり、寒色の強調が浮いて系統としてまとまらない。
-     灰へ 0.6 だけ寄せて 5.9 にしてある(2026-08-12 の自己点検) */
+     灰へ 0.6 だけ寄せて 5.9 にしてある */
   --bg:#f7efe5; --surface:#fdfbf3; --surface-2:#f7ebde;
   --line:#d5cabd; --line-strong:#9a8e81; --muted:#6e6862; --ink:#2a2521;
   /* 強調は暖色にしない。暖色にすると注意(色相 78)と同じ色相帯に入り、
@@ -125,7 +125,7 @@
 * { box-sizing:border-box; }
 /* ヘッダーは固定し、スクロールは main(本文領域)が持つ。ページ全体で
    スクロールさせると、縦スクロールバーがヘッダーの高さまで貫通する
-   (2026-08-04 ユーザー指摘。一般的なヘッダ+本文のアプリと同じ構造に) */
+   (一般的なヘッダ+本文のアプリと同じ構造に) */
 html, body { height:100%; }
 body { margin:0; background:var(--bg); color:var(--ink); font-size:var(--fs-field);
   font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",Meiryo,sans-serif;
@@ -198,7 +198,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
   border-color:transparent; }
 /* 丸印の色: 黄は「人の操作が要る」(選択待ち)専用、赤は異常専用。
    ふだんの実行中・待機中を黄や赤にしない(色が警告の意味を失う)。
-   つながっていないだけは中立色——異常ではないため(2026-08-12 の原則改定) */
+   つながっていないだけは中立色——異常ではないため */
 .dot { width:9px; height:9px; border-radius:50%; background:var(--muted);
   display:inline-block; flex:none; }
 .dot.ok { background:var(--ok); }
@@ -221,7 +221,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .devrow.flagged { border-color:var(--err); background:var(--err-bg); }
 /* プリセットの行 = 装置の開閉行から丸印の列だけを抜いた形。詳細は名前の
    位置まで下げて、どの行の中身かを字下げで示す。名前は行幅を目一杯使い、
-   操作(呼び出す・改名・削除)は2行目に置く(2026-08-08 ユーザー指摘) */
+   操作(呼び出す・改名・削除)は2行目に置く */
 .devrow.foldable.formrow { grid-template-columns:16px 1fr; }
 .devrow.foldable.formrow .fact,
 .devrow.foldable.formrow .devdetail { grid-column:2 / -1; }
@@ -258,7 +258,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .lane.needs { box-shadow:0 0 0 3px var(--warn); }
 /* 連結中の「両方へ同時に送る」。人が選ぶ場面だけ、押す物のまわりを
    同じ形(黄のリング)で囲む。レーンを光らせると、押す物が無い場所へ
-   目を向けさせることになる(2026-08-15 指摘)。内側に余白を置くのは、
+   目を向けさせることになる。内側に余白を置くのは、
    ボタン自身も注意色で塗られていて、詰めるとリングと溶けるため */
 #cbotharms.needs { box-shadow:0 0 0 3px var(--warn); border-radius:8px;
   padding:4px 7px; }
@@ -338,7 +338,7 @@ main > .card { min-width:0; }
 /* 所要フレーム数の席に出る「変換できない」の印。同じ席なので行は動かない */
 .pname .fr.err { color:var(--err); font-weight:700; }
 /* 行の名前に付く ID。名前のすぐ右に薄く小さく置く(下段へ落とすと、装置の
-   ID なのか Switch 本体の ID なのかが読み取れない。2026-08-08 ユーザー指摘) */
+   ID なのか Switch 本体の ID なのかが読み取れない) */
 .rowid { color:var(--muted); font-size:var(--fs-sub); font-variant-numeric:tabular-nums;
   white-space:nowrap; }
 /* 並べ替えのつまみ。行クリック(選択)と衝突しないよう専用の持ち手にする */
@@ -402,7 +402,7 @@ main > .card { min-width:0; }
    同じリズムの余白を入れる(無いと実行ボタン行が上の行に密着する) */
 .lane .row + .row { margin-top:9px; }
 /* .hint の上マージンは本文下の注釈用。行の中に置いたラベルまで持ち上げると
-   行(と保存バー)が画面ごとに違う高さになる(2026-08-04 ユーザー指摘) */
+   行(と保存バー)が画面ごとに違う高さになる */
 .row > .hint { margin-top:0; }
 button { font:inherit; border:1px solid var(--line); background:var(--surface);
   color:var(--ink); border-radius:7px; padding:4px 12px; cursor:pointer; }
@@ -452,7 +452,7 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:var(--fs-sub);
 .kv dt { color:var(--muted); margin-right:8px; align-self:start; }
 .kv dd { margin:0; font-variant-numeric:tabular-nums; }
 /* 値が2つ以上ある項目(ずれの最大)は、親を見出しだけの行にし、子は字下げして
-   他の項目と同じ2列に並べる(名前=左・値=右。2026-08-08 ユーザー指摘) */
+   他の項目と同じ2列に並べる(名前=左・値=右) */
 .kv dt.kvhead { grid-column:1 / -1; }
 .kv dt.kvsub { padding-left:14px; }
 /* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
@@ -491,8 +491,7 @@ table.grid td.ops button { width:28px; padding:2px 0; text-align:center; }
    指定を忘れると画面全体を基準にしてしまい、まったく違う場所に出る。
    マーク・帯・再生位置はすべて %(親要素幅に対する割合)で置いているので、
    幅そのものは固定 px を持たずパネル幅にそのまま追従する。レーンの
-   タイムラインは横スクロールさせない(部品エディタのグリッドとは別扱い。
-   2026-08-07 決定) */
+   タイムラインは横スクロールさせない(部品エディタのグリッドとは別扱い) */
 .tl { position:relative; }
 .lane .tl-wrap { overflow-x:visible; }
 .tlrow { display:grid; grid-template-columns:56px 1fr; align-items:center;
@@ -666,8 +665,8 @@ table.grid th.gh { background:var(--surface); color:var(--muted); font-weight:40
   top:0; height:18px; box-sizing:border-box; }
 table.grid tr.alt td { background:rgba(128,128,128,.10); }
 /* ポインタのある行(と入力中の行)を丸ごとハイライトする。左右に長い表で
-   「この数値の行は何フレーム目か」を目で追うときの行ズレ防止(2026-08-04
-   ユーザー要望)。薄い重ねなので ON セルの色や縞はそのまま読める */
+   「この数値の行は何フレーム目か」を目で追うときの行ズレ防止。
+   薄い重ねなので ON セルの色や縞はそのまま読める */
 table.grid tr:hover td, table.grid tr:focus-within td {
   background:color-mix(in srgb, var(--accent) 12%, transparent); }
 /* 左端のフレーム番号列は横スクロールの上に浮く(sticky)ため、下が透けない
@@ -685,7 +684,7 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 /* 続けて並ぶ注釈行(開始と終了予定 → 開始ズレ)は、間を詰めてひとまとまりに */
 .hint + .hint { margin-top:2px; }
 /* 注釈行の中の「項目名 値」。項目どうしは余白で切り、値は本文の色にする
-   (単色の1行に「・」で連ねると、どこまでが値なのか読めない。2026-08-08) */
+   (単色の1行に「・」で連ねると、どこまでが値なのか読めない) */
 .stat { display:inline-flex; align-items:baseline; gap:6px; margin-right:22px; }
 .stat:last-child { margin-right:0; }
 .statv { color:var(--ink); font-variant-numeric:tabular-nums; }

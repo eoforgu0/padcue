@@ -35,7 +35,7 @@ CONFIG_ESP_WIFI_NVS_ENABLED=n
 CONFIG_SPIFFS_OBJ_NAME_LEN=48
 
 # クラッシュしたときに「どこで落ちたか」をフラッシュへ残す。
-# 2026-08-02 に実行中のパニックを追ったとき、これが無効で逆アセンブル解析が
+# 実行中のパニックを追うとき、これが無効だと逆アセンブル解析が
 # 必要だった。次からは padcue で吸い出して原因を直接見られるようにする
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y

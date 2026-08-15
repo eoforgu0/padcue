@@ -34,7 +34,6 @@ function buildLane(d) {
   card.append(lane.msg);
   // 実行(設定は上、行動は下。原則 §2)。小見出し「実行」は置かない——
   // レーン=実行の場所であることは形で分かるので、見出しは面積を食うだけ
-  // (2026-08-08 ユーザー指摘)
   lane.prenote = el('div', 'prenote');
   lane.prenote.style.display = 'none';
   card.append(lane.prenote);
@@ -245,7 +244,7 @@ function updateLane(lane, d) {
   // 外周のリング。人の操作を待っている(黄)・装置が異常を報告している(赤)
   // ときだけ出す。つながっていないだけでは出さない(原則 §5 と同じ理由)。
   //
-  // **連結して走っている間は、レーンには出さない**(2026-08-15 指摘)。
+  // **連結して走っている間は、レーンには出さない**。
   // そのときの選択は上部バーの「選択肢を両方へ同時に送る」で行うので、
   // レーンを光らせると、押す物が無い場所へ目を向けさせることになる。
   // ただし相方が来ないときだけは、そのレーンの「だけ進める…」を人が
@@ -668,7 +667,7 @@ document.addEventListener('keydown', async e => {
 // プリセットの装置解決。正は個体ID(改名に耐える)だが、練習の mock は
 // 設計上 ID を学習しない(台帳の id が空)ため、空 ID 同士で引くと全エントリが
 // 1台目に一致して「ずれ判定が直らない・別の装置に適用される」が起きる
-// (2026-08-06 uicheck で実証)。ID が空のときだけ名前で引く
+// (uicheck で実証済み)。ID が空のときだけ名前で引く
 function formationDevice(fd) {
   const devs = state.devices || [];
   return fd.id ? devs.find(x => x.id === fd.id)
@@ -723,7 +722,7 @@ async function applyFormation(f) {
   }
   // 開閉には触らない。**ボタンを押すことと詳細の開閉は別の機能**で、
   // 呼び出すたびに開くと、畳んでおきたい人の意思を毎回上書きしてしまう
-  // (2026-08-08 ユーザー指摘)。呼び出し中であることは行の強調で伝わる
+  //。呼び出し中であることは行の強調で伝わる
   await api('/api/couple', 'POST', {on: !!f.linked,
                                     auto_join: !!f.auto_join,
                                     arm: f.arm | 0});
@@ -775,7 +774,7 @@ function renderFormations() {
     toggle.onclick = (e) => { e.stopPropagation(); toggleFormOpen(row, f.name); };
     row.append(toggle);
     // 連結の別 + 名前。名前に行幅を目一杯使わせる(右端に別の欄を置くと、
-    // 狭い左ペインでは名前が1〜2文字しか見えない。2026-08-08 ユーザー指摘)
+    // 狭い左ペインでは名前が1〜2文字しか見えない)
     const pname = el('div', 'pname');
     const nb = el('b', null, f.name);
     nb.title = f.name;
@@ -1022,7 +1021,7 @@ function renderCoupling() {
   const both = document.getElementById('cbotharms');
   const ready = devs.slice(0, 2).every(d => !d.error && d.awaiting);
   // 人が選ぶ場面(自動合流が働かない)だけ、この一角を光らせる。
-  // 光らせる場所と押す場所を一致させる(2026-08-15 指摘)
+  // 光らせる場所と押す場所を一致させる
   both.classList.toggle('needs',
     ready && !(c.auto_join && !c.oneshot_manual));
   const bKey = armKey + '|' + ready;
@@ -1051,7 +1050,7 @@ function renderCoupling() {
   }
   // 連動停止・ワンショットの知らせ。作り直すのは中身が変わったときだけ
   // (毎秒作り直すと、再開ボタンを押している最中に DOM が差し替わって
-  // クリックが失われる。2026-08-06 レビュー)
+  // クリックが失われる)
   const box = document.getElementById('cmsg');
   const ls = run.linked_stop;
   const anyErr = devs.slice(0, 2).some(d => d.error);
@@ -1132,7 +1131,7 @@ function renderCoupling() {
   // 実測の開始ズレだけ(原則 §5)。「前回の」は付けない——実行中はいま走って
   // いる組のズレなので、いつの値かを語ると却って迷う。ホットキーの凡例も
   // 置かない——入切を決める ⚙ に書いてあり、使う人はそこで読む
-  // (値の位置に別の話が地続きで並ぶ形そのものが読みにくい。2026-08-08 指摘)
+  // (値の位置に別の話が地続きで並ぶ形そのものが読みにくい)
   const bits = [];
   if (run.skew_ms != null) {
     const who = (run.members || []).length

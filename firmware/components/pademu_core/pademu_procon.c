@@ -153,7 +153,7 @@ static size_t handle_subcommand(pademu_procon_t *pc, const uint8_t *data,
         // (0x01=新規ペアリング開始 / 0x04=既知本体の記録手渡し)のときだけ
         // 更新する。0x02/0x03 は引数がフェーズ番号だけ(残りはゼロ埋め)
         // なので、控えると「02+ゼロ」が識別子として記録され、どの本体でも
-        // 同じ値になって命名が壊れる(2026-08-06 レビュー)
+        // 同じ値になって命名が壊れる
         if (step == 0x01 || step == 0x04) {
             pc->host_info_len = (uint8_t)(arglen > 8 ? 8 : arglen);
             for (uint8_t k = 0; k < pc->host_info_len; k++) {
@@ -167,7 +167,7 @@ static size_t handle_subcommand(pademu_procon_t *pc, const uint8_t *data,
         // だった。本体側にこの個体の登録記録が無いと、本体は新規ペアリング
         // (arg 0x01)を送ってくるが、固定 0x03 では完了せず 100〜400ms
         // 間隔で再要求が続き、登録未完のまま**全ての入力が無視される**
-        // (2026-08-06 に実測。自動・手動とも Switch 無反応の原因)。
+        // (実測。自動・手動とも Switch 無反応の原因)。
         // フェーズ 01/02 の応答形式は dekuNukem の BT 資料に従う。
         // **実機プロコンでの実測は未実施**(採取したら突き合わせて直す)
         fill_subcmd_header(pc, r, 0x81, sub);
