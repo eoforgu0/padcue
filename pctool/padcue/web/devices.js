@@ -567,9 +567,9 @@ function armRow(d, dev, errBox) {
   const row = el('div', 'row');
   for (let i = 0; i < (d.await_arms || names.length); i++) {
     const label = (names[i] || `選択肢${i + 1}`) + (dev ? `(${dev} へ)` : '');
-    // 押せるボタンが画面に他にもある中で、「いま人を待っているのはこれ」
-    // と分かるようにする(原則 §5)。塗りは注意色、文字はその配色の地の色
-    const b = el('button', 'primary waiting', label);
+    // 「いま人を待っている」ことはレーンの外周のリング(.lane.needs)が
+    // 言うので、ボタン自身は他の primary と同じ姿にする(原則 §5)
+    const b = el('button', 'primary', label);
     b.onclick = async () => {
       const r = await api('/api/select', 'POST', {arm: i, dev});
       if (r.error) {

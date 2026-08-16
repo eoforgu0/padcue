@@ -926,8 +926,13 @@ function renderCoupling() {
     fchip.textContent = loadedFormation;
     const dirty = formationDirty();
     finfo.style.display = '';
-    finfo.textContent = dirty ? '未保存の変更' : '保存済み';
-    finfo.className = 'chip' + (dirty ? ' warn' : ' ok');
+    const want = dirty ? '未保存の変更' : '保存済み';
+    if (finfo.textContent !== want) finfo.textContent = want;
+    // className へ丸ごと代入しない。この関数は毎秒走るので、代入すると
+    // 保存直後の flash(0.8秒)を途中で消し、手順・部品のバッジと違って
+    // 一瞬しか光らなくなる。付け替えるクラスだけを触る
+    finfo.classList.toggle('warn', dirty);
+    finfo.classList.toggle('ok', !dirty);
     if (fsave.textContent !== '上書き保存') fsave.textContent = '上書き保存';
     fsave.title = `いまの割り当てを、プリセット「${loadedFormation}」に`
                  + '同じ名前で保存し直します';
@@ -1030,10 +1035,10 @@ function renderCoupling() {
     both.textContent = '';
     (arms.length ? arms : ['選択肢1', '選択肢2']).forEach((a, i) => {
       // レーンの選択肢と同じ姿にする(原則 §5: 同じ意味は同じ形)。
-      // 両方が選択待ち=人を待っている唯一のボタンなので注意色で塗り、
-      // それ以外は押せない姿で置いたままにする。名前に「(両方へ)」は
+      // 人を待っていることは外周のリングが言うので、ボタン自身は塗らない。
+      // 押せないときは disabled の姿で置いたままにする。名前に「(両方へ)」は
       // 付けない —— すぐ左の見出しが「選択肢を両方へ同時に送る」なので
-      const b = el('button', ready ? 'primary waiting' : 'primary', a);
+      const b = el('button', 'primary', a);
       b.disabled = !ready;
       b.title = ready ? '両方へ同時に SELECT を送ります'
                       : '両方が選択待ちのときに押せます';

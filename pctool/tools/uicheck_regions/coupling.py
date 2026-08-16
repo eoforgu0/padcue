@@ -245,13 +245,21 @@ def run_coupling(c: Checker, page, proj: Project,
             "連結中の選択待ちでレーンが光っている(押す物はバーにある)"
         cls_both = page.locator("#cbotharms").get_attribute("class") or ""
         assert "needs" in cls_both, "選択肢のまわりが光っていない"
-        # 人を待っている唯一のボタンなので、レーンの選択肢と同じ姿
-        # (注意色で塗る・同じ大きさ)。名前に「(両方へ)」は付けない
+        # レーンの選択肢と同じ姿(同じ大きさ)。名前に「(両方へ)」は付けない
         # ——すぐ左の見出しが「選択肢を両方へ同時に送る」
         arm = page.locator("#cbotharms button", has_text="出た").first
         cls = arm.get_attribute("class") or ""
-        assert "waiting" in cls and "primary" in cls, cls
+        assert "primary" in cls, cls
         assert "small" not in cls, "他のボタンと大きさが違う"
+        # ボタン自身は塗らない。「人を待っている」は外周のリングが言う。
+        # 両方言うと、ホバーで塗りだけ戻って壊れて見える(特定度の関係で
+        # button.primary:hover の方が強い)
+        assert "waiting" not in cls, "ボタン自身を注意色で塗っている"
+        bg = arm.evaluate("e => getComputedStyle(e).backgroundColor")
+        arm.hover()
+        page.wait_for_timeout(150)
+        bg_hover = arm.evaluate("e => getComputedStyle(e).backgroundColor")
+        assert bg != bg_hover, "ホバーで見た目が変わらない(押せる合図が無い)"
         assert arm.inner_text().strip() == "出た", arm.inner_text()
         arm.click()
         # 正常・軽量・自分で押した操作の成功は、ボタンのそばに数秒だけ出て
@@ -427,6 +435,13 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             " === '保存済み'", timeout=8000)
         assert page.locator("#formmsg").inner_text().strip() == "", \
             "上書き保存で文が出ている(バッジで伝えるはず)"
+        # 保存の合図(バッジが光る)は、手順・部品と同じく最後まで光り切る。
+        # この上部バーは毎秒描き直されるので、その更新で class を丸ごと
+        # 書き戻すと 0.8 秒のアニメーションが途中で切れて一瞬しか光らない
+        page.wait_for_timeout(1200)      # 毎秒の更新を必ず1回またぐ
+        assert "flash" in (
+            page.locator("#cforminfo").get_attribute("class") or ""), \
+            "保存の光りが毎秒の更新で消えている(手順・部品と光り方が違う)"
         # 割り当てを再び動かしてから呼び出すと、上書き保存した内容(9)に戻る
         lane_at(page, 0).locator(".lloops").fill("5")
         page.wait_for_function(

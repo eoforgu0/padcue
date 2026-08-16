@@ -258,8 +258,8 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .lane.needs { box-shadow:0 0 0 3px var(--warn); }
 /* 連結中の「両方へ同時に送る」。人が選ぶ場面だけ、押す物のまわりを
    同じ形(黄のリング)で囲む。レーンを光らせると、押す物が無い場所へ
-   目を向けさせることになる。内側に余白を置くのは、
-   ボタン自身も注意色で塗られていて、詰めるとリングと溶けるため */
+   目を向けさせることになる。内側の余白は、リングがボタンに貼り付いて
+   枠に見えなくなるのを防ぐため */
 #cbotharms.needs { box-shadow:0 0 0 3px var(--warn); border-radius:8px;
   padding:4px 7px; }
 .lane.faulted { box-shadow:0 0 0 3px var(--err); }
@@ -417,11 +417,11 @@ button.primary:hover:not(:disabled) {
 button.danger:hover:not(:disabled) { background:var(--err-bg); }
 button.small { padding:2px 8px; font-size:var(--fs-body); }
 button:disabled { opacity:.45; cursor:not-allowed; }
-/* 待機分岐の選択肢。人の操作を待っている唯一のボタンなので、強調ではなく
-   注意の色で塗る。載せる文字は地の色にする——注意色は明るい配色では濃く、
-   暗い配色では明るいので、地を載せるとどちらでも反転して読める */
-button.primary.waiting { background:var(--warn); color:var(--bg);
-  border-color:transparent; }
+/* 待機分岐の選択肢は、ボタン自身を塗らない。「人を待っている」は外周のリング
+   (.lane.needs / #cbotharms.needs)が言うので、ボタンまで注意色にすると
+   同じことを二度言うことになる。塗ると壊れもする —— ホバーの規則
+   (button.primary:hover:not(:disabled))の方が特定度が高いので、乗せた
+   瞬間だけ通常の塗りへ戻る */
 /* 塗りのボタン(実行)は、薄めるのではなく中立色の塗りへ置き換える。
    薄めると地と文字の両方が薄くなり、文字が地に対して 2.0 まで落ちる。
    塗り=ボタンの形は残るので「押せるボタンが減った」と読み違えない。
