@@ -77,7 +77,7 @@ PC 側は **探索が先、名前解決は保険**の順で試す(`pctool/padcue
 
 PC 側が独自に付ける code もある(装置とは通信していない失敗)。
 `DEVICE_MISMATCH` = 控えた個体IDと違う装置につながった(誤爆防止。
-docs/design/multi-device-plan.md D2)。
+docs/specs/coupling.md D2)。
 
 ## デバイス状態機械(LED 表示と対応)
 
@@ -90,7 +90,7 @@ CLEAR_ERROR で解除)/ OTA
 - USB 切断・サスペンドを RUNNING 中に検出した場合: 中断+全ニュートラル+位置(周回・
   index)記録 → ERROR
 
-## 決着した設計事項
+## 設計上の取り決め
 
 - **OTA の分割転送**: 4KB ごとに `action: data` で送る(begin / data / end の
   3段階)。レジュームは実装しない — 1MB 弱の転送が数秒で終わり、失敗しても

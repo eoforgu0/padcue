@@ -16,7 +16,7 @@ from ._harness import (
 
 def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
               prompt_value: list, dialogs: list):
-    """装置2台のレーン画面(案C)。
+    """装置2台のレーン画面。
 
     装置は台帳へ直接書いて登録する(GUI の「＋装置を追加」は LAN 探索が
     要るが、検査では探索を mock 1台に固定しているため通らない。登録 API の

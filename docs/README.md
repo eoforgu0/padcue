@@ -25,7 +25,7 @@
 | [design/procon-protocol.md](design/procon-protocol.md)             | コントローラーとして名乗るためのプロトコル(実測値つき)                     |
 | [specs/comm-protocol.md](specs/comm-protocol.md)                   | PC とマイコンの通信。コマンドの一覧                                        |
 | [design/gui-principles.md](design/gui-principles.md)               | 画面のあらゆる見た目・文言・配置を、ここから説明できる状態に保つための原則 |
-| [design/multi-device-plan.md](design/multi-device-plan.md)         | 2台同時運用の設計と決定事項。D1〜D10 はコードが参照する契約                |
+| [specs/coupling.md](specs/coupling.md)                             | 2台同時運用の仕様。D1〜D10 はコードが参照する契約                          |
 
 ## 一次資料(実測)
 
@@ -33,7 +33,3 @@
 |----------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | [reference/hid_report_descriptor.txt](reference/hid_report_descriptor.txt) | 純正 Pro コントローラーの HID レポートディスクリプタ 203 バイト(注釈つき) |
 | [reference/bypass_procon_log.txt](reference/bypass_procon_log.txt)         | 純正機と Switch 本体の USB 通信を中継して採ったログ                       |
-
----
-
-手元の作業記録(`docs/notes/`)はリポジトリに含めていません。

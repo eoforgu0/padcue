@@ -1,4 +1,4 @@
-"""flow.json + parts CSV のコンパイル結合テスト(段階1)。期待値は手計算。"""
+"""flow.json + parts CSV のコンパイル結合テスト。期待値は手計算。"""
 import json
 
 import pytest

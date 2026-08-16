@@ -51,5 +51,5 @@ procedures/
 parts/
 order.json
 
-# 手元の作業記録(引き継ぎメモ・内部の検討記録)。公開物ではない
+# 手元のメモ置き場
 /docs/notes/

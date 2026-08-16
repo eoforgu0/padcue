@@ -804,7 +804,7 @@ _PART_AXES = {"LX": "lx", "LY": "ly", "RX": "rx", "RY": "ry",
 
 
 def _compile_part(st: Stmt, ctx: _Ctx) -> None:
-    """行列部品を展開する(flow-format.md §4)。
+    """行列部品を展開する(flow-format.md §3)。
 
     記載列 = 行が完全な定義(空セル=離す/0)。未記載列 = 直前の状態を継続。
     状態が変化したフレームのみイベント化する。

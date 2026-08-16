@@ -18,9 +18,15 @@ from ._harness import (
 )
 
 
+def size_of(page, sel: str) -> tuple:
+    """要素の大きさ(幅・高さ)。位置は含めない。"""
+    b = page.locator(sel).bounding_box()
+    return (round(b["width"], 1), round(b["height"], 1))
+
+
 def run_coupling(c: Checker, page, proj: Project,
                  prompt_value: list, dialogs: list):
-    """上部バー(案C): まとめて開始・自動合流・連動停止・プリセット。"""
+    """上部バー: まとめて開始・自動合流・連動停止・プリセット。"""
     print("[連結(2台をまとめて動かす)]", flush=True)
     c1 = MockDevice(speed=1.0, device_id="mockcp100000")
     c2 = MockDevice(speed=1.0, device_id="mockcp200000")
@@ -226,6 +232,11 @@ def run_coupling(c: Checker, page, proj: Project,
         t_wait_colors)
 
     def t_oneshot_manual():
+        # リングが出る前の**寸法**。box-shadow は場所を取らないので、余白まで
+        # 常に確保してあれば、出ても消えても大きさは変わらないはず(下で照合)。
+        # 位置(x)は比べない —— 左隣のボタンの文言が「次の合流は自分で選ぶ」
+        # から「保留を取り消す」に変わるぶん、正常に動く
+        size_before = size_of(page, "#cbotharms")
         page.click("#coneshot")
         page.wait_for_function(
             "() => document.getElementById('coneshot')"
@@ -245,6 +256,28 @@ def run_coupling(c: Checker, page, proj: Project,
             "連結中の選択待ちでレーンが光っている(押す物はバーにある)"
         cls_both = page.locator("#cbotharms").get_attribute("class") or ""
         assert "needs" in cls_both, "選択肢のまわりが光っていない"
+        # リングは押す物から**四方とも同じだけ**離す。丸みが「ボタンの丸み
+        # + 余白」でないと、直線部より角が広く空いて枠が歪んで見える
+        geo = page.evaluate(
+            "() => {"
+            "  const w = document.getElementById('cbotharms');"
+            "  const b = w.querySelector('button');"
+            "  const s = getComputedStyle(w), bs = getComputedStyle(b);"
+            "  const pad = ['Top','Right','Bottom','Left']"
+            "    .map(k => parseFloat(s['padding' + k]));"
+            "  return {pad: pad, r: parseFloat(s.borderRadius),"
+            "          br: parseFloat(bs.borderRadius)}; }")
+        assert len(set(geo["pad"])) == 1, (
+            f"リングの余白が四方で違う(上右下左): {geo['pad']}")
+        # 出ても消えても大きさが変わらない(余白を .needs のときだけ足すと、
+        # 出た瞬間に高さが変わって下の行がずれる)
+        size_after = size_of(page, "#cbotharms")
+        assert size_before == size_after, (
+            f"リングが出て大きさが変わった: {size_before} -> {size_after}")
+        want_r = geo["br"] + geo["pad"][0]
+        assert abs(geo["r"] - want_r) < 0.6, (
+            f"リングの丸みが同心でない: {geo['r']} "
+            f"(ボタン {geo['br']} + 余白 {geo['pad'][0]} = {want_r} のはず)")
         # レーンの選択肢と同じ姿(同じ大きさ)。名前に「(両方へ)」は付けない
         # ——すぐ左の見出しが「選択肢を両方へ同時に送る」
         arm = page.locator("#cbotharms button", has_text="出た").first

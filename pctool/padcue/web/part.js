@@ -459,7 +459,7 @@ function focusPartCell(ri, ci) {
 }
 
 // 末尾に空の1フレームを足す(Enter/Tab が下端を越えたとき)。
-// 空の行は「記載列すべて離す/0」の有効な1フレーム(flow-format.md §4)で、
+// 空の行は「記載列すべて離す/0」の有効な1フレーム(flow-format.md §3)で、
 // 末尾追加ボタン(#addrow)が足す行と同じもの
 function appendPartRow() {
   partData.rows.push(PART_COLS.map(() => ''));

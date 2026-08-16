@@ -4,7 +4,7 @@
 
 'use strict';
 
-// ============ レーン(装置ごとの実行・監視画面。案C) ============
+// ============ レーン(装置ごとの実行・監視画面) ============
 // 装置台数に関わらず常にレーン(原則 §1 系: 1台と2台は同型)。
 // レーンの DOM は装置ごとに一度だけ組み立て、毎秒は中身だけ更新する
 // (入力欄・フォーカス・ホバーを毎秒壊さない)。改名は作り直し(まれ)
@@ -387,7 +387,7 @@ function updateLane(lane, d) {
   // 開始・終了予定は、連結して開始した組では上部バーが組全体で出す
   etaLine(lane.eta, (!inRun && (running || awaiting)) ? d.run_started_at : 0,
           [runEndAt(d)]);
-  // 待機分岐の表示。三態色(計画 §2b): 青=相方待ち(自動で進む予定)/
+  // 待機分岐の表示。三態色(specs/coupling.md §5): 青=相方待ち(自動で進む予定)/
   // 緑=そろって進んだ直後/黄=人の操作が要る・相方が来ない。赤は装置異常専用
   const autoJoinLive = inRun && c.auto_join && !c.oneshot_manual;
   if (awaiting && lane.parkedGenSeen !== d.await_gen) {
@@ -558,7 +558,7 @@ function manualTarget() {
     ? document.getElementById('manualdev').value : '';
 }
 
-// ============ 上部バー(2台にまたがることだけの場所。案C+D6〜D8) ============
+// ============ 上部バー(2台にまたがることだけの場所。D6〜D8) ============
 // 連結はそのうちの一つ(2台をまとめる唯一の入口)。連動の実体はサーバ
 // (coupler.py)で、ここは盤面の写像と操作の入口だけ
 
@@ -567,7 +567,7 @@ let cplStopSeen = 0;         // 連動停止の知らせを × で閉じた時�
 let cplJoinSeen = 0;         // ズレの大きい合流を知らせた時刻(at)
 
 // この ms を超えた合流のズレだけ知らせる。ふだんは数十ms、WiFi 次第で
-// 百ms強(design/multi-device-plan.md §0)なので、その倍を超えたら想定外。
+// 百ms強(specs/coupling.md §1)なので、その倍を超えたら想定外。
 // 通常のズレをいちいち出すと、読み切れないうちに消える文が毎回増える
 const JOIN_SKEW_WARN_MS = 300;
 

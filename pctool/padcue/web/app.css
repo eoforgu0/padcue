@@ -258,10 +258,14 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .lane.needs { box-shadow:0 0 0 3px var(--warn); }
 /* 連結中の「両方へ同時に送る」。人が選ぶ場面だけ、押す物のまわりを
    同じ形(黄のリング)で囲む。レーンを光らせると、押す物が無い場所へ
-   目を向けさせることになる。内側の余白は、リングがボタンに貼り付いて
-   枠に見えなくなるのを防ぐため */
-#cbotharms.needs { box-shadow:0 0 0 3px var(--warn); border-radius:8px;
-  padding:4px 7px; }
+   目を向けさせることになる。
+   **余白は常に取る**。リングが出るときだけ足すと、出た瞬間に行の高さが
+   変わって下の行が動く(box-shadow を使う理由がそれなので、padding で
+   台無しにしない)。
+   **丸みは「ボタンの丸み + 余白」**にする(7 + 6 = 13px)。同心にしないと
+   四隅だけリングが外へ膨らみ、直線部 6px に対して角が 9px 空く */
+#cbotharms { padding:6px; border-radius:13px; }
+#cbotharms.needs { box-shadow:0 0 0 3px var(--warn); }
 .lane.faulted { box-shadow:0 0 0 3px var(--err); }
 /* レーン内の小見出し(1台時のカード見出しに相当) */
 .subh { font-size:var(--fs-sub); letter-spacing:.1em; color:var(--muted);
@@ -280,7 +284,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .chip.link { color:var(--accent); border-color:var(--accent);
   font-weight:700; }
 /* 相方待ち(連結中の正常な待ち)は藍。黄色は「人の操作が要る」専用、
-   赤は装置の異常専用(計画 §2b の三態色) */
+   赤は装置の異常専用(specs/coupling.md §5 の三態色) */
 .chip.wait { color:var(--accent); border-color:var(--accent); }
 .msg.wait { background:var(--accent-soft); color:var(--accent); }
 .lane h2 .runchip { font-size:var(--fs-tight); padding:1px 8px; }
