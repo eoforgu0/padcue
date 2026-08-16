@@ -98,7 +98,7 @@ esp_err_t app_wifi_start(void)
     // 省電力を切る。既定(WIFI_PS_MIN_MODEM)のままだとビーコン間隔ごとに
     // 眠るため、こちらから送るパケットが落ちる・数百 ms 遅れる。
     // 実測で ping の 86% が落ち、応答が最大 1.1 秒まで伸びて PC から
-    // 事実上つながらなかった。USB/ドック給電なので節電の
+    // 事実上つながらない。USB/ドック給電なので節電の
     // 理由がなく、制御リンクは応答性が全てなので常時受信にする
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     return ESP_OK;

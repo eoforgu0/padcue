@@ -162,7 +162,7 @@ function syncLaneProc(lane, d, runName) {
     // 読み込み直した直後は select がまだ空なので、控えを起点にする。
     // 選択肢を並べると value は勝手に先頭へ決まってしまい、後ろの want で
     // 控えを読む段には永久に到達しない(= 最後に選んだ手順を覚える仕組みが
-    // 読み込み直しでは効いていなかった)
+    // 読み込み直しで効かなくなる)
     const keep = lane.proc.value || localStorage.getItem(laneProcKey(lane));
     lane.proc.textContent = '';
     for (const p of shown) {
@@ -781,7 +781,7 @@ function renderFormations() {
     pname.append(el('span', 'fkind', f.linked ? '⧉ 連結' : '単独'), nb);
     row.append(pname);
     // 呼び出す・改名・削除は2行目に置き、たたんだままでも押せるようにする
-    // (呼び出しが一番よく使う操作なのに、開かないと押せなかった。同指摘)
+    // (呼び出しが一番よく使う操作なので、開かないと押せないのでは困る)
     const act = el('div', 'fact');
     const use = el('button', 'small', '呼び出す');
     use.title = '割り当て(連結・手順・周回・開始ラベル・合流)をこの内容に'

@@ -239,9 +239,9 @@ def test_manual_restart_solo_not_auto_joined(env):
 def test_transient_error_does_not_end_run(env):
     """一過性の収集エラー(5秒未満)で連動停止・完走確定を誤発しないこと。
 
-    数時間の周回では WiFi の単発タイムアウトが毎周の駐機窓に重なる。
-    以前は busy 判定に猶予がなく、1回の失敗で「相方は完走した」と誤認して
-    駐機側を止めていた。
+    数時間の周回では WiFi の単発タイムアウトが毎周の駐機窓に重なる。busy
+    判定に猶予が無いと、1回の失敗で「相方は完走した」と誤認して駐機側を
+    止めてしまう。
     """
     _proj, _d1, _d2, base = env
     wait_ready(base)
@@ -251,8 +251,8 @@ def test_transient_error_does_not_end_run(env):
                            for d in devs(base)))
     # 2P の収集を一瞬だけ失敗させる。収集係(約1秒周期)が次の成功で
     # 消してしまうので、**見張り(0.5秒周期)が1回は必ず見る**ように、
-    # 消される側を止めてから立てる。以前は立てて 1.2 秒眠るだけで、
-    # 窓に入らないと猶予の分岐を一度も通らないまま緑になっていた
+    # 消される側を止めてから立てる。立てて 1.2 秒眠るだけだと、窓に
+    # 入らなかったときに猶予の分岐を一度も通らないまま緑になる
     link2 = gui._Handler.pool.get("2P")
     link2.stop()                      # 収集係だけ止める(接続は保つ)
     link2.error = "一過性の模擬エラー"
@@ -403,7 +403,7 @@ def test_watch_survives_a_failure_in_the_error_path(tmp_path, monkeypatch):
     異常の記録は members() を呼んで「どの装置の記録か」を決めるが、異常の
     原因がその members() 自身(設定ファイルが壊れている等)だと、except の
     中で二度目の例外が出る。except から送出された例外は同じ try では
-    捕まらないので、以前は見張りスレッドごと死んでいた —— 連動停止も
+    捕まらないので、守りが無ければ見張りスレッドごと死ぬ。そうなると連動停止も
     自動合流も黙って止まり、設定を直しても GUI を再起動するまで戻らない。
     """
     proj = Project(tmp_path)

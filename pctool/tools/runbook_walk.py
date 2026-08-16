@@ -86,8 +86,8 @@ def main():
 
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    # 前回の装置プールが残っていたら閉じる(P2-1 で接続は _Handler.pool に
-    # 一本化された。プロジェクト差し替え時の作法は uicheck と同じ)
+    # 前回の装置プールが残っていたら閉じる(接続は _Handler.pool が一手に
+    # 持つ。プロジェクト差し替え時の作法は uicheck と同じ)
     if gui._Handler.pool is not None:
         gui._Handler.pool.close()
         gui._Handler.pool = None
@@ -155,8 +155,8 @@ def walk(page, proj, dev, prompt):
     # runbook 2 の確認表(接続・診断は装置パネルの行の開閉式詳細に集約)
     row = open_dev_row(page)
     kv = row.locator(".kv").inner_text()
-    # 「USB」は語をやめた——「未接続」が PC↔装置 と 装置↔Switch の2つの
-    # 別概念に当たっていたので、後者は相手を明示した言い方にした
+    # 「USB」という語は使わない。「未接続」が PC と装置の間、装置と Switch
+    # の間という2つの別概念に当たるので、後者は相手を明示した言い方にする
     for want in ("ファーム", "方式", "Switch との接続"):
         if want not in kv:
             note(f"runbook 2 の確認表にある「{want}」が装置行の詳細に出ていない")

@@ -1,10 +1,9 @@
 """装置リンク(DeviceLink.call)の接続の持ち回しと、切れたときのやり直し。
 
-実際に起きた不具合: 実機が応答を返さない(TimeoutError)と、
-本来の理由が RuntimeError("generator didn't stop after throw()") に化けて、
-端末に例外の山が出ていた。原因は contextmanager の中で 2 回目の yield を
-していたこと。P2-1 で接続管理は devicepool.DeviceLink に一本化されたが、
-守るべき規則は同じ:
+contextmanager の中で 2 回目の yield をすると、実機が応答を返さない
+(TimeoutError)ときに本来の理由が RuntimeError("generator didn't stop
+after throw()") に化け、端末に例外の山が出る。接続管理は
+devicepool.DeviceLink が一手に持つが、守るべき規則はどの経路でも同じ:
  - **やり直すのは「送り出す前に切れていた」と分かるときだけ**(NotSentError)。
    装置が受け取った可能性がある切れ方でやり直すと、実行や転送が二重に効く
  - TimeoutError も同じ理由で再送しない。理由はそのまま伝える

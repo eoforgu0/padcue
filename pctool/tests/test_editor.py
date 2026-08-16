@@ -181,7 +181,7 @@ def test_editor_page_contains_editing_ui(server):
         assert token in page
 
 
-# ---- 画面の作り(UX 点検で直した箇所の固定) ----
+# ---- 画面の作り(使い勝手に関わる決まりの固定) ----
 
 def test_timeline_labels_are_available_for_display(server):
     """自分で付けたラベルがタイムラインに出せること(区間の意味が読める)。"""

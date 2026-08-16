@@ -151,7 +151,7 @@ def test_wait_branch_arm_does_not_leak_motion(tmp_path):
     ev = c.events
     aw = next(e for e in ev if isinstance(e, binfmt.Await))
     # 腕1の先頭は自分の gyro 3000 が同一フレーム統合で乗る(正しい)。
-    # 腕2の先頭は分岐時点の 1000 に戻ること(修正前は腕1の 3000 が漏れた)
+    # 腕2の先頭は分岐時点の 1000 に戻ること(腕1の 3000 が漏れてはいけない)
     heads = [ev[t] for t in aw.targets]
     assert all(isinstance(h, binfmt.State) for h in heads)
     assert [h.gy for h in heads] == [3000, 1000]
@@ -261,8 +261,8 @@ def test_gyro_const_warns_above_60f(tmp_path):
 def test_gyro_const_no_warn_at_60f(tmp_path):
     """ちょうど 60F は安全(「60F 保持+ゆらぎ」の実測)なので警告しない。
 
-    以前は 60F 以上で警告していて、実測どおりに組んだ安全な手順
-    (60F 保持 → 2F 変化)に誤警告が出ていた(オフバイワン)。
+    60F 以上で警告すると、実測どおりに組んだ安全な手順(60F 保持のあと
+    2F 変化)にまで誤警告が出る(オフバイワン)。
     """
     p = make(tmp_path, {"p": [
         {"type": "gyro", "gy": 2000},

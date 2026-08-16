@@ -74,9 +74,8 @@ def test_scan_hides_mocks_and_registered(env, monkeypatch):
 
     探索の返事は差し替えて渡す。模擬デバイスを実際に UDP へ応答させると、
     2台目以降が同じ番号(5557)を待ち受けられず、候補が1件も返らない状態でも
-    assert が通ってしまう —— 以前この検査は空の列に
-    対する恒真だった。UDP そのものは test_discover.py が見ている。ここで
-    見たいのは絞り込みの規則。
+    assert が通ってしまう(空の列に対する恒真になる)。UDP そのものは
+    test_discover.py が見ている。ここで見たいのは絞り込みの規則。
     """
     _proj, _d1, base = env
     found = [
@@ -224,8 +223,8 @@ def test_console_key_ignores_pairing_phase():
     """同じ本体なら、登録の前(フェーズ 01)と後(04)で同じキーになること。
 
     ペアリング引数は [0]=フェーズ [1..6]=本体 BT MAC [7..]=フェーズ依存
-    (procon-protocol.md §7)。8バイトまるごとをキーにしていたため、同じ
-    本体でも登録の前後で別物として扱われ、付けた名前が引き継がれなかった。
+    (procon-protocol.md §7)。8バイトまるごとをキーにすると、同じ本体でも
+    登録の前後で別物として扱われ、付けた名前が引き継がれない。
     """
     from padcue.devicepool import host_mac
     # 01 形と 04 形で、フェーズと末尾のバイトだけが違う同じ本体

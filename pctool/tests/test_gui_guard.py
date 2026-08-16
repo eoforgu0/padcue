@@ -104,8 +104,8 @@ def test_no_origin_is_allowed(base):
 def test_internal_error_returns_a_reason(base, monkeypatch):
     """想定外の例外でも、理由を返して「押しても無反応」にしないこと。
 
-    以前は総括の except が無く、例外が抜けると http.server が応答を返さずに
-    接続を落としていた。画面には何も出ず、原因を追う手がかりが残らない。
+    総括の except が無いと、例外が抜けたときに http.server が応答を返さずに
+    接続を落とす。画面には何も出ず、原因を追う手がかりも残らない。
     """
     def boom(*a, **k):
         raise RuntimeError("わざと壊す")

@@ -112,7 +112,7 @@ class Project:
         # 本体の名前(consoles)のキーを、ペアリング引数の先頭8バイトから
         # 本体 MAC の6バイトへ移す。8バイトには先頭のフェーズ
         # 番号と末尾のフェーズ依存バイトが混ざっていて、同じ本体でも登録の
-        # 前後で別キーになり、付けた名前が引き継がれなかった
+        # 前後で別キーになり、付けた名前が引き継がれない
         cons = cfg.get("consoles")
         if isinstance(cons, dict) and any(len(k) == 16 for k in cons):
             cfg["consoles"] = {(k[2:14] if len(k) == 16 else k): v
@@ -191,8 +191,8 @@ class Project:
         return self.root / "logs.jsonl"
 
     # 書き込みは単一ライタに直列化する。装置2台のログを別スレッドが並行して
-    # 追記すると、追記と間引き(全読み・全書き)が競合して行が消えるため
-    # (以前は GUI の単一 lock が偶然守っていた)
+    # 追記すると、追記と間引き(全読み・全書き)が競合して行が消える。
+    # 呼び出し元(GUI)の lock に頼らず、ここで自前に守る
     _log_write_lock = threading.Lock()
 
     def append_logs(self, entries: list[dict], dev: str = "") -> None:

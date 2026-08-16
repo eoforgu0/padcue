@@ -210,8 +210,8 @@ def run_flow_editor(c: Checker, page, proj: Project):
     def t_block_drag_after_nest():
         """くり返しの「後ろ」へ置けること、動かした先が選ばれること。
 
-        入れ子の下端は外側の並びの当たり判定だが、細すぎて中へ吸い込まれ、
-        入れ子の直後へは置けなかった。
+        入れ子の下端は外側の並びの当たり判定だが、細いと中へ吸い込まれて
+        入れ子の直後へ置けなくなる。
         """
         before = flow_shape()
         i = next(n for n, x in enumerate(before) if x.startswith("loop["))
@@ -378,8 +378,8 @@ def run_flow_list(c: Checker, page, proj: Project, prompt_value: list):
         """ブロックの右端のチェックを外すと、丸ごと飛ばされること。
 
         フレーム数は保存後の再コンパイル結果(プロジェクト側)で確かめる。
-        以前は保存メッセージの「(N フレーム)」を読んでいたが、正常系の
-        保存メッセージは廃止されたため、データ源を直接見る。
+        正常系の保存メッセージは出さない(状態変化で伝える)ので、
+        データ源を直接見る。
         """
         def total_frames():
             r = proj.build_safe("素材周回")[0]
@@ -613,7 +613,7 @@ def run_flow_branch_and_folders(c: Checker, page, proj: Project, prompt_value: l
         """フォルダを並べ替えられること(開閉は巻き添えで変わらない)。
 
         つまみを離した直後の click が見出し行へ伝わって開閉が走り、それが
-        古い並びを保存し直すため、並べ替えたはずの順番が元へ戻っていた。
+        古い並びを保存し直すので、抑えないと並べ替えた順番が元へ戻る。
         """
         names = proj.procedure_names()
         try:

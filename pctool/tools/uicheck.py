@@ -51,9 +51,8 @@ def main() -> int:
     out = Path(args[0])
     out.mkdir(parents=True, exist_ok=True)
     # 前回の失敗写真を消す。ファイル名は NG-<通番>-<項目名> で、項目を1つ
-    # 足すと以降の番号がずれるため上書きされない。放っておくと直したはずの
+    # 足すと以降の番号がずれるため上書きされない。消さないと直したはずの
     # 項目の写真が残り続け、「どれが今回の失敗か」が分からなくなる
-    # (実際に41枚たまり、同じ項目の別番号が別の日付で同居していた)
     for old in out.glob("NG-*.png"):
         old.unlink()
     proj = build_project(out / "_proj")
@@ -102,8 +101,8 @@ def main() -> int:
         page.wait_for_timeout(1500)
 
         # 画面が初期化できていないなら、その先の検査は全部倒れて原因が
-        # 分からなくなる。ここで止めて理由を出す(定数の定義順を
-        # 崩して JS が丸ごと止まり、80 項目が「確認中…」で失敗した)
+        # 分からなくなる。ここで止めて理由を出す(定数の定義順が崩れて
+        # JS が丸ごと止まると、全項目が「確認中…」のまま失敗する)
         booted = page.evaluate(
             "() => typeof state !== 'undefined' && state !== null"
             " && Array.isArray(state.procedures)")

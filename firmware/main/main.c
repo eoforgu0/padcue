@@ -35,8 +35,8 @@ static void on_button_long(void)
     ESP_LOGW(TAG, "ボタン長押し: 即時停止");
     app_engine_stop(false);
     // 中断の記録は supervisor の着地(app_run_end_land)に任せる。
-    // 以前ここで書いていた RUN_ABORT(a=1) は「1 フレーム時点」という偽の行に
-    // なるうえ、実行していないときの長押しでも記録されてしまっていた
+    // ここで RUN_ABORT(a=1) を書くと、「1 フレーム時点」という偽の行に
+    // なるうえ、実行していないときの長押しでも記録されてしまう
 }
 
 static void on_player_lights(uint8_t bitmap)
@@ -160,12 +160,12 @@ static void supervisor_task(void *arg)
         // 立ち上がり検出だと、100ms より短い実行を取りこぼすうえ、手順名や
         // 周回数(RUN コマンドしか知らない情報)を載せられない
         // レベル同期: 状態機械が「実行系」なのにエンジンが動いていなければ、
-        // 必ず結果に応じて着地させる。以前は running の true→false エッジで
-        // しか反映しなかったため、1ポーリング窓(100ms)より短い実行や開始
-        // 直後の異常では true を一度も標本化できず、RUNNING が永久に残った
-        // (実機で起きる。実行も停止もできなくなる)。
-        // 条件を app_state 基準にしたので、ERROR ラッチ(USB切断時など)を
-        // ここが上書きして消してしまうこともなくなる
+        // 必ず結果に応じて着地させる。running の立ち下がりエッジでしか
+        // 反映しないと、1ポーリング窓(100ms)より短い実行や開始直後の異常
+        // では true を一度も標本化できず、RUNNING が永久に残る(実機で
+        // 起きる。実行も停止もできなくなる)。
+        // 条件が app_state 基準なので、ERROR ラッチ(USB切断時など)を
+        // ここが上書きして消してしまうこともない
         if ((st == APP_STATE_RUNNING || st == APP_STATE_AWAITING)
             && !running && !awaiting) {
             app_run_end_land();

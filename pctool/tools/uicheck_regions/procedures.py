@@ -31,9 +31,8 @@ def run_procedures(c: Checker, page):
 
     def t_resume_starts_from_label():
         """開始ラベルを選ぶと、その起点から再生される(先頭からではない)。
-        旧来は文言(「〜から実行しています」)で確認していたが、その文は
-        原則 §5(迷ったら出さない)に基づき削ったので、再生位置の起点
-        フレームそのものを見る(uicheck の追従)。「移動」は手順の先頭
+        文言(「〜から実行しています」)は原則 §5(迷ったら出さない)により
+        出さないので、再生位置の起点フレームそのものを見る。「移動」は手順の先頭
         (フレーム0)と区別が付かないため、頭出しの効く「戦闘」で見る
         """
         ln = lane(page)
@@ -114,11 +113,9 @@ def run_procedures(c: Checker, page):
         """実行中は手順選択がその手順に固定される(レーンは1台ぶんが
         自己完結する。原則 §2)。
 
-        以前は一覧に▶印を付けて「動いているのはどれか」を選択と区別して
-        示し、他の手順を選んでも進行表示が重ならないことを別に確かめていた。
-        いまは選択欄そのものが実行中の手順に同期して固定され(かつ実行中は
+        選択欄そのものが実行中の手順に同期して固定され(かつ実行中は
         disabled で選び直せない)ため、「他の手順を選んで進行が重なる」
-        という事態自体が起こり得ない。ここでは、その固定と抑止だけを見る。
+        という事態は起こり得ない。ここでは、その固定と抑止だけを見る。
         """
         ln = lane(page)
         ln.locator(".lproc").select_option("素材周回")
@@ -208,8 +205,8 @@ def run_look_and_alerts(c: Checker, page):
     def t_lane_proc_survives_reload():
         """読み込み直しても、そのレーンで最後に選んだ手順が選ばれたままなこと。
 
-        以前は select に選択肢を並べた時点で先頭が選ばれてしまい、控え
-        (localStorage)を読む段に到達していなかった。
+        select に選択肢を並べた時点で先頭が選ばれてしまうと、控え
+        (localStorage)を読む段に到達しない。
         """
         ln = lane(page)
         before = ln.locator(".lproc").input_value()
@@ -424,7 +421,7 @@ def run_stop_and_partial(c: Checker, page):
         page.wait_for_timeout(400)
         tlmsg = text(page, "#lanes .lane .ltlmsg")
         assert "終わりました" not in tlmsg and "予約どおり" not in tlmsg, \
-            f"終了メッセージは廃止したはずが出ている: {tlmsg!r}"
+            f"出さないと決めた終了メッセージが出ている: {tlmsg!r}"
         assert not ln.locator("button", has_text="周回実行").is_disabled(), \
             "終了したのに実行ボタンが戻らない"
         # ログに「どの手順を何周指定で始め、何周で終えたか」が残ること
@@ -518,7 +515,7 @@ def run_stop_and_partial(c: Checker, page):
 
     def t_resume_from():
         # 「戦闘」はくり返しの直前のラベル(再開点がカウンタ初期化を指す位置)。
-        # 受理の文言は削ったので、予定量(total_frames)が手順全体(309F、
+        # 受理の文言は出さないので、予定量(total_frames)が手順全体(309F、
         # 次の検査のコメント参照)より短いこと(=先頭からではなく戦闘から
         # 始まっていること)で受理を確認する(uicheck の追従)
         ln = lane(page)

@@ -1,7 +1,7 @@
 /* ===== 文字の大きさ =====
-   役目ごとに1つ。以前は 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 14 / 15px の
-   9値が散っていて、階層が読み取れなかった(同じ役目に 0.5px 違いの2値が
-   当たっている状態。0.5px は見て分からないので、差を持つ意味がない)。
+   役目ごとに1つ。10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 / 14 / 15px のように
+   0.5px 刻みで値が散ると、階層が読み取れなくなる(0.5px は見て分からないので、
+   同じ役目に2値を持つ意味がない)。
    **値が同じでも役目が違えば別のトークンで持つ**——「見出し」と「記号」は
    たまたま同じ 15px だが、片方を動かすときにもう片方まで動いては困る */
 :root {
@@ -23,17 +23,17 @@
      分類 2    部品・くり返し(手順ブロックの帯と枠)
      塗りの上 1  塗った面に載せる文字
 
-   **分類の色は意味の色より控えめにする**(彩度 18 前後)。くり返し・
-   分岐の枠は当初 41.7 あり、注意(52.7)に匹敵する目立ち方だった——
+   **分類の色は意味の色より控えめにする**(彩度 18 前後)。くり返し・分岐の
+   枠を彩度 40 台まで上げると、注意(52.7)に匹敵する目立ち方になる。
    入れ子であることは枠の形と見出しの文字が既に言っているので、平常の
    構造表示にその水準の色は要らない。細い線は
    色みが立ちにくいので下げすぎると灰に見えるが、そこは許容した——
    ティール等へ色相を変える案も撮って比べたうえで、黄緑を残す判断
 
    **意味の色は6配色すべて同じ値**にする。系統が変えてよいのは中立・強調・
-   分類だけ。以前は6配色それぞれに意味の色を手書きしていたため、琥珀ライトで
-   「注意」と「強調」が色差 1.6 まで接近していた(10 未満は並べても判別が
-   難しい水準)。中立7段の明るさも3系統で共通なので、系統を切り替えても面の
+   分類だけ。6配色それぞれに意味の色を手書きすると、琥珀ライトで「注意」と
+   「強調」が色差 1.6 まで接近する(10 未満は並べても判別が難しい水準)。
+   中立7段の明るさも3系統で共通なので、系統を切り替えても面の
    段差と文字の読みやすさは変わらない。
 
    系統の違い:
@@ -48,7 +48,7 @@
    採用しない。切り替えは右上のボタン、選択はこのブラウザに保存される */
 /* チェックボックス・ラジオ・スライダー・選択欄・スクロールバーを配色に乗せる。
    どちらも指定が無いと、6配色すべてで OS 既定の青が出て、暗い配色でも
-   選択欄だけが白く残っていた。属性は html に付くので、ここに書けば継承される */
+   選択欄だけが白く残る。属性は html に付くので、ここに書けば継承される */
 :root { accent-color:var(--accent); }
 :root, [data-theme="ai-light"] {
   color-scheme:light;
@@ -251,7 +251,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .lane h2 .tlprog { margin-left:auto; }
 /* 人の操作を待っている・異常で止まっているレーンは、外周のリングで名乗る。
    画面をぼかして面と明るさだけ残すと(横目で見たときの代わり)、赤い面は
-   見えるのに操作待ちは正常時とほぼ同じに見えていた。box-shadow は寸法を
+   見えるのに、リングが無ければ操作待ちは正常時とほぼ同じに見える。box-shadow は寸法を
    持たないので、出ても消えても位置は動かない(border だと行が動く)。
    実行中には出さない——数時間ずっと光ることになり、平常時に色を使い切ると
    異常が浮かばなくなる(ISA-101 の「平常はグレー基調」) */
@@ -382,7 +382,7 @@ main > .card { min-width:0; }
 .chip:empty { display:none; }   /* 中身が空のときは枠だけ残さない */
 /* 保存できた合図: バッジの枠がパッと光ってスッと消える。
    「保存しました」の文を出す代わり(正常系は状態変化で伝える。文だと
-   消し忘れが実状とずれる)。異常系のメッセージは従来どおり文で出す */
+   消し忘れが実状とずれる)。異常系のメッセージは文で出す */
 @keyframes chipflash {
   0%   { box-shadow:0 0 0 1px var(--ok), 0 0 9px 2px var(--ok); }
   100% { box-shadow:0 0 0 7px rgba(0,0,0,0), 0 0 9px 7px rgba(0,0,0,0); }
@@ -394,8 +394,8 @@ main > .card { min-width:0; }
 .chip.err { color:var(--err); border-color:var(--err); font-weight:700; }
 .row { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
 /* 意味のまとまり(実行の2つ・停止の2つ)。行が折り返すとき、まとまりの中では
-   割れずに境目で折り返す。幅が足りていれば1行のまま変わらない——以前は
-   溢れたぶんだけが次の行へ落ちるので、停止の2つが上下に分かれることがあった
+   割れずに境目で折り返す。幅が足りていれば1行のまま変わらない。まとめずに
+   置くと溢れたぶんだけが次の行へ落ち、停止の2つが上下に分かれる
    (1280px=FHD の 150% 表示・2台のとき。急いで止めたい場面で押す先が散る) */
 .btngrp { display:flex; gap:7px; align-items:center; }
 /* レーンは行(手順・開始位置・実行ボタン…)を縦に積むので、行間に周囲と
@@ -410,8 +410,8 @@ button:hover:not(:disabled) { border-color:var(--accent); }
 button.primary { background:var(--accent-fill); color:var(--on-fill);
   border-color:transparent;
   font-weight:700; }
-/* primary/danger は独自の枠色を持つため、素のホバー(枠を藍に)が効かず
-   「最重要ボタンだけホバーで無反応」になっていた。地色側で反応させる */
+/* primary/danger は独自の枠色を持つため、素のホバー(枠を藍に)が効かない。
+   放っておくと「最重要ボタンだけホバーで無反応」になる。地色側で反応させる */
 button.primary:hover:not(:disabled) {
   background:color-mix(in srgb, var(--accent) 86%, var(--ink)); }
 button.danger:hover:not(:disabled) { background:var(--err-bg); }
@@ -460,7 +460,7 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:var(--fs-sub);
            border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
            padding:6px 10px; margin-bottom:9px; }
 /* 実行が始まったら沈める。押す前に読むものなので、実行中は役目を終えている
-   (6文字の案内が画面でいちばん大きい色面のまま残っていた)。高さは変えない
+   (沈めないと、6文字の案内が画面でいちばん大きい色面のまま残る)。高さは変えない
    ので位置は動かない。opacity は使わない——地と文字が両方薄くなるため */
 .prenote.dim { background:transparent; border-left-color:var(--line);
                color:var(--muted); }
@@ -549,8 +549,8 @@ tr.off td.ax input, tr.off td.fn { opacity:.38; }
 .delx.cpy:hover { background:var(--accent-soft); color:var(--accent); }
 /* 区切り停止の予約中。押した本人に「効いている」と伝われば十分なので、
    文字を足さずボタン自身の見た目を変える。ラベル自身が「予約を取り消す」と
-   名乗るので記号も足さない(以前は ⏳ を付けていたが、Windows ではこれだけが
-   カラー絵文字になり、他の記号 ▶ ⟳ ◼ ⏹ ⧉ ↩ が単色なのと揃わなかった) */
+   名乗るので記号も足さない(⏳ は Windows ではこれだけがカラー絵文字になり、
+   他の記号 ▶ ⟳ ◼ ⏹ ⧉ ↩ が単色なのと揃わない) */
 button.armed { border-color:var(--warn); color:var(--warn);
   background:var(--warn-bg); font-weight:700; }
 /* ブロックのドラッグつまみ */
@@ -655,7 +655,7 @@ table.grid th.fn, table.grid td.fn:first-child {
   position:sticky; left:0; z-index:3; background:var(--surface); }
 /* テーマは data-theme 属性で切り替わるため、OS 設定(prefers-color-scheme)
    ではなくテーマ変数から縞色を作る(OS=ライトのままダーク系テーマを選ぶと
-   左端列の縞だけ明るく浮いていた) */
+   左端列の縞だけ明るく浮く) */
 table.grid tr.alt td.fn:first-child {
   background:var(--surface-2); }
 table.grid th.gh { background:var(--surface); color:var(--muted); font-weight:400;
@@ -691,8 +691,8 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 /* 中身が空の注釈行は、余白だけを占めない(実行していないときの ETA 行) */
 .hint:empty { display:none; }
 /* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない)。
-   中は注釈行と同じ「項目どうしは余白で切る」作法(以前は全角空白1つで
-   区切っていて、どこまでが1つの値なのか読み取れなかった) */
+   中は注釈行と同じ「項目どうしは余白で切る」作法(全角空白1つで区切ると、
+   どこまでが1つの値なのか読み取れない) */
 .tlprog { float:right; color:var(--accent); font-weight:700;
   letter-spacing:0; font-variant-numeric:tabular-nums; }
 .tlprog .stat { margin-right:14px; }

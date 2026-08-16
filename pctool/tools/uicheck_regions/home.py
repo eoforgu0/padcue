@@ -14,7 +14,7 @@ def run_home(c: Checker, page):
     print("[実行・監視]", flush=True)
 
     def t_lane_smoke():
-        """1台構成でもレーンが1本出て、実行・停止・開始ラベルが従来どおり働く。
+        """1台構成でもレーンが1本出て、実行・停止・開始ラベルが働く。
 
         原則 §1 系「1台と2台は同型」の1台側の土台。台数で構造を変えない、
         という前提がまず崩れていないかをここで確かめ、以降の検査はその上に
@@ -34,10 +34,10 @@ def run_home(c: Checker, page):
             "停止中に即時停止が押せる"
         assert ln.locator("button", has_text="周回実行").is_enabled(), \
             "待機中に実行が押せない"
-        # 実行・停止も従来どおり働くこと(開始ラベルは後続の検査で個別に見る)
+        # 実行・停止も働くこと(開始ラベルは後続の検査で個別に見る)
         ln.locator("button", has_text="1回実行").click()
         wait_state(page, "実行中")
         ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-    c.check("1台構成でもレーンが1本出て、実行・停止・開始ラベルが従来どおり働く",
+    c.check("1台構成でもレーンが1本出て、実行・停止・開始ラベルが働く",
             t_lane_smoke)

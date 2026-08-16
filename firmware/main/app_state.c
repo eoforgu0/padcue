@@ -56,9 +56,9 @@ void app_state_init(void) {
 
     // ロールバック判定: 直前の OTA が起動に失敗して前版へ戻った場合、
     // 失敗した側(=次の更新先)のパーティションが ABORTED になっている。
-    // 以前は実行中パーティションの PENDING_VERIFY を見ていたが、それは
-    // 「OTA 後の初回起動」の印であってロールバックではない(成功した更新の
-    // 直後に「ロールバックされました」と誤報告していた)
+    // 実行中パーティションの PENDING_VERIFY は見ない。それは「OTA 後の
+    // 初回起動」の印であってロールバックではなく、成功した更新の直後に
+    // 「ロールバックされました」と誤報告することになる
     const esp_partition_t *other = esp_ota_get_next_update_partition(NULL);
     esp_ota_img_states_t img_state;
     if (other && esp_ota_get_state_partition(other, &img_state) == ESP_OK) {
@@ -85,10 +85,10 @@ void app_state_set(app_state_t s) {
 void app_state_fault(uint32_t code) {
     app_state_t prev = app_state_get();
     atomic_store(&s_state, APP_STATE_ERROR);
-    // ここでは状態遷移だけを記録する。以前は ENGINE_FAULT を code 付きで
-    // 書いていたが、呼び出し元(実行異常・USB切断・サスペンド)がそれぞれ
-    // 実のある値でログ済みなので、二重になるうえ a の意味(イベント index)
-    // と code が混ざって「手順の 7 番目」のような偽の行になっていた
+    // ここでは状態遷移だけを記録する。ENGINE_FAULT を code 付きで書くと、
+    // 呼び出し元(実行異常・USB切断・サスペンド)がそれぞれ実のある値で
+    // ログ済みなので二重になるうえ、a の意味(イベント index)と code が
+    // 混ざって「手順の 7 番目」のような偽の行になる
     app_log_put(APP_LOG_RING_CORE0, APP_LOG_STATE,
                 (uint32_t)prev, (uint32_t)APP_STATE_ERROR);
     ESP_LOGE(TAG, "異常でラッチ: code=%u", (unsigned)code);

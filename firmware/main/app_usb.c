@@ -35,7 +35,7 @@ static pademu_tx_t s_tx;
 // 定刻に入っても、本体が読みに来るまでは出力は届かないので、そこを別に測る。
 //
 // **実測**: bInterval=1(1ms)を名乗っていても、Switch 本体が
-// 実際にこちらを読みに来るのは平均 5.8ms・最大 8ms 間隔だった
+// 実際にこちらを読みに来るのは平均 5.8ms・最大 8ms 間隔である
 // (6.7 秒の実行で送出成功 1149 回 = 172回/秒)。つまり数 ms の配送遅れは
 // **異常ではなく USB の下限**であり、それを警告にすると毎回鳴って意味を失う。
 //
@@ -179,7 +179,7 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 // HOST_INFO(ペアリング引数の控え)のコア間受け渡し。
 // 書き手 = usb_task(コア1、下の set_report_cb)、読み手 = supervisor(コア0)。
 // s_procon の中身を直接読ませると、コピー中に次の 0x01 が上書きする競合が
-// あった(0x01 が 100ms 間隔で洪水する状況で実際に起きうる)ため、
+// 起きる(0x01 が 100ms 間隔で洪水する状況では現実に起きる)ので、
 // ここでスピンロック越しの控えに移してから渡す
 static portMUX_TYPE s_hi_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t s_hi[8];

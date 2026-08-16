@@ -164,7 +164,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         # つながっていないだけなら赤くしない——2台目を外して1台で回すのは
         # 正常な使い方で、異常ではない
         assert not text(page, "#lanes .lane .lmsg"), \
-            "未接続の理由がレーンに残っている(装置カードへ移したはず)"
+            "未接続の理由がレーンに出ている(装置カードに出す決まり)"
         why = text(page, "#devlist .devrow .devwhy")
         assert why, "未接続の理由が装置カードに出ていない"
         assert "×" not in why, "直れば自動で消える知らせに × が付いている"
@@ -233,7 +233,7 @@ def run_disconnected(c: Checker, page, dev: MockDevice):
         assert ln.locator("button", has_text="今すぐ止める").is_disabled(), \
             "未接続でも停止が押せる"
         assert not text(page, "#lanes .lane .lmsg"), \
-            "未接続の理由がレーンに残っている(装置カードへ移したはず)"
+            "未接続の理由がレーンに出ている(装置カードに出す決まり)"
         msg = text(page, "#devlist .devrow .devwhy")
         assert "127.0.0.1" in msg, f"どこに繋げなかったのか分からない: {msg!r}"
         assert not any(w in msg for w in ("Errno", "failed", "refused")), \

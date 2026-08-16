@@ -54,14 +54,14 @@ def _first(entries, kind):
 def test_abort_frame_reflects_when_stopped(dev):
     """中断ログの「N フレーム時点」が、止めたタイミングで実際に変わること。
 
-    以前は「最後に状態が変化したフレーム」を記録していたため、いつ止めても
-    同じ値になっていた(実機で発覚)。止める時刻を乱数で散らし、値がばらけ、
-    かつ経過時間と整合することを見る。
+    「最後に状態が変化したフレーム」を記録する作りだと、いつ止めても同じ値に
+    なる。止める時刻を乱数で散らし、値がばらけ、かつ経過時間と整合することを
+    見る。
     """
     c = _client(dev)
     h, total = _push(c, "長い手順", "press A 2\nwait 6000")
     c.logs()                                   # 起動ログを流す
-    rng = random.Random(20260801)
+    rng = random.Random(4649)
     seen = []
     for _ in range(5):
         c.run("長い手順", h, loop_n=1)
@@ -131,8 +131,7 @@ def test_log_kinds_are_known_to_the_gui():
     assert m, "LOG_JA が見つかりません"
     ja = set(re.findall(r"^\s{2}([A-Z_]+):", m.group(1), re.M))
     # 種別はファームウェアが増やす。ここに書き写すと、増えた種別が
-    # 「書き写した表にも無い」ので黙って検査を素通りする(実際 TX_LATE /
-    # TX_LOST / AWAIT_TIMEOUT / HOST_INFO の4種がそうなっていた)。
+    # 「書き写した表にも無い」ので黙って検査を素通りする。
     # 正本(app_log.c の KIND_NAMES)から読む
     from tests.conftest import REPO
     src = (REPO / "firmware" / "main" / "app_log.c").read_text(encoding="utf-8")
@@ -250,9 +249,8 @@ def test_stop_cancel_revokes_graceful(dev):
     「取り消せた」の証拠は **周回境界を跨いでも止まらないこと**。時間で
     待って running を見るだけだと、境界に届く前を見ているに過ぎない
     (200倍速では 32 フレームの手順が1周 3ms 弱)。逆に予約と取り消しの
-    隙間に境界が来ると仕様どおり本当に停止するので、負荷しだいで落ちる
-    テストになっていた。周の頭に合わせてから予約し、次の境界を跨ぐまで
-    見張る形に直した。
+    隙間に境界が来ると仕様どおり本当に停止するため、そのまま書くと負荷しだいで
+    落ちる検査になる。周の頭に合わせてから予約し、次の境界を跨ぐまで見張る。
     """
     c = _client(dev)
     # 1周を長めに取る(200倍速で約 0.5 秒)。予約と取り消しの隙間に周回境界が

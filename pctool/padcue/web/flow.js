@@ -147,9 +147,9 @@ function _blockTargetAt(x, y) {
     target = b;   // querySelectorAll は文書順 = 後勝ちが最深
   }
   // 箱の高さは中身ぴったりなので、最後のブロックより下には当たり判定が無く、
-  // 「一番下へ入れる」ができなかった。フロー欄の横幅の中にいる限り、下の
-  // 余白はいちばん外側の並びの末尾として受け取る(左の一覧まで持って行った
-  // ときは何も起きない、は今までどおり)
+  // そのままでは「一番下へ入れる」ができない。フロー欄の横幅の中にいる限り、
+  // 下の余白はいちばん外側の並びの末尾として受け取る(左の一覧まで持って
+  // 行ったときは何も起きない)
   if (!target) {
     const top = document.querySelector('#flowbody > .blocks');
     const body = document.getElementById('flowbody');
@@ -395,8 +395,8 @@ function renderProps() {
     const nm = el('input'); nm.value = flowDoc.name; nm.disabled = true;
     const pre = el('input'); pre.value = flowDoc.pre || '';
     // ブロックの欄と同じ扱いにする(未保存の印が立ち、Ctrl+Z で戻せる)。
-    // 以前はここだけ直接代入していたため、書き換えても「保存済み」のまま
-    // 別の手順へ移れてしまい、書いた内容が黙って消えていた
+    // ここだけ直接代入すると、書き換えても「保存済み」のまま別の手順へ
+    // 移れてしまい、書いた内容が黙って消える
     bindInput(pre, () => { flowDoc.pre = pre.value; });
     box.append(field('手順名', nm), field('前提条件(実行前に表示)', pre));
     return;
@@ -698,7 +698,7 @@ window.addEventListener('keydown', e => {
     moveBlock(e.key === 'ArrowUp' ? -1 : 1);
   }
   // ブロックの選択を外す。選ぶと右の欄が「この手順の設定」(手順名・
-  // 前提条件)から切り替わるので、外せないとそこへ戻れなかった
+  // 前提条件)から切り替わるので、外せないとそこへ戻れない
   if (view === 'flow' && e.key === 'Escape' && flowSel
       && !(document.activeElement && document.activeElement.matches(
              'input, select, textarea'))) {
@@ -767,7 +767,7 @@ function renderProcRow(p) {
   } else if (p.error) {
     // 変換できない手順。所要フレーム数が出ないだけでは、健全なものと
     // 見分けが付かない(レーンの手順プルダウンは「(エラー)」と名乗るのに、
-    // 編集画面の一覧だけが黙っていた)
+    // ここが黙っていると編集画面だけ何も言わないことになる)
     const bad = el('span', 'fr err', 'エラー');
     bad.title = p.error;
     nm.append(bad);
@@ -1132,7 +1132,7 @@ document.getElementById('newflow').onclick = async () => {
   await refresh(); loadFlow(name);
 };
 // 手順の複製・改名・削除は一覧の行アイコンから(dupFlow/renFlow/delFlow)
-// 上下移動は Alt+↑/↓(moveBlock)と D&D で行う(ボタンは廃止)
+// 上下移動は Alt+↑/↓(moveBlock)と D&D で行う(専用ボタンは置かない)
 function moveBlock(dir) {
   if (!flowSel) return;
   const r = resolve(flowSel);

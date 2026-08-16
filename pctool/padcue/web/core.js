@@ -181,7 +181,7 @@ function showIn(box, cls, text, closable = true) {
 // 成功の一言を、押したボタンのそばに数秒だけ出して自ら消す。
 // 正常・軽量・自分で押したと分かっている操作(選択肢の同時送出など)は、
 // 消えない知らせの席を作るほどではない——出すたびに下の行がずれる方が邪魔
-//。失敗と警告は従来どおり残す(×で消す)
+//。失敗と警告は残す(×で消す)
 function flashOk(box, text) {
   clearTimeout(box._t);
   box.textContent = text;

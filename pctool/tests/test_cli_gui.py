@@ -169,7 +169,7 @@ def test_gui_logs_resolve_run_start_name(guiserver):
     assert http_post(guiserver + "/api/run",
                      {"name": "サンプル", "loops": 5}).get("ok")
     http_post(guiserver + "/api/stop", {"mode": "immediate"})
-    # ログの回収は装置プールが約1秒周期で行う(P2-1 で非同期化)。少し待つ
+    # ログの回収は装置プールが約1秒周期で非同期に行う。少し待つ
     starts = []
     for _ in range(40):
         entries = http_get(guiserver + "/api/logs")["entries"]
@@ -180,7 +180,7 @@ def test_gui_logs_resolve_run_start_name(guiserver):
     assert starts, [e["kind"] for e in entries]
     assert starts[-1].get("name") == "サンプル", starts[-1]
     assert starts[-1].get("a") == 5, starts[-1]
-    # どの装置の記録かのタグ(2台化 P1)。取り出した瞬間に付けないと、
+    # どの装置の記録かのタグ。取り出した瞬間に付けないと、
     # 装置側は読むと消えるため帰属が永久に分からなくなる
     assert starts[-1].get("dev"), starts[-1]
 

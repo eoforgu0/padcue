@@ -9,9 +9,9 @@
 // 出力として中継する。人が操作するので通信の遅延は問題にならない。
 //
 // 【重要】ビット割り当ては表示順(BUTTONS)ではなく、送信データの
-// ビット順(binfmt.BUTTONS)に一致させること。以前は表示順から作っていた
-// ため、DU が PLUS に、HOME が DU に…とビット 8 以降の全ボタンが
-// 別のボタンとして送られていた(tests/test_web_assets.py が一致を検査)
+// ビット順(binfmt.BUTTONS)に一致させること。表示順から作ると、DU が
+// PLUS に、HOME が DU に…とビット 8 以降の全ボタンが別のボタンとして
+// 送られる(tests/test_web_assets.py が一致を検査)
 const BTN_BITS = ['A','B','X','Y','L','R','ZL','ZR',
                   'PLUS','MINUS','HOME','CAPTURE','LS','RS',
                   'DU','DD','DL','DR'];
@@ -184,8 +184,8 @@ document.querySelectorAll('#padfig .figc').forEach(g => {
 let ptBusy = false;
 // 手動操作の送達エラーは「継続状態」として #ptmsg に直接出す(メッセージ欄
 // #manualmsg と共用しない。保存結果に上書きされて再表示されない事故を防ぐ)。
-// 直れば自動で消える。以前はエラーを一切見ておらず、装置へ届いていないのに
-// 「操作中」の見た目のままになっていた
+// 直れば自動で消える。見ていないと、装置へ届いていないのに「操作中」の
+// 見た目のままになる
 function ptError(text) {
   const box = document.getElementById('ptmsg');
   if (!text) { box.style.display = 'none'; box.textContent = ''; return; }
@@ -237,8 +237,8 @@ document.getElementById('logclear').onclick = async () => {
   // (「表示より状態変化で伝える」)
 };
 // 記録は「開始 → 停止 → 部品として保存」の順。停止するまで保存ボタンは
-// 出さない(以前は停止すると記録が捨てられ、停止してから保存を押すと
-// 「記録がありません」になっていた)
+// 出さない(停止で記録を捨てると、停止してから保存を押したときに
+// 「記録がありません」になる)
 document.getElementById('rec').onclick = async () => {
   const btn = document.getElementById('rec');
   const chip = document.getElementById('recchip');

@@ -45,9 +45,9 @@ static const char *TAG = "ctrl";
 #define T_RESP 0x80
 #define T_ERROR 0xFF
 
-// パケット緩衝の大きさ。以前は理論上の最大(65535)を送受で2本取っていたが、
-// 手順バッファ 96KB と合わせて約 229KB になり、WiFi/USB を足すと内蔵 RAM
-// (約 320KB)に収まらず malloc が失敗して起動できなかった。
+// パケット緩衝の大きさ。理論上の最大(65535)を送受で2本取ると、手順バッファ
+// 96KB と合わせて約 229KB になり、WiFi/USB を足すと内蔵 RAM(約 320KB)に
+// 収まらない(malloc が失敗して起動できない)。
 // 大きな転送(手順の PUT・OTA)はすべて分割して送るので、1パケットは小さくてよい。
 // 8KB = 転送チャンク 4KB + JSON + 余裕
 #define MAX_FRAME 8192
@@ -313,7 +313,7 @@ static int cmd_stop(int sock, cJSON *req) {
     // 実行系のままなら、その場で戻す。supervisor のレベル同期(100ms周期)
     // でも直るが、STOP の応答が返った時点で状態が正しいほうがよい。
     // 「状態は RUNNING なのにエンジンは停止」という固着からの脱出口を
-    // STOP 一発に一本化する(以前は再起動しか手がなかった)
+    // STOP 一発に一本化する(これが無いと再起動しか手が無い)
     if (!app_engine_is_running() && !app_engine_is_awaiting()) {
         app_state_t st = app_state_get();
         if (st == APP_STATE_RUNNING || st == APP_STATE_AWAITING) {
@@ -339,7 +339,7 @@ static int cmd_status(int sock) {
     cJSON_AddNumberToObject(j, "await_gen", app_engine_await_gen());
     // ペアリング・入力モード・手動操作の可観測化(
     // 「ハンドシェイク完全・カウンタ健全なのに本体が入力を無視する」状態
-    // (=コントローラー登録の未完)を外から切り分けられなかった)
+    // (=コントローラー登録の未完)を外から切り分けられるようにする)
     cJSON_AddNumberToObject(j, "pair_reqs", app_usb_pair_reqs());
     cJSON_AddNumberToObject(j, "pair_step", app_usb_pair_step());
     cJSON_AddNumberToObject(j, "input_mode", app_usb_input_mode());
@@ -438,8 +438,8 @@ static int cmd_config(int sock, cJSON *req) {
         return send_frame(sock, T_CONFIG | T_RESP, NULL, NULL, 0);
     }
     // WiFi 設定を NVS へ保存する(次回起動から有効。app_wifi は NVS を最優先で読む)。
-    // ビルド設定(sdkconfig)は作り直しで消えるため、WiFi 設定が
-    // 消えたファームを書き込んで実機がネットワークから消えた。稼働中の実機へ
+    // ビルド設定(sdkconfig)は作り直しで消えるため、WiFi 設定が消えた
+    // ファームを書き込むと実機はネットワークから消える。稼働中の実機へ
     // 無線で保存しておけば、以後どんなビルドを書き込んでも接続は失われない
     if ((strcmp(key->valuestring, "wifi_ssid") == 0
          || strcmp(key->valuestring, "wifi_pass") == 0) && cJSON_IsString(val)) {
@@ -663,8 +663,8 @@ static int s_listen_sock = -1;
 // 見る。来ていれば今の相手を手放して新しい方に譲る(あとから来た方を優先)。
 //
 // 実機は同時に1つしか相手にできないので、これが無いと「先に繋いだ側が
-// 黙っている間、他は一切つながらない」ことになる。無通信の待ち時間を
-// 180 秒に延ばした結果、締め出しが最大3分に伸びてしまった。
+// 黙っている間、他は一切つながらない」ことになる。無通信の待ち時間が
+// 180 秒あるので、締め出しは最大3分に及ぶ。
 // 実際の使い方(操作画面を開いたまま CLI で更新する等)では、あとから
 // 明示的に繋ぎに来た方を使いたいので、譲る方が理にかなう
 static bool someone_else_waiting(void) {
@@ -772,9 +772,9 @@ static void ctrl_task(void *arg) {
             int nodelay = 1;
             setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
             // 応答が止まった PC に制御チャネルを占有させないための保険。
-            // 30 秒は短すぎた: 画面が手順/部品タブにいる間や、ブラウザのタブが
+            // 30 秒では短い: 画面が手順/部品タブにいる間や、ブラウザのタブが
             // 裏に回って setInterval が間引かれる間は状態取得が止まるため、
-            // ふつうに使っていても切断が起きていた。
+            // ふつうに使っていても切断が起きる。
             // PC 側も無通信が続かないよう定期的に叩くようにしたうえで、
             // ここは十分長く取る(死んだ PC は KEEPALIVE でも検出できる)
             struct timeval tv = { .tv_sec = 180, .tv_usec = 0 };

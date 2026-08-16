@@ -20,7 +20,7 @@ from ._harness import (
 
 def run_coupling(c: Checker, page, proj: Project,
                  prompt_value: list, dialogs: list):
-    """上部バー(案C・P3/P4): まとめて開始・自動合流・連動停止・プリセット。"""
+    """上部バー(案C): まとめて開始・自動合流・連動停止・プリセット。"""
     print("[連結(2台をまとめて動かす)]", flush=True)
     c1 = MockDevice(speed=1.0, device_id="mockcp100000")
     c2 = MockDevice(speed=1.0, device_id="mockcp200000")
@@ -86,15 +86,15 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "連結中" not in bar, \
             "バーは連結中にしか存在しない純粋な重複チップが残っている"
         assert "もう一回" not in bar, \
-            "廃止した「もう一回(同じ条件)」ボタンが残っている"
+            "置かないと決めた「もう一回(同じ条件)」ボタンが出ている"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
         # #chint は実測(開始ズレ)だけ。ホットキーの凡例は入切を決める ⚙ にある
-        # ——値の位置に別の話が地続きで並ぶ形をやめた
+        # ——値の位置に別の話が地続きで並ぶ形にはしない
         hint = page.locator("#chint").inner_text()
         assert "F9" not in hint and "F10" not in hint, \
             f"ホットキーの凡例が #chint に残っている: {hint}"
         assert "µs" not in hint and "連動停止が効くのは" not in hint, \
-            f"廃止したはずの教育文が #chint に残っている: {hint}"
+            f"出さないと決めた教育文が #chint に出ている: {hint}"
         page.click("#setbtn")
         page.wait_for_timeout(200)
         legend = page.locator(".sethint").first.inner_text()
@@ -195,7 +195,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_timeout(300)
         page.click("#crun1")
         # 早い 1P が先に駐機 → 青の「相方待ち」(黄や赤ではない)。
-        # 毎秒の待ち文は削った(waitMsg 廃止)ので、チップだけで見る
+        # 毎秒の待ち文は出さない決まりなので、チップだけで見る
         page.wait_for_function(
             "() => {"
             "  const l1 = document.querySelectorAll('#lanes .lane')[0];"
@@ -203,7 +203,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "  return ch && ch.textContent === '相方待ち'; }",
             timeout=10000)
         assert lane_at(page, 0).locator(".lawait .msg.wait").count() == 0, \
-            "廃止したはずの毎秒の相方待ち文が残っている"
+            "出さないと決めた毎秒の相方待ち文が出ている"
         assert lane_at(page, 0).locator(".lawait .msg.warn").count() == 0, \
             "正常な相方待ちに黄色が使われている"
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
@@ -407,7 +407,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
         assert row.locator(".fdev").count() == 2, "装置ごとの行になっていない"
         assert "×" in row.locator(".floops").first.inner_text(), \
             "周回が出ていない"
-        # 名前が縦に潰れない(1文字ずつ折り返す崩れの再発を止める)
+        # 名前が縦に潰れない(1文字ずつ折り返す崩れを止める)
         w = row.locator("b").first.bounding_box()["width"]
         assert w > 40, f"名前の幅が潰れている: {w}px"
         # 使用中だけ「別名で保存」が出る
@@ -492,8 +492,8 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
     def t_formation_save_as():
         """呼び出した内容から、別名で新しいプリセットを作れること。
 
-        以前は上書き保存しか道が無く、呼び出したプリセットを土台に別の
-        組み合わせを残せなかった。
+        上書き保存しか無いと、呼び出したプリセットを土台に別の組み合わせを
+        残せない。
         """
         lane_at(page, 0).locator(".lloops").fill("7")
         page.wait_for_function(

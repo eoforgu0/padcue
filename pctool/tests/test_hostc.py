@@ -52,7 +52,7 @@ end
 """,
     "proc p\npress A 3\nloop 4 {\nwait 10\n}\npress A 3\nwait 10\nend\n",
     # ジャイロ(長さ付き・回しっぱなし)。C エンジンの gx..az 復元も 12 値
-    # 完全一致の対象に載せる(以前はモーションを一度も動かしていなかった)
+    # 完全一致の対象に載せる(モーションを動かさない列だけでは穴が残る)
     "proc p\ngyro 0 2000 0 30\nwait 10\ngyro -500 0 700\nwait 20\n"
     "gyro 0 0 0\nwait 5\nend\n",
     "proc p\nloop 3 {\ngyro 1000 0 0 5\nwait 10\n}\nend\n",
@@ -131,7 +131,7 @@ def test_c_rejects_overflowing_event_count(host_exe, tmp_path):
 
     実機の size_t は 32bit なので、`count * 32` と掛けると count が 2^27 で
     積が回り込んで 0 になる。レコード部が空(50B ちょうど)のデータが検査を
-    通り抜け、直後のループが1億3千万回ぶん確保外を読んでいた。crc の対象は
+    通り抜け、直後のループが1億3千万回ぶん確保外を読む。crc の対象は
     ヘッダだけになるので、値も合わせられる。
 
     この検査自体はホスト(64bit)で走るので、掛け算のままでも通ってしまう
@@ -160,9 +160,9 @@ def test_c_rejects_out_of_range_resume_base(host_exe, tmp_path):
 
     断らないと、最初の送出のアラームが遠い未来に置かれ、装置は RUNNING の
     まま何も出さずに固着する(PUT/COMMIT/RUN は BUSY で断られ、STOP でしか
-    戻れない)。以前は「先頭は手順の自然な開始位置だから検証不要」として
-    index==0 の枝だけ上限検査を飛ばしていた。参照実装は index に関係なく
-    弾くので、両実装の判定を揃えるという意味もある。
+    戻れない)。「先頭は手順の自然な開始位置だから検証不要」として index==0
+    の枝で上限検査を飛ばしてはいけない。参照実装は index に関係なく弾くので、
+    両実装の判定を揃えるという意味もある。
     """
     c = compile_source("proc p\npress A 5\nwait 5\nend\n")
     blob = binfmt.encode(c.name, c.events, c.total_frames)
@@ -184,8 +184,8 @@ def test_c_rejects_zero_loop_count(host_exe, tmp_path):
 
     実行は「1 減らしてから 0 か見る」ので、0 から引くと C 側(uint32)が
     回り込んで約42億周する。Python 側は任意精度なので -1 になって素通り
-    する。両実装の送出列が一致しない唯一の既知の穴だったので、decode の
-    段階で両方が弾くようにした(PC 側は test_binfmt が見ている)。
+    する。この食い違いを残さないよう、decode の段階で両方が弾く
+    (PC 側は test_binfmt が見ている)。
     """
     blob = binfmt.encode("p", [binfmt.SetCnt(0, 0), binfmt.State(0),
                                binfmt.Djnz(0, target=1, advance=3),

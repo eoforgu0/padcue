@@ -54,8 +54,8 @@ _STATIC = {
 def web_asset(name: str) -> str:
     """画面の資産(index.html / app.css / 各 JS)を読む。
 
-    検査もここを通す。以前は資産が gui.py 内の1本の文字列だったため、
-    検査が正規表現でこそぎ取っており、書式を少し変えると黙って空振りした。
+    検査もここを通す。資産が Python の文字列の中にあると、検査は正規表現で
+    こそぎ取ることになり、書式を少し変えるだけで黙って空振りする。
     """
     if name not in {v[0] for v in _STATIC.values()}:
         raise ValueError(f"画面の資産ではありません: {name}")
@@ -152,8 +152,8 @@ class _Handler(BaseHTTPRequestHandler):
             pass   # ブラウザが先に閉じただけ
 
     # ---- 装置プール(接続・収集・キャッシュの唯一の窓口) ----
-    # 接続の張り方・個体ID照合・繋ぎ直しの規則は devicepool.DeviceLink に
-    # 一本化した(2台化 P2-1)。ここは「どの装置へ」を選んで渡すだけ
+    # 接続の張り方・個体ID照合・繋ぎ直しの規則は devicepool.DeviceLink が
+    # 一手に持つ。ここは「どの装置へ」を選んで渡すだけ
 
     @classmethod
     def _pool(cls):
@@ -297,7 +297,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(tl)
         if u.path == "/api/logs":
             # 回収は装置プールの収集係が装置ごとに行い、装置タグ付きで保存
-            # 済み(装置側は読むと消えるため、読み手をプールに一本化した)。
+            # 済み(装置側は読むと消えるので、読み手はプール1つに限る)。
             # ここは溜まっている記録を返すだけ
             self._pool()                     # 収集が動いていることを保証
             n = int(parse_qs(u.query).get("limit", ["1000"])[0])
@@ -428,7 +428,7 @@ class _Handler(BaseHTTPRequestHandler):
             # 1P が落ちている状態で 1P の「探す」を押すと、応答するのは 2P
             # だけになる。ここを見ないと 1P の接続先が 2P の住所に書き換わり、
             # 両方のレーンが同じ実機を掴む(片方の操作がもう片方に出る)。
-            # 追加登録(/api/device_scan)と CLI は同じ危険を既に防いでいた
+            # 追加登録(/api/device_scan)と CLI も同じ形でここを防ぐ
             others = {d.get("id") for i, d in enumerate(devs_all)
                       if i != didx and d.get("id")}
             ordered = sorted(found,
@@ -915,7 +915,7 @@ class _Handler(BaseHTTPRequestHandler):
         """起動直後の1回だけ、最初の収集が終わるまで少し待つ。
 
         待たないと、画面の最初の1秒だけ全装置が「未接続」に見えてしまう
-        (従来はこの経路が同期接続だったので起きなかった)。
+        (収集は非同期なので、起動直後はまだ1度も返ってきていない)。
         """
         end = time.monotonic() + timeout
         while (any(link.at == 0 for link in links)

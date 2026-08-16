@@ -164,11 +164,10 @@ def test_theme_contrast(theme):
 def test_block_colors_are_distinguishable(theme):
     """手順ブロックの帯が互いに見分けられること。
 
-    以前は `比 > 1.12 or 色が違う` で測っていたが、右辺は4色が互いに違う以上
-    つねに真なので、一組も検査していなかった。しかも
-    「比」は明るさの比であって色差ではない——明るさを揃えた色どうしは比が
-    1.0 付近になるので、そのまま or を外しても意味のある検査にはならない。
-    色差(ΔE2000)で測る。
+    `比 > 1.12 or 色が違う` では測れない。右辺は4色が互いに違う以上つねに
+    真なので、一組も検査しないことになる。しかも「比」は明るさの比であって
+    色差ではない——明るさを揃えた色どうしは比が 1.0 付近になるので、or を
+    外しても意味のある検査にはならない。色差(ΔE2000)で測る。
     """
     v = THEMES[theme]
     # 帯として隣り合って並ぶ色。入力=muted / ラベル=accent / 部品=cat-part /
@@ -187,8 +186,8 @@ def test_block_colors_are_distinguishable(theme):
 def test_meaning_colors_are_shared(theme):
     """意味の色(異常・注意・良好とその淡い地)は全系統で同じ値であること。
 
-    系統ごとに書き分けていたため、琥珀ライトで「注意」と「強調」が色差 1.6 まで
-    接近していた。系統が変えてよいのは中立・強調・分類だけ。
+    系統ごとに書き分けると、琥珀ライトで「注意」と「強調」が色差 1.6 まで
+    接近する。系統が変えてよいのは中立・強調・分類だけ。
     """
     base = THEMES["ai-light"] if theme.endswith("-light") else THEMES["ai-dark"]
     for k in ("err", "err-fill", "warn", "ok", "err-bg", "warn-bg", "ok-bg"):
@@ -198,7 +197,7 @@ def test_meaning_colors_are_shared(theme):
 
 @pytest.mark.parametrize("theme", sorted(THEMES))
 def test_meaning_colors_differ_from_accent(theme):
-    """意味の色と強調色が、並べて判別できること(琥珀の色ぶつかりの再発防止)。"""
+    """意味の色と強調色が、並べて判別できること(琥珀での色ぶつかりを止める)。"""
     v = THEMES[theme]
     for k in ("err", "warn", "ok"):
         d = _delta_e(v[k], v["accent"])

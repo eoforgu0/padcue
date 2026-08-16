@@ -62,9 +62,9 @@ def _labels(out: str) -> list[str]:
 def test_status_shows_the_same_rows_through_both_paths(env, capsys):
     """同じ status が、画面経由でも直結でも同じ項目を出すこと。
 
-    以前は経路ごとに表示を書き分けていたため、直結のときだけ出る行が3つ
-    あった(記録落ち・送出失敗・ロールバック)。操作画面を開いているかどうかで
-    計器の見え方が変わるのは、それ自体が不具合。
+    経路ごとに表示を書き分けると、直結のときだけ出る行(記録落ち・送出失敗・
+    ロールバック)が生まれる。操作画面を開いているかどうかで計器の見え方が
+    変わるのは、それ自体が不具合。
     """
     _proj, _dev, tmp = env
     assert cli.cmd_status(_args(tmp)) == 0

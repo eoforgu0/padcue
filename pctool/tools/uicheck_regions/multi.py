@@ -43,9 +43,9 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             "() => document.querySelectorAll('#lanes .lane').length === 2"
             " && document.querySelector('#lanes').style.display !== 'none'",
             timeout=10000)
-        # 旧来の1台専用カード(#conncard/#runcard/#tlcard)は常時レーン化で
-        # HTML から撤去済み(1台と2台は同型。原則 §1 系)なので、ここでは
-        # レーン2本+装置カード2行という新配置そのものだけを見る
+        # 1台専用のカード(#conncard/#runcard/#tlcard)は持たない(1台と2台は
+        # 同型。原則 §1 系)ので、ここではレーン2本+装置カード2行という
+        # 配置そのものだけを見る
         assert page.locator("#manualdevwrap").is_visible(), "手動操作の対象が出ない"
         rows = page.locator("#devlist .devrow")
         assert rows.count() == 2, "装置カードが2行にならない"
@@ -65,7 +65,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
             assert lane_at(page, i).locator(".lproc").count() == 1, "手順の選択が無い"
             assert lane_at(page, i).locator(".lloops").count() == 1, "周回の欄が無い"
             # 小見出しは「タイムライン」だけ。レーン=実行の場所なので、
-            # 「実行」の見出しは面積を食うだけだった
+            # 「実行」の見出しは面積を食うだけになる
             subhs = lane_at(page, i).locator(".subh").all_inner_texts()
             assert subhs == ["タイムライン"], subhs
     c.check("レーンは装置名入りのボタンと実行一式を持つ", t_lane_layout)
@@ -360,7 +360,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
 
     def t_remove_returns_to_solo():
         """2台目を外すと、レーン1本の画面に戻る(1台と2台は同型。原則 §1
-        系。旧来の専用1台画面へ戻る、ではない=レーンは消えず1本残る)。
+        系。専用の1台画面へ戻る、ではない=レーンは消えず1本残る)。
         """
         row = page.locator("#devlist .devrow").nth(1)
         row.locator("button", has_text="登録を解除").click()

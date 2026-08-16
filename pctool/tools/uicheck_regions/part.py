@@ -327,7 +327,7 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
 
         破線=未確定の見た目どおりに動くこと(Excel のフィルハンドルと同じ)。
         広げすぎても、縮めてから離せば縮めた範囲しかコピーされない
-        (以前は動かすそばから確定していた)。
+        (動かすそばから確定してはいけない)。
         """
         col = page.evaluate("() => PART_COLS.indexOf('LX')")
 
@@ -496,8 +496,8 @@ def run_part_keys_and_files(c: Checker, page, proj: Project, prompt_value: list,
     def t_keyboard_insert_delete():
         """Alt+Insert で上に1行挿し、Alt+Delete でその行を削れること。
 
-        末尾への追加は下端の Enter/Tab が持っていたが、途中を足す・削るは
-        マウスでしかできなかった(行末の ＋/× はタブ順から外してあるため)。
+        末尾への追加は下端の Enter/Tab が持つ。途中を足す・削るは、これが
+        無いとマウスでしかできない(行末の ＋/× はタブ順から外してあるため)。
         Excel と同じ Ctrl+Minus は、ブラウザの表示縮小と衝突するので使わない。
         """
         lx = page.evaluate("() => PART_COLS.indexOf('LX')")

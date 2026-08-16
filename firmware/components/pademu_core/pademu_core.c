@@ -150,7 +150,7 @@ pademu_err_t pademu_engine_init_at(pademu_engine_t *e, const pademu_proc_t *p,
         // 固着する(最初の送出のアラームが遠い未来に置かれ、状態は RUNNING の
         // まま。PUT/COMMIT/RUN は BUSY で断られ、STOP でしか戻れない)。
         // 参照実装(engine.py の resume_start_frame)は index に関係なく
-        // 同じ式で弾いており、ここだけ検査が抜けていた
+        // 同じ式で弾く。ここだけ検査を抜かない
         skip = start_base;
     }
     if (skip > p->total_frames) return PADEMU_ERR_TARGET;

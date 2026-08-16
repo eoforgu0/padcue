@@ -230,7 +230,7 @@ function renderPart() {
         //   Esc=グリッドから抜ける(Tab が中で折り返すため、唯一の出口)
         // ↑↓(値の±1)と ←→(桁のカーソル移動)は数値入力の標準のまま触らない。
         // 矢印をセル移動に使うと、↑↓は標準慣習に反し、←→は桁編集を壊した上で
-        // 「縦は矢印・横は別手段」という質の悪い非対称になる(検討の経緯)
+        // 「縦は矢印・横は別手段」という質の悪い非対称になる
         i.onkeydown = (e) => {
           // Ctrl+D: すぐ上の値を取り込んで1つ下へ(表計算の下方向コピー)
           if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
@@ -373,7 +373,7 @@ function renderPart() {
     en.title = 'チェックを外すと、この行を丸ごと飛ばします';
     // 行末の操作(✓/＋/×)はタブ順から外す。Tab は「セルの移動」専用にし、
     // 右端→次行頭の折り返しを成立させるため(表計算でも行操作はタブ対象外)。
-    // マウスでは今までどおり押せる
+    // マウスからは変わらず押せる
     en.tabIndex = -1;
     en.onchange = () => {
       partData.rows[ri][offAt] = en.checked ? '' : '1';
@@ -470,8 +470,8 @@ function appendPartRow() {
 // ドラッグ中は「コピーされた場合のプレビュー」だけを見せる(破線+仮の値)。
 // データ(partData)に書くのはドラッグを終えた時点の範囲に対してのみ。
 // Excel などのフィルハンドルと同じ: 途中で範囲を広げすぎても、縮めてから
-// 離せば縮めた範囲だけが確定する(以前は動かすそばから確定していて、
-// 破線=未確定という見た目と実動作が食い違っていた)
+// 離せば縮めた範囲だけが確定する(動かすそばから確定すると、破線=未確定
+// という見た目と実動作が食い違う)
 function fillPreviewClear() {
   if (!fillDrag || fillDrag.pa == null) return;
   for (let r = fillDrag.pa; r <= fillDrag.pb; r++) {
@@ -579,7 +579,7 @@ document.getElementById('savepart').onclick = async () => {
   const r = await api('/api/part/save', 'POST',
     {name: partName, header, rows});
   // 正常に保存できたことは文で知らせない(バッジが「保存済み」になり一瞬
-  // 光る)。エラーは必ず読ませたいので従来どおり
+  // 光る)。エラーは必ず読ませたいので文で出す
   show('partmsg', 'err', r.error || '');
   if (!r.error) { markPartDirty(false); flashChip('partinfo'); refresh(); }
 };

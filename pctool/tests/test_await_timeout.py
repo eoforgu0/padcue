@@ -1,8 +1,7 @@
 """駐機タイムアウト(AWAIT レコードの timeout_frames / on_timeout)。
 
-flow-format §7 に書かれながら実機・mock とも数えていなかった乖離(計画 §1)を
-P4 で解消した。ここは mock の検査。実機は同じ規則を supervisor(100ms 周期)で
-実装しており、実機2台での確認は runbook の受け入れ手順に含める。
+ここは mock の検査。実機は同じ規則を supervisor(100ms 周期)で実装しており、
+実機2台での確認は runbook の受け入れ手順に含める。
 
 守りたい不変条件:
  - timeout_frames = 0(既定)は無期限に待つ(従来と同じ)

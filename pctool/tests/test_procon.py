@@ -58,9 +58,9 @@ def test_player_lights_callback(device):
 
 
 # 実測: 本体側にこの個体の登録記録が無いと、本体は新規ペアリング
-# (arg[0]=0x01 + 本体 BT MAC(LE))を送ってくる。旧実装は全フェーズに固定
-# 0x03 を返しており、これが完了しないと本体はコントローラー登録を行わず
-# **全ての入力を無視する**(自動・手動とも Switch 無反応の根因)。
+# (arg[0]=0x01 + 本体 BT MAC(LE))を送ってくる。全フェーズに固定 0x03 を
+# 返すとこれが完了せず、本体はコントローラー登録を行わないまま
+# **全ての入力を無視する**(自動・手動とも Switch が無反応になる)。
 # 応答形式は dekuNukem の BT 資料に従う(実機プロコンでの実測は未採取)。
 # 実測時の Switch 2 の要求そのもの(引数先頭 8 バイト)
 PAIR_PHASE1_SWITCH2 = bytes([0x01, 0x9D, 0xF7, 0x6A, 0x6A, 0x30, 0x4C, 0x3C])
@@ -324,9 +324,9 @@ def test_reply_queue_overflow_is_counted(device):
 def test_failed_reply_is_resent_not_lost(device):
     """送出に失敗した応答は消えず、次の周期でもう一度出ること。
 
-    以前は pademu_tx_next() の時点でキューから外して「送った」と数えていたため、
-    tud_hid_report() が false を返すと応答はどこにも残らず、数にも入らないまま
-    消えていた(Switch 側は応答を待ち続ける)。
+    pademu_tx_next() の時点でキューから外して「送った」と数えると、
+    tud_hid_report() が false を返したときに応答はどこにも残らず、数にも
+    入らないまま消える(Switch 側は応答を待ち続ける)。
     """
     run_handshake(device)
     device.tx_out(bytes([0x01, 0x00]) + bytes(8) + bytes([0x04]))

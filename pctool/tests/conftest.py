@@ -1,10 +1,9 @@
 """検査で共有する下ごしらえ(fixture)。
 
 pytest の作法として、検査モジュールは互いに import しない。共有するものは
-**fixture はここ、ただの関数とクラスは helpers.py** に置く。以前は
-test_procon / test_resume / test_wait_branch / test_integration が
-test_hostc から借りていて、gcc ビルドの手順・skip の条件・出力先が
-一箇所で読めなかった。
+**fixture はここ、ただの関数とクラスは helpers.py** に置く。検査モジュール
+どうしで借り合うと、gcc ビルドの手順・skip の条件・出力先が一箇所で
+読めなくなる。
 """
 from __future__ import annotations
 
@@ -23,9 +22,9 @@ CORE = REPO / "firmware" / "components" / "pademu_core"
 def page_assets(base: str) -> str:
     """画面を構成する資産(HTML + CSS + JS)をつなげた文字列。
 
-    資産が gui.py の中の1本の文字列だった頃は、`/` を取れば全部入っていた。
-    実ファイルへ分けたので、「画面のどこかにこの語があること」を見る検査は
-    ここを通す(どのファイルにあるかまで問うなら web_asset を直接読む)。
+    資産は実ファイルへ分かれているので、「画面のどこかにこの語があること」を
+    見る検査はここを通す(どのファイルにあるかまで問うなら web_asset を
+    直接読む)。
     """
     import urllib.request
 

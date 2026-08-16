@@ -7,6 +7,6 @@ idf_component_register(
              json spiffs mbedtls app_update lwip esp_hw_support
 )
 
-# ESP32 固有の層。pademu_core と同じ厳しさで通す。入れてみたところ指摘は
-# 0 件だったので、最初から -Werror にしてある(以後は増やせない)
+# ESP32 固有の層。pademu_core と同じ厳しさで通す。-Werror にしてあるので、
+# 警告を1つでも増やすとビルドが止まる
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

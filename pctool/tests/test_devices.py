@@ -1,4 +1,4 @@
-"""装置台帳(2台化 P1)の検証: 設定移行・個体ID照合・乗り換え禁止・横取り。
+"""装置台帳の検証: 設定移行・個体ID照合・乗り換え禁止・横取り。
 
 守りたい不変条件:
  - 旧設定(host/port 単一)は自動で devices へ移行し、元ファイルの控えが残る
@@ -275,9 +275,9 @@ def test_cli_device_flag_selects_registered_device(tmp_path, capsys):
 def test_cli_never_switches_to_wrong_individual(tmp_path, capsys):
     """登録した個体が居ないとき、別個体へ黙って乗り換えないこと。
 
-    以前は「実際に繋がった最初の1台」へ乗り換えて控え直していた。
-    2台環境では意図しない実機の操作(誤爆)になるため、ID 不一致なら
-    失敗して止まるのが正しい。
+    「実際に繋がった最初の1台」へ乗り換えて控え直すと、2台環境では
+    意図しない実機の操作(誤爆)になる。ID 不一致なら失敗して止まるのが
+    正しい。
     """
     with MockDevice(device_id="dddd00000004") as d:
         p = Project(tmp_path)
