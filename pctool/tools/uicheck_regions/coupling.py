@@ -256,8 +256,9 @@ def run_coupling(c: Checker, page, proj: Project,
             "連結中の選択待ちでレーンが光っている(押す物はバーにある)"
         cls_both = page.locator("#cbotharms").get_attribute("class") or ""
         assert "needs" in cls_both, "選択肢のまわりが光っていない"
-        # リングは押す物から**四方とも同じだけ**離す。丸みが「ボタンの丸み
-        # + 余白」でないと、直線部より角が広く空いて枠が歪んで見える
+        # リングは押す物に密着させる(余白 0)。丸みが「ボタンの丸み + 余白」
+        # でないと同心にならず、直線部より角が広く空いて枠が歪んで見える。
+        # 余白を変えるなら丸みも一緒に動かすこと、を機械で縛る
         geo = page.evaluate(
             "() => {"
             "  const w = document.getElementById('cbotharms');"
