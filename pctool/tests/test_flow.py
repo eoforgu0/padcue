@@ -36,7 +36,7 @@ def make_project(tmp_path, flows: dict, parts: dict):
 
 
 def test_part_with_inheritance(tmp_path):
-    """ユーザー提示の複雑並行入力の例 + 未記載列(ZL)の継続を検証する。"""
+    """複数の入力が重なる部品 + 未記載列(ZL)の継続を検証する。"""
     root = make_project(tmp_path, {
         "main": {"schema": 1, "name": "main", "pre": "テスト", "body": [
             {"type": "label", "text": "開始"},

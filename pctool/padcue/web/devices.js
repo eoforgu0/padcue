@@ -315,10 +315,9 @@ function renderConsoles(devs) {
   const ids = [...new Set([...seen.keys(), ...Object.keys(named)])];
   document.getElementById('consolecard').style.display =
     ids.length ? '' : 'none';
-  // 識別子の並び・名前・接続中装置名が変わったときだけ作り直す(procsKey/
-  // devsKey と同じ作法)。押そうとした✎が毎秒破壊され、命名操作ができ
-  // なくなる不具合の修正(原則 §5「進行中のユーザー操作の足元を作り
-  // 変えない」)
+  // 識別子の並び・名前・接続中装置名が変わったときだけ作り直す(devsKey と
+  // 同じ作法)。毎秒作り直すと、押そうとした✎がその場で消えて命名できない
+  // (原則 §5「進行中のユーザー操作の足元を作り変えない」)
   const key = JSON.stringify(
     ids.map(hi => [hi, named[hi] || '', (seen.get(hi) || []).join(',')]));
   if (key === consKey) return;

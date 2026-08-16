@@ -43,7 +43,7 @@ end
 ```
 
 - ボタン名: A B X Y L R ZL ZR PLUS MINUS HOME CAPTURE LS RS DU DD DL DR(十字キー)
-- モーション(ジャイロ/加速度)は実装済み: DSL
+- モーション(ジャイロ/加速度)の書き方は3つ: DSL の
   `gyro <ひねり> <上下> <水平> [フレーム数]`、フローの gyro ノード、部品の
   GP/GY/GR/AX/AY/AZ 列
 - 外部分岐の待機点は `wait_branch` として実装済み(タイムアウトと待機中の全

@@ -67,29 +67,34 @@ R1(意図した時刻に入力を送出)> 試行錯誤の速さ > 放置、の�
 
 ```c
 // アプリ層が保持する論理状態(生値。手順データ仕様と同一の座標系)
+// pademu_core.h
 typedef struct {
-  uint32_t buttons;            // 論理ビット割り当て(binfmt.BUTTONS と一致)
-  int16_t  lx, ly, rx, ry;     // -2048..+2047(中心0、左/下が負)
-  int16_t  gyro[3], accel[3];  // センサー生値
-  uint32_t seq;                // seqlock
-} pad_state_t;
+    uint32_t buttons;                    // 論理ビット(binfmt.BUTTONS と一致)
+    int16_t lx, ly, rx, ry;              // 符号付き生値(-2048..+2047)
+    int16_t gx, gy, gz, ax, ay, az;      // センサー生値
+} pademu_state_t;
 
+// プロコン方式が本体から受け取る通知。pademu_procon.h
 typedef struct {
-  void (*on_player_lights)(uint8_t bitmap);   // 1P/2P 表示(LED へ)
-  void (*on_rumble)(const uint8_t *raw);      // 将来のイベント検知用(記録のみ)
-  void (*on_host_activity)(void);             // ホスト生存確認
-} transport_callbacks_t;
+    void (*on_player_lights)(void *ctx, uint8_t bitmap);   // 1P/2P 表示(LED へ)
+    void (*on_rumble)(void *ctx, const uint8_t raw[8]);    // 記録のみ
+    void *ctx;
+} pademu_procon_cb_t;
 
-esp_err_t transport_start(transport_mode_t mode /* PROCON | HIDPAD */,
-                          const pad_state_t *state,
-                          const transport_callbacks_t *cb);
+void pademu_procon_init(pademu_procon_t *pc, const uint8_t mac[6],
+                        const pademu_procon_cb_t *cb);
+
+// 入力レポートの組み立て。方式ごとに1本ずつあり、呼び分けるのはアプリ層
+size_t pademu_procon_build_input(pademu_procon_t *pc,
+                                 const pademu_state_t *st, uint8_t *out);
+size_t pademu_hidpad_build_input(const pademu_state_t *st, uint8_t *out);
 ```
 
-- 転送層はレポート生成のたびに `state` を seqlock 読みし、**ワイヤ形式への変換は
+- 転送層はレポート生成のたびに `pademu_state_t` を読み、**ワイヤ形式への変換は
   転送層内**で行う(プロコン: +2048 の12bit詰め+IMU 3サンプル複製/HIDパッド: 8bit
   へ丸め、モーション破棄)
-- モード切替は NVS へ保存して**再起動で反映**(USB 再列挙の複雑さを回避。切替は稀
-  で IDLE 時のみ)
+- どちらの方式で名乗るかは NVS へ保存し、**再起動で反映**する(USB 再列挙の複雑さ
+  を回避。切替は稀で IDLE 時のみ。既定は `PADEMU_TRANSPORT_DEFAULT`)
 
 ## 4. プロコン方式転送層(dekuNukem 文書+mzyy94 実装を典拠)
 

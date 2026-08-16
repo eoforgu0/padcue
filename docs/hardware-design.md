@@ -146,7 +146,7 @@ Switch に接続したまま、以下のような操作が繰り返される。
   る(付録C)
 - Switch は USB 接続のライセンス品コントローラーを認識する。ただし本体設定「Pro
   コントローラーの有線通信」が工場出荷時 OFF であり、ON にしない限り USB 接続の
-  コントローラーは認識されない(2026-07 任天堂公式サポートで確認)。マイコンによる
+  コントローラーは認識されない(任天堂公式サポートの記載による)。マイコンによる
   自動化は、この既存のコントローラー仕様に沿ったデバイスとして動作させる方式が主
   流である
 - **ゲームは 16.7ms(60fps)ごとに入力を読み取る**。これがフレーム数の分解能の下限
@@ -178,11 +178,11 @@ Pro コントローラー方式は Linux 上の実装例とプロトコル技術
 新規のプロトコル調査を要さず実装可能と見込まれる。HID ゲームパッド方式に対する機
 能的上位集合であるため、**Pro コントローラー方式に一本化**する。
 
-**注記(2026-07 調査)**: 表の「Switch 2 実績 可」は、純正 Pro コントローラーの有
-線公式対応およびライセンス品有線コントローラーの動作確認に基づく。**自作互換機が
-Switch 2 の有線 USB で動作した直接の公開報告は確認できていない**。その確認が 9
-HID ゲームパッド方式は自作機での Switch 2 動作報告が複数あるため、保険として
-同じ装置に併載する(7.2 の層分離により転送層だけの差し替えで済む)。
+**注記**: 表の「Switch 2 実績 可」は、純正 Pro コントローラーの有線公式対応および
+ライセンス品有線コントローラーの動作確認に基づく。**自作互換機が Switch 2 の有線
+USB で動作した直接の公開報告は見当たらない**が、この実装では実機で動作を確認済み。
+HID ゲームパッド方式は自作機での Switch 2 動作報告が複数あるため、保険として同じ
+装置に併載する(7.2 の層分離により転送層だけの差し替えで済む)。
 
 ### 6. マイコンの選定
 
@@ -586,7 +586,7 @@ A-1 は「ずれが起こりうる」という話であって「必ず起こる�
 |-------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
 | dekuNukem / Nintendo_Switch_Reverse_Engineering | コントローラープロトコルの技術文書(無線・有線)                                                                                                                                         | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering                  |
 | mzyy94                                          | Linux USB Gadget による Pro コントローラー実装例                                                                                                                                       | https://www.mzyy94.com/blog/2020/03/20/nintendo-switch-pro-controller-usb-gadget/ |
-| sorasen2020 / SwitchControllerESP32             | ESP32-S3 向け Switch 制御ライブラリ(HID ゲームパッド方式のため Pro コン方式の参照には不可。2026-06 アーカイブ済み。ESP32-S3 が bInterval=1 で Switch に認識された実績の傍証として参照) | https://github.com/sorasen2020/SwitchControllerESP32                              |
+| sorasen2020 / SwitchControllerESP32             | ESP32-S3 向け Switch 制御ライブラリ(HID ゲームパッド方式のため Pro コン方式の参照には不可。アーカイブ済み。ESP32-S3 が bInterval=1 で Switch に認識された実績の傍証として参照) | https://github.com/sorasen2020/SwitchControllerESP32                              |
 | raspberrypi / pico-examples                     | RP2350 の OTA 公式実装例                                                                                                                                                               | https://github.com/raspberrypi/pico-examples                                      |
 | ESP-IDF Programming Guide                       | USB Device(TinyUSB)／OTA ／パーティションテーブル                                                                                                                                      | https://docs.espressif.com/                                                       |
 | M5Stack AtomS3 Lite ドキュメント                | ピン配置・仕様                                                                                                                                                                         | https://docs.m5stack.com/en/core/AtomS3%20Lite                                    |

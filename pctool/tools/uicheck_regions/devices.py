@@ -26,7 +26,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         """装置行の詳細に、方式・ファーム・ジャイロなどの診断が全部見えること。
 
         診断は稀なので既定は畳んでおく(表示の引き算)。開けばしきい値で
-        隠さず無条件に全て見える、が本旨(原則 §1 系。新設)。
+        隠さず無条件に全て見える、が本旨(原則 §1 系)。
         """
         row = dev_row(page)
         assert "open" not in (row.get_attribute("class") or ""), \

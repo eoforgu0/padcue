@@ -19,7 +19,7 @@
 #define STICK_CENTER    2048
 #define STICK_MAX_DELTA 2047
 #define STICK_MIN_DELTA 2048
-// IMU 較正: 原点 0・標準感度で固定する(procon-protocol.md §5 の決着)
+// IMU 較正: 原点 0・標準感度で固定する(procon-protocol.md §5 の換算式)
 #define IMU_ACC_SENS    16384
 #define IMU_GYRO_SENS   13371
 
@@ -167,7 +167,7 @@ static size_t handle_subcommand(pademu_procon_t *pc, const uint8_t *data,
         // 再要求が続き、登録未完のまま**全ての入力が無視される**(実測。
         // 自動・手動とも Switch が無反応になる)。
         // 実測で裏が取れているのは「既知本体の記録手渡し」(arg 0x04、
-        // bypass_procon_log.txt:24-25 で実機プロコンと全バイト一致)だけ。
+        // bypass_procon_log.txt:36-37 で実機プロコンと全バイト一致)だけ。
         // フェーズ 01/02 の応答形式は dekuNukem の BT 資料に従う。
         // **実機プロコンでの実測は未実施**(採取したら突き合わせて直す)
         fill_subcmd_header(pc, r, 0x81, sub);

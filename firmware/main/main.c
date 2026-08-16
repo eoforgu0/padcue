@@ -142,7 +142,8 @@ static void supervisor_task(void *arg)
             && app_engine_is_running() && !app_engine_is_awaiting()) {
             app_state_set(APP_STATE_RUNNING);
         }
-        // ペアリング引数の控えがあれば記録する(本体識別子の調査。§0.1:
+        // ペアリング引数の控えがあれば記録する(本体識別子の調査。
+        // specs/coupling.md §1:
         // 同じ本体で毎回同じ値が出るなら、どの Switch に繋がっているかの
         // 自動識別に昇格できる。違えば物理記名で確定)
         {

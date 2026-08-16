@@ -32,7 +32,7 @@ class Coupler:
     """連結の状態・セット実行・自動合流・連動停止の持ち主。"""
 
     POLL_S = 0.5
-    GONE_S = 5.0          # 「約5秒見えない」= 異常(§0.1)
+    GONE_S = 5.0          # 「約5秒見えない」= 異常(coupling.md §1)
     WAIT_FLOOR_S = 30.0   # 合流待ちの超過判定の下限(実測が無い初回)
 
     def __init__(self, project, pool):
@@ -355,7 +355,7 @@ class Coupler:
             self.set_coupling(oneshot_manual=False)
         return {"ok": True, "skew_ms": skew}
 
-    # ---- 人為停止の印(§0.1: 人為停止は連動しない) ----
+    # ---- 人為停止の印(coupling.md §1: 人為停止は連動しない) ----
 
     def note_manual_stop(self, dev_name: str) -> None:
         with self._lock:
@@ -479,7 +479,7 @@ class Coupler:
         links = [by_name[n] for n in run["members"]]
         # 駐機の観測(いつから・どの世代か)。対象は**連結実行のメンバーとして
         # 駐機した装置**だけに限る。人為停止の印(manual)が付いた装置は、
-        # あとで独立にソロ実行を始められる(§0.1)——その駐機まで拾うと、
+        # あとで独立にソロ実行を始められる(coupling.md §1)——その駐機まで拾うと、
         # 「連結実行の相方の駐機」と「無関係なソロ実行の駐機」がたまたま
         # 重なっただけで『2台そろった』と誤認し、無関係なソロ実行へ勝手に
         # SELECT を送ってしまう
@@ -515,7 +515,7 @@ class Coupler:
                     self._save_runstate()
         # 片送りに終わった SELECT の再送(到達順の対応ずれを防ぐ)
         self._retry_selects(links)
-        # 異常の判定(§0.1: 装置の異常報告、または約5秒見えない)
+        # 異常の判定(coupling.md §1: 装置の異常報告、または約5秒見えない)
         anomaly = None
         for link in links:
             name = link.cfg.get("name")
@@ -567,7 +567,7 @@ class Coupler:
             oname = other.cfg.get("name")
             if not busy[oname]:
                 if oname in run["manual"]:
-                    # 人為的に相方を止めた → ソロで自動進行(§0.1 確定)。
+                    # 人為的に相方を止めた → ソロで自動進行(coupling.md §1)。
                     # ワンショットは「合流の腕を人が選ぶ」ための保留で、
                     # 相方のいないソロ進行には合流が無い。保留すると解除
                     # 経路(両方へ同時に選ぶ)も無く恒久停止になるため、
@@ -712,7 +712,7 @@ class Coupler:
                    if link.cfg.get("name") != cause_dev
                    and link.cfg.get("name") not in run["manual"]
                    and (not only or link.cfg.get("name") == only)]
-        # 止め方: 走行中は今の周で(graceful)、駐機中は即時(§2c)
+        # 止め方: 走行中は今の周で(graceful)、駐機中は即時(coupling.md §6)
         modes = {link.cfg.get("name"):
                  ("immediate" if link.status.get("awaiting") else "graceful")
                  for link in targets}

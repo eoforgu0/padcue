@@ -586,7 +586,7 @@ class _Handler(BaseHTTPRequestHandler):
             link.write_through(
                 status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             # 人が押した停止の印。連結実行中でも「人為停止は連動しない」
-            # (§0.1)ため、監視係が異常停止と区別できるように記す。
+            # (coupling.md §1)ため、監視係が異常停止と区別できるように記す。
             # 停止が**実際に届いてから**記す(届く前に印だけ付くと、その
             # 装置の本物の異常が連動停止にならない)。予約の取り消しは
             # 印も取り消す(走り続けるので)

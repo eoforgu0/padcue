@@ -7,7 +7,7 @@ from ._harness import Checker, chip_text, lane, wait_state
 def run_home(c: Checker, page):
     """実行・監視の画面(1台のときのレーン)。"""
     # ================= 実行・監視 =================
-    # 常時レーン化した後の1台系検査。装置台数に関わらず常にレーン
+    # 1台構成の検査。装置台数に関わらず常にレーン
     # (原則 §1 系「1台と2台は同型」)なので、ここは #lanes .lane が1本だけの
     # 状態を前提に、run_multi/run_coupling と同じ流儀(lane()・has_text)で
     # レーンを操作する。接続・診断は装置カードの開閉式詳細(dev_row)側。
