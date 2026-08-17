@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from . import binfmt
 from .discover import HOSTNAME
@@ -120,7 +122,15 @@ class Project:
             self.save_config(cfg)
         return cfg
 
+    # 台帳の読み直し〜書き戻しを直列化する。装置の追加・改名・個体IDの記録は
+    # 画面の複数スレッドから来るので、囲まないと後勝ちで片方の変更が消える
+    _config_write_lock = threading.Lock()
+
     def save_config(self, cfg: dict) -> None:
+        with self._config_write_lock:
+            self._save_config_locked(cfg)
+
+    def _save_config_locked(self, cfg: dict) -> None:
         devs = cfg.get("devices")
         if devs:
             # 旧キー host/port を書き換えた呼び出し元(既存ツール)の意図は
@@ -144,8 +154,13 @@ class Project:
                 devs[0]["port"] = int(cfg["port"])
             cfg["host"] = devs[0]["host"]
             cfg["port"] = devs[0]["port"]
-        self.config_path.write_text(
-            json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 一時ファイル経由で置き換える(coupler の runstate と同じ理由。
+        # 書き込み途中で落ちると台帳が壊れ、全装置の登録をやり直しになる。
+        # 失っても再実行で済む runstate より、こちらのほうが失うものが大きい)
+        tmp = self.config_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
+        tmp.replace(self.config_path)
 
     def update_device(self, cfg: dict, idx: int, **fields) -> None:
         """装置台帳のエントリを更新して保存する(新コードはこれを使う)。
@@ -159,6 +174,12 @@ class Project:
           対象エントリ(IDが記録してあればID、なければ名前、最後は位置で特定)
           にだけ変更を当てる
         """
+        with self._config_write_lock:
+            self._update_device_locked(cfg, idx, **fields)
+
+    def _update_device_locked(self, cfg: dict, idx: int, **fields) -> None:
+        # 読み直し〜書き戻しを一続きにする。ここを囲まないと、2スレッドが
+        # 同じ古い内容を読んでから順に書き、後から書いたほうの変更しか残らない
         target = cfg["devices"][idx]
         target.update(fields)                      # 呼び出し元の観測も揃える
         fresh = cfg
@@ -178,7 +199,7 @@ class Project:
         if hit is devs[0]:
             fresh["host"] = hit["host"]
             fresh["port"] = hit["port"]
-        self.save_config(fresh)
+        self._save_config_locked(fresh)
 
     # ---- ログ(logs.jsonl) ----
     # 実機のログは取り出すと実機側から消える(リングバッファ)。取り出した端から
@@ -472,13 +493,63 @@ class Project:
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         self._formation_path(old).unlink(missing_ok=True)
 
+    # コンパイル結果の使い回し。画面は毎秒 /api/state を叩き、その中で全手順を
+    # build している。素通しだと手順9本の放置運転10時間で 30 万回コンパイルし、
+    # 同じ内容の .bin を同じ回数だけ書き直すことになる。しかもこれは装置操作を
+    # 直列化する lock の内側で走るので、コンパイル時間がボタンの反応に乗る
+    _build_cache: ClassVar[dict] = {}
+    _build_cache_lock = threading.Lock()
+
+    def _sources_signature(self) -> str:
+        """procedures/ と parts/ の中身から作る指紋。
+
+        手順は他の手順や部品を呼ぶので、1本の flow.json だけ見ても変化を
+        捉えられない。中身を読んで鍵にする(数 KB の読み込みで、コンパイルと
+        書き出しよりはるかに安い)。mtime を使わないのは、粒度の粗い
+        ファイルシステムで「変えたのに作り直さない」が起こりうるため。
+        """
+        h = hashlib.blake2b(digest_size=16)
+        for d in (self.root / "procedures", self.root / "parts"):
+            if not d.is_dir():
+                continue
+            for f in sorted(d.iterdir()):
+                if not f.is_file():
+                    continue
+                h.update(f.name.encode("utf-8"))
+                try:
+                    h.update(f.read_bytes())
+                except OSError:
+                    pass
+        return h.hexdigest()
+
+    def _write_artifact(self, name: str, blob: bytes,
+                        only_if_missing: bool = False) -> None:
+        """build/<名前>.bin を置く。
+
+        これを読むコードは無く(転送は手元の blob を使う)、中身を目で
+        確かめるための副産物。だから毎秒書き直す必要は無いが、消えたままにも
+        しない。
+        """
+        out = self.root / "build"
+        dst = out / f"{name}.bin"
+        if only_if_missing and dst.is_file():
+            return
+        out.mkdir(exist_ok=True)
+        dst.write_bytes(blob)
+
     def build(self, name: str) -> BuildResult:
+        sig = (str(self.root), self._sources_signature())
+        with self._build_cache_lock:
+            hit = self._build_cache.get((sig, name))
+        if hit is not None:
+            # 使い回すときも成果物は置いておく(消されていたら書き戻すだけ。
+            # stat 1回で済むので毎秒呼ばれても負担にならない)
+            self._write_artifact(name, hit.blob, only_if_missing=True)
+            return hit
         c = compile_flow(self.root, name)
         blob = binfmt.encode(c.name, c.events, c.total_frames)
-        out = self.root / "build"
-        out.mkdir(exist_ok=True)
-        (out / f"{name}.bin").write_bytes(blob)
-        return BuildResult(
+        self._write_artifact(name, blob)
+        result = BuildResult(
             name=name, blob=blob, total_frames=c.total_frames,
             events=len(c.events),
             warnings=[{"line": w.line, "msg": w.msg} for w in c.warnings],
@@ -487,6 +558,13 @@ class Project:
             resume_points=c.resume_points,
             wait_branch_arms=c.wait_branch_arms,
         )
+        with self._build_cache_lock:
+            # 鍵に指紋が入っているので、古い版は使われない。ただし溜め続けると
+            # 編集のたびに増えるため、指紋が変わったら捨てる
+            self._build_cache = {k: v for k, v in self._build_cache.items()
+                                 if k[0] == sig}
+            self._build_cache[(sig, name)] = result
+        return result
 
     def error_message(self, name: str, e: Exception) -> str:
         """読み込みの失敗を、利用者に見せる文にする(GUI も使う)。"""

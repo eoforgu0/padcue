@@ -90,13 +90,34 @@ def test_hello_rejects_wrong_device():
         srv.close()
 
 
-def test_name_resolution_is_tried_first(monkeypatch):
-    """名前(pademu.local)で解決できるならそれを使うこと。"""
+def test_name_resolution_is_the_fallback(monkeypatch):
+    """探索が空振りしたときだけ、名前(pademu.local)で解決すること。"""
     monkeypatch.setattr(disc, "resolve_by_name", lambda name=disc.HOSTNAME: "10.1.2.3")
     monkeypatch.setattr(disc, "_local_ipv4_addresses", lambda: [])
     found = disc.discover(timeout=0.1)
     assert [f.host for f in found] == ["10.1.2.3"]
     assert "名前" in found[0].how
+
+
+def test_broadcast_answer_is_not_hidden_by_name_resolution(monkeypatch):
+    """探索の「ID付きの応答」が、名前解決の「ID無しの応答」に隠されないこと。
+
+    discover.py が「この順序を入れ替えてはいけない」と書いている不変条件その
+    もの。名前解決を先に入れると、同じホストの枠を ID 無しで埋めてしまい、
+    あとから来る ID 付きの応答が setdefault で捨てられる。そうなると、記録
+    した個体IDで装置を追う側が、同じ装置を見ているのに不一致と判定する。
+
+    上の検査は `_local_ipv4_addresses` を空にするので探索の側が丸ごと動かず、
+    順序を入れ替えても通ってしまう。ここは両方を動かして順序を見る。
+    """
+    monkeypatch.setattr(disc, "_local_ipv4_addresses", lambda: ["192.0.2.5"])
+    monkeypatch.setattr(disc, "_probe_once", lambda b, p, t: [
+        disc.Found(host="10.1.2.3", port=5555, device_id="aabbccddeeff",
+                   fw="0.3.0", how="探索")])
+    monkeypatch.setattr(disc, "resolve_by_name", lambda name=disc.HOSTNAME: "10.1.2.3")
+    found = disc.discover(timeout=0.1)
+    assert [f.device_id for f in found] == ["aabbccddeeff"], \
+        "名前解決の ID 無しの応答が、探索の ID 付きの応答を隠している"
 
 
 def test_default_host_is_the_name():

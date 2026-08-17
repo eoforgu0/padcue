@@ -378,9 +378,6 @@ class _Ctx:
     # 同一フレーム統合(制御イベントを跨いでは統合しない=ブロック境界)
     last_state_index: int | None = None
     last_state_abs: int | None = None
-    # リント用
-    first_emit_abs: int | None = None
-    last_emit_abs: int | None = None
     # 0フレーム打ち消し検出(現在フレーム内でのユーザー操作の追跡)
     chg_abs: int = -1
     chg_set_mask: int = 0
@@ -495,9 +492,6 @@ class _Ctx:
             self.events.append(st)
             self.last_state_index = len(self.events) - 1
             self.last_state_abs = self.abs_frame
-        if self.first_emit_abs is None:
-            self.first_emit_abs = self.abs_frame
-        self.last_emit_abs = self.abs_frame
 
 
 def compile_procs(procs: dict[str, Proc], proc_name: str | None = None) -> Compiled:
@@ -916,8 +910,6 @@ def _compile_loop(
     abs_before = ctx.abs_frame
     base_before = ctx.base
     entry_state = ctx.state_tuple()
-    saved_first = ctx.first_emit_abs
-    ctx.first_emit_abs = None
 
     # ブロックモデル: 本体先頭に「開始時点の全状態」スナップショットを置く。
     # これにより周回の再生は本体の定義のみで決まる(隠れた持ち越しなし)
@@ -959,10 +951,3 @@ def _compile_loop(
     ctx.abs_frame = new_abs
     ctx.base = base_before + n * body_len
 
-    # リント用の位置を実際の最終周回の位置へ補正
-    if ctx.last_emit_abs is not None and ctx.last_emit_abs >= abs_before:
-        ctx.last_emit_abs += (n - 1) * body_len
-    if ctx.first_emit_abs is None:
-        ctx.first_emit_abs = saved_first
-    elif saved_first is not None:
-        ctx.first_emit_abs = saved_first

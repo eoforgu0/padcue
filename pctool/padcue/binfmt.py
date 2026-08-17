@@ -225,7 +225,8 @@ def _encode_record(ev: Event) -> bytes:
         return struct.pack("<IBI23x", 0, OP_JMP, ev.target)
     if isinstance(ev, Await):
         if not (1 <= len(ev.targets) <= MAX_ARMS):
-            raise ValueError(f"待機分岐の腕は 1〜{MAX_ARMS} 本です: {len(ev.targets)}")
+            raise ValueError(
+                f"待機分岐の選択肢は 1〜{MAX_ARMS} 本です: {len(ev.targets)}")
         _check_u32(ev.timeout_frames, "Await.timeout_frames")
         if not (0 <= ev.on_timeout <= len(ev.targets)):
             raise ValueError(f"on_timeout が範囲外です: {ev.on_timeout}")

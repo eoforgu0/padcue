@@ -114,9 +114,14 @@ class Coupler:
         if len(members) < 2:
             return {"error": "連結には装置が2台必要です"}
         order = [link.cfg.get("name") for link in members]
+        # 並べ替えの前に照合する。order.index() は台帳に無い名前が来ると
+        # ValueError を投げ、下の日本語の案内に届かないまま
+        # 「'消えた装置' is not in list」が画面に出る(台帳を別の窓で
+        # 変えたあと、古い画面のまま開始すると起こる)
+        if sorted(p["dev"] for p in plan) != sorted(order):
+            return {"error": "開始の計画が装置台帳と一致しません"
+                             "(台帳が変わったようです。画面を更新してください)"}
         plan = sorted(plan, key=lambda p: order.index(p["dev"]))
-        if [p["dev"] for p in plan] != order:
-            return {"error": "開始の計画が装置台帳と一致しません"}
         warnings: list[str] = []
         builds = {}
         # 1. 事前検査(全員ぶん揃ってから初めて装置に触る)

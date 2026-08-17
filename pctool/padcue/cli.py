@@ -18,7 +18,7 @@
     padcue device list             登録済みの一覧
     padcue device add <IP> [名前]  新しい装置を登録(繋いで個体IDを覚える)
     padcue device rename <旧> <新> 表示名を変える(参照は個体IDなので切れない)
-    padcue device forget <名前>    個体IDの記録だけ消すする(基板の交換用)
+    padcue device forget <名前>    個体IDの記録だけ消す(基板の交換用)
     padcue device remove <名前>    台帳から外す
     padcue device auto             登録した個体のIPを探索で追いかける
     padcue device <IP>             接続先を手で設定する
@@ -155,7 +155,7 @@ def _learn_id(p, cfg: dict, dev: dict, info) -> None:
         return
     if not dev.get("id") and info.device_id:
         p.update_device(cfg, cfg["devices"].index(dev), id=info.device_id)
-        print(f"装置 {dev.get('name')} の個体ID {info.device_id} を記録ました",
+        print(f"装置 {dev.get('name')} の個体ID {info.device_id} を記録しました",
               file=sys.stderr)
 
 
@@ -770,7 +770,10 @@ def cmd_mock(args) -> int:
 
 def cmd_gui(args) -> int:
     from .gui import serve  # cmd_mock と同じ理由で、ここで読み込む
-    return serve(_project(args), args.host or "", args.port, args.open)
+    # グローバルの --host は「装置の IP」なので、画面の待ち受け先には渡さない。
+    # 渡すと `padcue --host <装置のIP> gui` がその IP に bind しようとして
+    # WinError 10049 で開かない(復旧手順が --host を勧めるので当たりやすい)
+    return serve(_project(args), args.port, args.open)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -518,7 +518,7 @@ esp_err_t app_engine_select(uint8_t arm) {
     // その値は必ず 0 で、「測っているつもりで測っていない」コードになる
     pademu_err_t perr = pademu_engine_select(&s_engine, arm, 0);
     if (perr != PADEMU_OK) {
-        // 腕が不正など。占有権(awaiting)を戻さないと、エンジンは選択待ちした
+        // 選択肢が不正など。占有権(awaiting)を戻さないと、エンジンは選択待ちした
         // ままなのに選択待ちが見えなくなり、誰も選べなくなる
         atomic_store_explicit(&s_awaiting, true, memory_order_release);
         return ESP_ERR_INVALID_ARG;
@@ -585,7 +585,7 @@ void app_engine_poll_await_timeout(void) {
                     waited_frames, on_to);
         app_engine_stop(false);   // supervisor が RUN_ABORT として記録する
     } else {
-        // 指定の腕へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)。
+        // 指定の選択肢へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)。
         // 占有権は app_engine_select 自身が取る。取れなければ何もしない
         if (app_engine_select((uint8_t)(on_to - 1)) == ESP_OK) {
             app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,

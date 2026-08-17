@@ -39,9 +39,10 @@ static void on_button_long(void)
     // なるうえ、実行していないときの長押しでも記録されてしまう
 }
 
+// 本体が割り当てたプレイヤー番号(1P/2P)。今は記録も表示もせず、
+// 診断のためログに出すだけ。使うことになったら app_state に持たせる
 static void on_player_lights(uint8_t bitmap)
 {
-    app_state_set_player_lights(bitmap);
     ESP_LOGI(TAG, "プレイヤーLED 通知: 0x%02x", bitmap);
 }
 

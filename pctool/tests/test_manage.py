@@ -134,3 +134,41 @@ def test_order_json_for_parts(tmp_path):
     p = make(tmp_path, {}, {"甲": "F,A\n1,1\n", "乙": "F,A\n1,1\n"})
     p.save_order("parts", ["乙", "甲"])
     assert p.part_names() == ["乙", "甲"]
+
+
+# ---------------- コンパイル結果の使い回し ----------------
+
+
+def test_build_is_cached_but_follows_edits(tmp_path):
+    """同じ内容なら作り直さず、中身が変われば必ず作り直すこと。
+
+    画面は毎秒 /api/state で全手順を build する。素通しだと同じ .bin を
+    何十万回も書き直し、その時間が装置操作の lock の中に乗る。かといって
+    使い回しが編集に追随しないと、直したのに古いまま転送される。
+    """
+    p = make(tmp_path, {"手順": [{"type": "wait", "frames": 30}]})
+    first = p.build("手順")
+    assert p.build("手順") is first, "同じ内容なのに作り直している"
+
+    # 呼び先を書き換えたら追随すること(直接の flow.json だけ見ていると漏れる)
+    p2 = make(tmp_path / "b", {
+        "共通": [{"type": "wait", "frames": 30}],
+        "本体": [{"type": "call", "ref": "共通"}],
+    })
+    before = p2.build("本体").total_frames
+    doc = p2.load_flow_doc("共通")
+    doc["body"][0]["frames"] = 90
+    p2.save_flow_doc("共通", doc)
+    assert p2.build("本体").total_frames == before + 60, \
+        "呼び先を変えたのに、呼び出し側が作り直されていない"
+
+
+def test_build_writes_the_binary_even_when_cached(tmp_path):
+    """使い回しの経路でも build/*.bin が残ること(消されたら書き戻す)。"""
+    p = make(tmp_path, {"手順": [{"type": "wait", "frames": 30}]})
+    r = p.build("手順")
+    bin_path = p.root / "build" / "手順.bin"
+    assert bin_path.read_bytes() == r.blob
+    bin_path.unlink()
+    assert p.build("手順") is r, "使い回しの経路を通っていない"
+    assert bin_path.read_bytes() == r.blob, "成果物が消えたまま戻らない"

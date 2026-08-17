@@ -1,5 +1,11 @@
 name: CI
 
+# 読むだけで足りる。既定に任せると、リポジトリの設定しだいで書き込み権限を
+# 持った GITHUB_TOKEN が公開リポジトリの pull_request(fork からも走る)に
+# 渡りうる
+permissions:
+  contents: read
+
 # 対象は Windows。バッチ(padcue.bat)から起動する道具なので、画面まわりの
 # 検査はその Windows で回す。パッケージ本体は標準ライブラリだけで書かれていて
 # OS に依存しないため、こちらは速い ubuntu で回す(Python 版のマトリクスは

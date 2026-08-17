@@ -81,9 +81,9 @@ def test_out_of_range_values_rejected():
         binfmt.encode("p", [State(0, gx=40000)], 0)
 
     # 待機分岐の選択肢の本数と、時間切れの行き先
-    with pytest.raises(ValueError, match="腕は"):
+    with pytest.raises(ValueError, match="選択肢は"):
         binfmt.encode("p", [Await(0, targets=(1, 2, 3, 4, 5)), End()], 0)
-    with pytest.raises(ValueError, match="腕は"):
+    with pytest.raises(ValueError, match="選択肢は"):
         binfmt.encode("p", [Await(0, targets=()), End()], 0)
     with pytest.raises(ValueError, match="on_timeout"):
         binfmt.encode("p", [Await(0, targets=(1,), on_timeout=9), End()], 0)

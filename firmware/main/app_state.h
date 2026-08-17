@@ -32,9 +32,6 @@ void app_state_fault(uint32_t code);
 // OTA の起動セルフテストを通過したか(HELLO で報告)
 bool app_state_rolled_back(void);
 
-// プレイヤー番号の表示(1P/2P 判別。LED に反映)
-void app_state_set_player_lights(uint8_t bitmap);
-
 #ifdef __cplusplus
 }
 #endif

@@ -83,12 +83,12 @@ typedef struct {
     bool counter_init[PADEMU_MAX_COUNTERS];
     pademu_state_t state;                // 現在の出力状態(ニュートラル初期化)
     bool done;
-    // 待機分岐(全ニュートラルで止まり、PC の選択で腕へ進む)
+    // 待機分岐(全ニュートラルで止まり、PC の選択で選択肢へ進む)
     bool awaiting;
     uint64_t shift;                      // 待機で消費した時間の累計(フレーム)
     uint32_t await_targets[PADEMU_MAX_ARMS];
     uint8_t await_arm_count;
-    uint8_t await_on_timeout;            // 0=中断、1..n=その腕へ
+    uint8_t await_on_timeout;            // 0=中断、1..n=その選択肢へ
     uint32_t await_timeout_frames;       // 0=無期限
 } pademu_engine_t;
 
@@ -118,7 +118,7 @@ uint64_t pademu_engine_total_frames(const pademu_engine_t *e);
 pademu_err_t pademu_engine_step(pademu_engine_t *e, bool *emitted,
                                 uint64_t *abs_frame);
 
-// 待機分岐で止まっているときに腕を選ぶ。
+// 待機分岐で止まっているときに選択肢を選ぶ。
 // waited_frames には実際に待った時間(フレーム)を渡す。以降の予定時刻が
 // そのぶん後ろへずれるので、待った長さは精度に影響しない。
 pademu_err_t pademu_engine_select(pademu_engine_t *e, uint8_t arm,

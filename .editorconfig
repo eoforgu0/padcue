@@ -20,3 +20,7 @@ trim_trailing_whitespace = false
 
 [*.{yml,yaml,json}]
 indent_size = 2
+
+# 画面の資産(pctool/padcue/web/)は2スペース
+[*.{js,css,html}]
+indent_size = 2

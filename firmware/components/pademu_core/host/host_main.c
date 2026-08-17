@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
                                 start_index, start_base);
     if (err != PADEMU_OK) { printf("ERR init %d\n", (int)err); return 3; }
 
-    // 待機分岐の検証用: 環境変数で「選ぶ腕」と「待った時間」を渡す
+    // 待機分岐の検証用: 環境変数で「選ぶ選択肢」と「待った時間」を渡す
     const char *choices = getenv("PADEMU_CHOICES");   // 例 "0,1"
     unsigned long await_frames = 0;
     const char *af = getenv("PADEMU_AWAIT_FRAMES");

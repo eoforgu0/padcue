@@ -949,9 +949,12 @@ def _why(e: Exception, host: str) -> str:
     return f"{host} につながりません({text})"
 
 
-def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
+def serve(project: Project, port: int, open_browser: bool) -> int:
+    # 待ち受けは常にループバック。装置を動かせる API なので、LAN へ出す判断は
+    # 引数ひとつで済ませてよいものではない(SECURITY.md は他サイトからの操作を
+    # Host / Origin で拒むと書いており、その前提がここ)
     _Handler.project = project
-    srv = ThreadingHTTPServer((host or "127.0.0.1", port), _Handler)
+    srv = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     url = f"http://127.0.0.1:{srv.server_port}/"
     # 稼働中の目印(計画 D10)。CLI はこれを見て、装置操作をこのサーバ経由に
     # 切り替える(直結すると毎秒の収集と接続を奪い合うため)

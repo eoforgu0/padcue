@@ -12,7 +12,6 @@
 static const char *TAG = "state";
 
 static _Atomic int s_state;
-static _Atomic uint8_t s_player_lights;
 static bool s_rolled_back;
 
 // 状態 → LED の色(明るさは控えめ。夜間の視認性より眩しさ回避を優先)
@@ -95,7 +94,3 @@ void app_state_fault(uint32_t code) {
 }
 
 bool app_state_rolled_back(void) { return s_rolled_back; }
-
-void app_state_set_player_lights(uint8_t bitmap) {
-    atomic_store(&s_player_lights, bitmap);
-}

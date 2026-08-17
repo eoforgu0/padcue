@@ -205,7 +205,7 @@ pademu_err_t pademu_engine_step(pademu_engine_t *e, bool *emitted,
     uint8_t op = r[4];
     switch (op) {
     case OP_AWAIT: {
-        // 全ニュートラルにして止まる。腕は pademu_engine_select で選ぶ
+        // 全ニュートラルにして止まる。選択肢は pademu_engine_select で選ぶ
         uint64_t raw = e->base + le32(r) + e->shift;
         if (raw < e->skip) return PADEMU_ERR_TIME_REGRESS;
         uint64_t abs = raw - e->skip;

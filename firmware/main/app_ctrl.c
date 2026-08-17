@@ -559,7 +559,7 @@ static int cmd_select(int sock, cJSON *req) {
     cJSON *arm = cJSON_GetObjectItem(req, "arm");
     if (!cJSON_IsNumber(arm) || arm->valuedouble < 0
         || arm->valuedouble >= app_engine_await_arm_count()) {
-        return send_error(sock, "BAD_ARG", "腕の番号が範囲外です");
+        return send_error(sock, "BAD_ARG", "選択肢の番号が範囲外です");
     }
     // 世代照合(任意): gen は「この実行で何回目の選択待ちか」。一致しない SELECT は
     // 別の選択待ちに宛てた古い指示なので拒否する(2台の自動合流で、遅れて届いた
@@ -573,7 +573,7 @@ static int cmd_select(int sock, cJSON *req) {
     }
     esp_err_t err = app_engine_select((uint8_t)arm->valuedouble);
     if (err != ESP_OK) return send_error(sock, "SELECT_FAILED", esp_err_to_name(err));
-    // 選んだ先で即座に終わっていることがある(残りが空の腕など)。その場合に
+    // 選んだ先で即座に終わっていることがある(残りが空の選択肢など)。その場合に
     // 無条件で RUNNING にすると、エンジン停止済みの RUNNING が残る。
     // 実際の状態を確かめてから設定し、動いていなければ supervisor の
     // レベル同期に任せる(結果に応じて IDLE/ERROR へ移る)
