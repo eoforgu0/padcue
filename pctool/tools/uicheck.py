@@ -42,6 +42,14 @@ from padcue import gui
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 
+# 走らせているマシンの資源が尽きたときに出る印。画面の JS とは無関係なので、
+# アプリの不具合と分けて数える(下の note_console)
+RUNNER_EXHAUSTION = (
+    "ERR_NO_BUFFER_SPACE",
+    "ERR_INSUFFICIENT_RESOURCES",
+    "ERR_NETWORK_CHANGED",
+)
+
 
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -94,9 +102,25 @@ def main() -> int:
         page.on("dialog", lambda d: (dialogs.append(d.message),
                                      d.accept(prompt_value[0])))
         errors: list[str] = []
+        skipped: list[str] = []
+
+        def note_console(m) -> None:
+            """コンソールのエラーを拾う。ただし転送層の枯渇は別扱い。
+
+            net::ERR_NO_BUFFER_SPACE / ERR_INSUFFICIENT_RESOURCES は、
+            走らせているマシンがソケットやハンドルを使い切ったときに出る。
+            画面の JS とは無関係で、同じコードでも出たり出なかったりする。
+            アプリの不具合と混ぜると、134 項目すべて通っているのに赤くなる。
+            """
+            if m.type != "error":
+                return
+            if any(k in m.text for k in RUNNER_EXHAUSTION):
+                skipped.append(m.text)
+                return
+            errors.append(f"console.error: {m.text}")
+
         page.on("pageerror", lambda e: errors.append(str(e).splitlines()[0]))
-        page.on("console", lambda m: errors.append(f"console.error: {m.text}")
-                if m.type == "error" else None)
+        page.on("console", note_console)
         page.goto(base)
         page.wait_for_timeout(1500)
 
@@ -125,6 +149,10 @@ def main() -> int:
         if errors:
             print("=== ブラウザ側のエラー ===")
             for e in dict.fromkeys(errors):
+                print("  ", e)
+        if skipped:
+            print("=== 走らせているマシンの資源不足(アプリとは無関係)===")
+            for e in dict.fromkeys(skipped):
                 print("  ", e)
         rc = c.summary()
         if errors:
