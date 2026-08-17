@@ -26,7 +26,7 @@ def proj(tmp_path):
 @pytest.fixture
 def server(proj):
     gui._Handler.project = proj
-    drop_handler_state()          # 前の検査のプール・見張りを持ち込まない
+    drop_handler_state()          # 前の検査のプール・監視を持ち込まない
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:

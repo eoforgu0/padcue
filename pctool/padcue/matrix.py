@@ -20,7 +20,7 @@ _MOTION_COLS = {"GP", "GY", "GR", "AX", "AY", "AZ"}
 # 加速度だけは 0 ではなく重力ぶんが入る(全軸 0 は自由落下。binfmt.REST_A* 参照)
 _BLANK = {"AX": REST_AX, "AY": REST_AY, "AZ": REST_AZ}
 _META_COLS = {"F", "rep", "off"}   # off: その行を丸ごと無かったことにする
-_MAX_ROWS = 100_000  # 展開後の上限(約28分。誤記入の防波堤)
+_MAX_ROWS = 100_000  # 展開後の上限(約28分。誤記入の防止策)
 
 
 class PartError(Exception):

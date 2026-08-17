@@ -149,10 +149,10 @@ static size_t handle_subcommand(pademu_procon_t *pc, const uint8_t *data,
         if (pc->pair_reqs < 255) pc->pair_reqs++;
         uint8_t step = (arglen >= 1) ? arg[0] : 0x00;
         pc->pair_last_step = step;
-        // 本体識別子の控え(pademu_procon.h 参照)は、識別子を運ぶフェーズ
+        // 本体識別子の記録(pademu_procon.h 参照)は、識別子を運ぶフェーズ
         // (0x01=新規ペアリング開始 / 0x04=既知本体の記録手渡し)のときだけ
         // 更新する。0x02/0x03 は引数がフェーズ番号だけ(残りはゼロ埋め)
-        // なので、控えると「02+ゼロ」が識別子として記録され、どの本体でも
+        // なので、記録すると「02+ゼロ」が識別子として記録され、どの本体でも
         // 同じ値になって命名が壊れる
         if (step == 0x01 || step == 0x04) {
             pc->host_info_len = (uint8_t)(arglen > 8 ? 8 : arglen);

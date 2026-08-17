@@ -5,7 +5,7 @@
   だけが連動し、レーンからの開始は独立(このモジュールは関与しない)
 - 人為停止は連動しない。人が片方を止めたら、残りの自動合流はソロで自動進行
 - 異常(装置の異常報告、または約5秒見えない)は連動停止。走行中は今の周で、
-  駐機中(AWAITING)は即時で止める(駐機中は全ニュートラルで停止済み相当、
+  選択待ち中(AWAITING)は即時で止める(選択待ち中は全ニュートラルで停止済み相当、
   区切り停止は SELECT が来ない限り永遠に完了しないため)
 - ブラウザではなくサーバが持つ: 画面を閉じても連動停止・自動合流が続く
 
@@ -43,14 +43,14 @@ class Coupler:
         self._state = self._load_runstate()
         # 監視の作業メモ(再起動で失われてよいもの)
         self._err_since: dict[str, float] = {}     # 装置名 -> 見えなくなった時刻
-        self._parked_since: dict[str, float] = {}  # 装置名 -> 駐機を見つけた時刻
-        self._parked_gen: dict[str, int] = {}      # 装置名 -> その駐機の世代
-        self._late_warned: dict[str, int] = {}     # 装置名 -> 警告済みの駐機世代
-        # 片送りに終わった SELECT の再送待ち: 装置名 -> (世代, 腕)。
+        self._parked_since: dict[str, float] = {}  # 装置名 -> 選択待ちを見つけた時刻
+        self._parked_gen: dict[str, int] = {}      # 装置名 -> その選択待ちの世代
+        self._late_warned: dict[str, int] = {}     # 装置名 -> 警告済みの選択待ち世代
+        # 片側送信に終わった SELECT の再送待ち: 装置名 -> (世代, 腕)。
         # 放置すると到達順の対応が1周ずれる
         self._select_retry: dict[str, tuple] = {}
         self._idle_since: float | None = None     # 全員停止を最初に見た時刻
-        # 見張りが落ちた直近の理由。同じ理由で記録が溢れないよう
+        # 監視が落ちた直近の理由。同じ理由で記録が溢れないよう
         # 「変わったときだけ」書く
         self._watch_error = ""
         self._thread = threading.Thread(target=self._watch_loop, daemon=True)
@@ -96,7 +96,7 @@ class Coupler:
                        encoding="utf-8")
         tmp.replace(path)
 
-    # ---- 盤面の相手(台帳の先頭2台) ----
+    # ---- 割り当ての相手(台帳の先頭2台) ----
 
     def members(self) -> list:
         links = self.pool.links()
@@ -198,7 +198,7 @@ class Coupler:
             except DeviceError as e:
                 # 装置が明確に拒否した(BUSY 等)。応答喪失と違い、走って
                 # いるとしてもそれは別の要求の実行なので取り込まない
-                # (STATUS で確認すると先客の実行を
+                # (STATUS で確認すると先に繋いでいた側の実行を
                 # 自分の連結実行と誤認する)
                 self._rollback_started(started)
                 return {"error": f"{p['dev']} が開始を受け付けませんでした"
@@ -339,8 +339,8 @@ class Coupler:
                 t.append(time.monotonic())
             except (DeviceError, OSError, ConnectionError,
                     TimeoutError) as e:
-                # 片送りのまま放すと到達順の対応がずれる。連結実行中なら
-                # 監視係が同じ世代へ再送する(_retry_selects)
+                # 片側送信のまま放すと到達順の対応がずれる。連結実行中なら
+                # 監視スレッドが同じ世代へ再送する(_retry_selects)
                 if t and gen is not None:
                     self._select_retry[link.cfg.get("name")] = \
                         (int(gen), int(arm))
@@ -398,8 +398,8 @@ class Coupler:
                 self._watch_once()
                 self._watch_error = ""
             except Exception as e:   # noqa: BLE001  監視は死なせない
-                # 死なせないのはよいが、黙って捨てると計器が静かに壊れる。
-                # 連動停止も自動合流もこの見張りが担っているので、毎周期
+                # 死なせないのはよいが、黙って捨てると計測値が静かに壊れる。
+                # 連動停止も自動合流もこの監視が担っているので、毎周期
                 # 落ち続けていても、利用者からは「連動が効かなくなった」と
                 # しか見えず、原因を追う手がかりが残らない。
                 # 同じ理由で溢れないよう、変わったときだけ記録する
@@ -411,7 +411,7 @@ class Coupler:
                     # その呼び出し自身(設定ファイルが壊れている等)だと、
                     # この except の中でもう一度落ちる。except の中から
                     # 送出された例外は同じ try では捕まらないので、
-                    # **見張りごと死ぬ**(連動停止も自動合流も黙って
+                    # **監視ごと死ぬ**(連動停止も自動合流も黙って
                     # 止まり、GUI を再起動するまで戻らない)。
                     # 記録できるときだけ記録する
                     try:
@@ -439,7 +439,7 @@ class Coupler:
             run = json.loads(json.dumps(run)) if run else None
         # 連動停止(今の周で)を指示した相手が、周を終える前に待機分岐へ
         # 着いてしまうと、SELECT が来ない限り「今の周」は永遠に終わらない。
-        # 駐機は全ニュートラルで停止済み相当なので、見つけ次第すぐ止める。
+        # 選択待ちは全ニュートラルで停止済み相当なので、見つけ次第すぐ止める。
         # 対象は**その連動停止で実際に区切り停止を送った装置(pending)**に
         # 限る。記録は次の連結開始まで残るため、無条件だと何日も後の独立
         # (レーン)実行の区切り停止まで即時停止してしまう
@@ -477,10 +477,10 @@ class Coupler:
         if set(run["members"]) != set(by_name):
             return                        # 台帳が変わった(外した等)
         links = [by_name[n] for n in run["members"]]
-        # 駐機の観測(いつから・どの世代か)。対象は**連結実行のメンバーとして
-        # 駐機した装置**だけに限る。人為停止の印(manual)が付いた装置は、
-        # あとで独立にソロ実行を始められる(coupling.md §1)——その駐機まで拾うと、
-        # 「連結実行の相方の駐機」と「無関係なソロ実行の駐機」がたまたま
+        # 選択待ちの観測(いつから・どの世代か)。対象は**連結実行のメンバーとして
+        # 選択待ちした装置**だけに限る。人為停止の印(manual)が付いた装置は、
+        # あとで独立にソロ実行を始められる(coupling.md §1)——その選択待ちまで拾うと、
+        # 「連結実行の相手の選択待ち」と「無関係なソロ実行の選択待ち」がたまたま
         # 重なっただけで『2台そろった』と誤認し、無関係なソロ実行へ勝手に
         # SELECT を送ってしまう
         for link in links:
@@ -495,7 +495,7 @@ class Coupler:
             else:
                 self._parked_gen.pop(name, None)
                 self._parked_since.pop(name, None)
-        # 周回の観測(通算・再開のため常に最新を控える)。以降の分岐が早期
+        # 周回の観測(通算・再開のため常に最新を記録する)。以降の分岐が早期
         # return しても失われないよう、その場で書き戻す
         changed = False
         for link in links:
@@ -513,7 +513,7 @@ class Coupler:
                         and cur.get("started_at") == run.get("started_at"):
                     cur["laps_done"] = run["laps_done"]
                     self._save_runstate()
-        # 片送りに終わった SELECT の再送(到達順の対応ずれを防ぐ)
+        # 片側送信に終わった SELECT の再送(到達順の対応ずれを防ぐ)
         self._retry_selects(links)
         # 異常の判定(coupling.md §1: 装置の異常報告、または約5秒見えない)
         anomaly = None
@@ -530,7 +530,7 @@ class Coupler:
             self._linked_stop(run, links, *anomaly)
             return
         # 一過性の収集エラー(GONE_S 未満)は「見えない」だけで生死不明。
-        # busy 判定に混ぜると、1回のタイムアウトで「完走した」「相方が
+        # busy 判定に混ぜると、1回のタイムアウトで「完走した」「相手が
         # 消えた」と誤認する(数時間の周回では毎周この窓を通る)。
         # 判定は次の周期へ持ち越す(本当の異常なら GONE_S 経過後
         # に上の anomaly が拾う)
@@ -556,7 +556,7 @@ class Coupler:
                 self._finish_run(run, links)
             return
         self._idle_since = None
-        # 片方だけ駐機している場合の扱い
+        # 片方だけ選択待ちしている場合の扱い
         cfgc = self.coupling()
         parked = [link for link in links if self._parked_gen.get(link.cfg.get("name"))
                   is not None]
@@ -567,19 +567,19 @@ class Coupler:
             oname = other.cfg.get("name")
             if not busy[oname]:
                 if oname in run["manual"]:
-                    # 人為的に相方を止めた → ソロで自動進行(coupling.md §1)。
+                    # 人為的に相手を止めた → ソロで自動進行(coupling.md §1)。
                     # ワンショットは「合流の腕を人が選ぶ」ための保留で、
-                    # 相方のいないソロ進行には合流が無い。保留すると解除
+                    # 相手のいないソロ進行には合流が無い。保留すると解除
                     # 経路(両方へ同時に選ぶ)も無く恒久停止になるため、
                     # ソロでは無視して進める
                     if cfgc["auto_join"]:
                         self._auto_select([link], run, cfgc["arm"], solo=True)
                 else:
-                    # 相方は完走した(異常ではない)のに、こちらは合流を
+                    # 相手は完走した(異常ではない)のに、こちらは合流を
                     # 待っている。待っても誰も来ないので止めて知らせる
                     self._linked_stop(
                         run, links, oname,
-                        "相方は完走し、もう合流の相手が来ません", only=name)
+                        "相手は完走し、もう合流の相手が来ません", only=name)
             elif self._wait_exceeded(run, name, now):
                 self._warn_late(run, link, other)
         elif len(parked) == 2 and cfgc["auto_join"] \
@@ -605,9 +605,9 @@ class Coupler:
                         (c.select(arm, gen=gen), c.status())[1]))
                 t.append(time.monotonic())
             except (DeviceError, OSError, ConnectionError, TimeoutError):
-                # 片送りのまま放置すると、次の合流で「相方の n+1 回目」と
+                # 片側送信のまま放置すると、次の合流で「相手の n+1 回目」と
                 # 「自分の n 回目」が対になり、以後1周ずれたまま進む。
-                # 世代を控えて再送に回す(同じ駐機に居る限り送り続ける。
+                # 世代を記録して再送に回す(同じ選択待ちに居る限り送り続ける。
                 # 装置側の世代照合が二重適用を防ぐ)
                 if gen is not None:
                     self._select_retry[name] = (int(gen), int(arm))
@@ -624,7 +624,7 @@ class Coupler:
             formation=run.get("formation", ""))
 
     def _retry_selects(self, links) -> None:
-        """片送りに終わった SELECT の再送。同じ世代の駐機に居る間だけ送る。"""
+        """片側送信に終わった SELECT の再送。同じ世代の選択待ちに居る間だけ送る。"""
         for link in links:
             name = link.cfg.get("name")
             want = self._select_retry.get(name)
@@ -659,8 +659,8 @@ class Coupler:
             cur = self._state.get("run")
             if cur and cur.get("active"):
                 # 「そろって進んだ直後」の緑表示と、ズレの常時表示に使う。
-                # 相方待ち超過の警告は合流できた時点で古い(残すと以後の
-                # 相方待ちがずっと黄色に見える)
+                # 相手待ち超過の警告は合流できた時点で古い(残すと以後の
+                # 相手待ちがずっと黄色に見える)
                 cur["last_join"] = {"at": _now(), "skew_ms": skew_ms,
                                     "auto": auto, "solo": solo}
                 cur.pop("late", None)
@@ -680,7 +680,7 @@ class Coupler:
             return False
         gen = self._parked_gen.get(name)
         if self._late_warned.get(name) == gen:
-            return False                  # この駐機ぶんは警告済み
+            return False                  # この選択待ちぶんは警告済み
         waits = []
         if run.get("formation"):
             with self._lock:
@@ -712,7 +712,7 @@ class Coupler:
                    if link.cfg.get("name") != cause_dev
                    and link.cfg.get("name") not in run["manual"]
                    and (not only or link.cfg.get("name") == only)]
-        # 止め方: 走行中は今の周で(graceful)、駐機中は即時(coupling.md §6)
+        # 止め方: 走行中は今の周で(graceful)、選択待ち中は即時(coupling.md §6)
         modes = {link.cfg.get("name"):
                  ("immediate" if link.status.get("awaiting") else "graceful")
                  for link in targets}
@@ -738,7 +738,7 @@ class Coupler:
             except (DeviceError, OSError, ConnectionError, TimeoutError):
                 pass                      # 見えない相手は止めようがない
             if mode == "graceful":
-                # 周の途中で駐機に着くと止まり切れない。監視の後始末対象
+                # 周の途中で選択待ちに着くと止まり切れない。監視の後始末対象
                 pending.append(name)
             self._log(link, "PC_LINK_STOP", a=0 if mode == "graceful" else 1,
                       why=f"{cause_dev}: {why}")
@@ -789,7 +789,7 @@ class Coupler:
             cur["active"] = False
             cur["ended_at"] = _now()
             # 周回の確定。第一候補は装置の終了ログ(完了周が正確。中断や
-            # 駐機タイムアウトでも正しい)。まだ回収されていなければ、
+            # 選択待ちタイムアウトでも正しい)。まだ回収されていなければ、
             # 計画周回数への切り上げで近似する(実行が監視の周期より速く
             # 終わると走行中の標本化では取りこぼすため。過小よりまし)。
             # 人為停止した装置は観測値のまま(完走していない)

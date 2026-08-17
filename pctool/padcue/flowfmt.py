@@ -127,7 +127,7 @@ def _node_to_stmt(node, file: str, path: str, project: _Project) -> Stmt:
         # 0 または省略: 時間を消費せず、次に変えるまで続く(従来どおり)
         frames = _parse_int(node.get("frames", 0), file, path, "frames",
                             0, 10**9)
-        # sway > 0: ゆらぎ(Switch 側のゼロ点自動較正よけの糖衣)。
+        # sway > 0: ゆらぎ(Switch 側のゼロ点自動較正よけの糖衣構文)。
         # 素の値を sway_interval フレーム続けるたびに、+sway と −sway を
         # sway_period フレームずつ対で入れる(間欠方式)。interval = 0 は
         # 常時 ± 交互。どの形でも合計の回転量は 値×frames に厳密に一致する

@@ -3,7 +3,7 @@
 contextmanager の中で 2 回目の yield をすると、実機が応答を返さない
 (TimeoutError)ときに本来の理由が RuntimeError("generator didn't stop
 after throw()") に化け、端末に例外の山が出る。接続管理は
-devicepool.DeviceLink が一手に持つが、守るべき規則はどの経路でも同じ:
+devicepool.DeviceLink が一元的に持つが、守るべき規則はどの経路でも同じ:
  - **やり直すのは「送り出す前に切れていた」と分かるときだけ**(NotSentError)。
    装置が受け取った可能性がある切れ方でやり直すと、実行や転送が二重に効く
  - TimeoutError も同じ理由で再送しない。理由はそのまま伝える
@@ -92,7 +92,7 @@ def test_disconnect_before_sending_is_retried_once(link):
 def test_disconnect_after_sending_is_not_retried(link):
     """送ったあとに切れた場合は、やり直さずに理由を伝えること。
 
-    実機は同時1接続・後着優先なので、相方の接続に横取りされて
+    実機は同時1接続・後着優先なので、相手の接続に横取りされて
     「送った直後に切れる」のは普通に起きる。ここで RUN を送り直すと
     BUSY で拒まれ、呼び出し元は「拒否された」と受け取って、実際には
     走っている装置を監視の外に置いてしまう。

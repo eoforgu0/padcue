@@ -1,4 +1,4 @@
-"""操作画面の入口の門番。
+"""操作画面の入口のアクセス制御。
 
 127.0.0.1 で待つだけでは足りない。利用者が別のタブで開いた任意の Web ページ
 から fetch を投げられ、同一生成元規則で応答は読めなくても **副作用は起きる**
@@ -54,7 +54,7 @@ def _send(base, path, *, method="POST", headers=None, body=b"{}"):
 
 
 def test_own_page_is_allowed(base):
-    """自分の画面からの操作は通ること(門番が邪魔をしない)。"""
+    """自分の画面からの操作は通ること(アクセス制御が邪魔をしない)。"""
     host = base.removeprefix("http://")
     code, body = _send(base, "/api/logs/clear", headers={
         "Content-Type": "application/json", "Origin": base, "Host": host})

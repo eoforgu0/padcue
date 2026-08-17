@@ -2,7 +2,7 @@
 #
 # blank_issues_enabled は true のままにする。SECURITY.md が「Security タブが
 # 使えない場合は issue に連絡先だけ書いてください」と案内しているので、空の
-# issue を塞ぐとその逃げ道と矛盾する。テンプレートは「うまく動かない」1つだけで、
+# issue を塞ぐとその代替手段と矛盾する。テンプレートは「うまく動かない」1つだけで、
 # 質問や提案はそこに当てはまらない。
 blank_issues_enabled: true
 

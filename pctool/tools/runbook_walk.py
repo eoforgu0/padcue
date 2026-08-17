@@ -86,8 +86,8 @@ def main():
 
     gui._Handler.project = proj
     gui._Handler.recorder = None
-    # 前回の装置プールが残っていたら閉じる(接続は _Handler.pool が一手に
-    # 持つ。プロジェクト差し替え時の作法は uicheck と同じ)
+    # 前回の装置プールが残っていたら閉じる(接続は _Handler.pool が一元的に
+    # 持つ。プロジェクト差し替え時のやり方は uicheck と同じ)
     if gui._Handler.pool is not None:
         gui._Handler.pool.close()
         gui._Handler.pool = None

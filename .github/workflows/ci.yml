@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: "3.10"
 
-      # ブラウザは playwright が取ってくる(Windows なので OS 側の追加は不要)。
+      # ブラウザは playwright が用意する(Windows なので OS 側の追加は不要)。
       # 依存は pc ジョブと同じく CONTRIBUTING の手順で入れる
       # 1ステップに並べない。pwsh は**最後のコマンドの終了コードだけ**を見るので、
       # pip が失敗しても playwright が成功すればステップは緑になり、次の検査が

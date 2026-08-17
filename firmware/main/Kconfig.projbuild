@@ -21,7 +21,7 @@ choice PADEMU_TRANSPORT_DEFAULT
     prompt "起動時の転送層モード(NVS 未設定時)"
     default PADEMU_TRANSPORT_PROCON
     config PADEMU_TRANSPORT_PROCON
-        bool "Pro コントローラー方式(本命・ジャイロ可)"
+        bool "Pro コントローラー方式(中核・ジャイロ可)"
     config PADEMU_TRANSPORT_HIDPAD
         bool "HID ゲームパッド方式(保険・ジャイロ不可)"
 endchoice

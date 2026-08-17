@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-// ---- プロコン方式(本命)----
+// ---- プロコン方式(中核)----
 #define PADEMU_PROCON_VID 0x057E
 #define PADEMU_PROCON_PID 0x2009
 #define PADEMU_PROCON_HID_DESC_LEN 203

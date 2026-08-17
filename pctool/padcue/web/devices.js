@@ -6,8 +6,8 @@
 
 // ============ 装置の台帳(登録・本体の確認・名前変更) ============
 // 丸印は「その装置が使える状態か」だけを言う。実行中・選択待ちといった
-// 生きた実行状態は運転席(レーン)の仕事で、ここには並べない(原則 §1 系。
-// 選択待ちでここも黄にすると、格納庫が運転席と二重になる)。
+// 生きた実行状態は操作領域(レーン)の仕事で、ここには並べない(原則 §1 系。
+// 選択待ちでここも黄にすると、管理領域が操作領域と二重になる)。
 // つながっていないだけ = 灰(2台目を外して1台で回すのは正常な使い方で、
 // 異常ではない)。赤は、この装置が異常を報告していて対処が要るときだけ
 function devDot(d) {
@@ -94,7 +94,7 @@ function buildDevRow(d) {
   nameWrap.append(row.nameEl, row.idEl);
   card.append(nameWrap);
   const rops = el('span', 'rowops');
-  // 名前の変更は手順・部品の一覧と同じ作法(行右端の ✎)
+  // 名前の変更は手順・部品の一覧と同じ形(行右端の ✎)
   rops.append(rowIcon('pencil', 'この装置の名前を変える', false, async () => {
     const nv = prompt(`「${row.name}」の新しい名前`, row.name);
     if (nv == null || nv === row.name) return;
@@ -264,7 +264,7 @@ function renderDevices() {
   devaddBtn.disabled = multi;
   devaddBtn.title = multi ? 'いまは2台までです(3台以上は未検証)'
     : 'LAN から装置を探して、まだ登録していないものを登録します';
-  // ログの絞り込みの選択肢は、台帳の顔ぶれが変わったときだけ作り直す
+  // ログの絞り込みの選択肢は、台帳の中身が変わったときだけ作り直す
   // (毎秒作り直すと、開いているドロップダウンが閉じる)
   const key = JSON.stringify(devs.map(d => [d.name, d.id]));
   if (key !== devsKey) {
@@ -316,7 +316,7 @@ function renderConsoles(devs) {
   document.getElementById('consolecard').style.display =
     ids.length ? '' : 'none';
   // 識別子の並び・名前・接続中装置名が変わったときだけ作り直す(devsKey と
-  // 同じ作法)。毎秒作り直すと、押そうとした✎がその場で消えて命名できない
+  // 同じやり方)。毎秒作り直すと、押そうとした✎がその場で消えて命名できない
   // (原則 §5「進行中のユーザー操作の足元を作り変えない」)
   const key = JSON.stringify(
     ids.map(hi => [hi, named[hi] || '', (seen.get(hi) || []).join(',')]));
@@ -340,7 +340,7 @@ function renderConsoles(devs) {
       show('consolemsg', r.error ? 'err' : '', r.error || '');
       refresh();
     }));
-    // 装置の行と同じ作法: 名前の右にこの本体の ID、下段は繋がっている相手。
+    // 装置の行と同じ形: 名前の右にこの本体の ID、下段は繋がっている相手。
     // 名前を付けていない本体は consoleJa が「本体 4C3C」と ID 由来の仮名を
     // 返すので、ここでは総称にする(同じ4桁が2度並ぶのを避ける)
     const nameWrap = el('div', 'pname');
@@ -567,7 +567,7 @@ function armRow(d, dev, errBox) {
   for (let i = 0; i < (d.await_arms || names.length); i++) {
     const label = (names[i] || `選択肢${i + 1}`) + (dev ? `(${dev} へ)` : '');
     // 「いま人を待っている」ことはレーンの外周のリング(.lane.needs)が
-    // 言うので、ボタン自身は他の primary と同じ姿にする(原則 §5)
+    // 言うので、ボタン自身は他の primary と同じ見た目にする(原則 §5)
     const b = el('button', 'primary', label);
     b.onclick = async () => {
       const r = await api('/api/select', 'POST', {arm: i, dev});

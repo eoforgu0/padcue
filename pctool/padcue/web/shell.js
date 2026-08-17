@@ -31,7 +31,7 @@ window.addEventListener('beforeunload', e => {
 });
 
 // タブの切り替え。ボタンからも、画面の中の導線(部品ブロック→その部品)
-// からも呼ぶ。未保存の確認はここが持つ(どの入口から来ても同じ作法)
+// からも呼ぶ。未保存の確認はここが持つ(どの入口から来ても同じ扱い)
 function gotoView(name) {
   const t = document.querySelector(`.tab[data-view="${name}"]`);
   if (t) t.click();
@@ -250,8 +250,8 @@ function onNotify(kind) {
 }
 
 // ============ キーボードのショートカット ============
-// F9/F10 は画面を見ずに打てるのが取り柄だが、そのぶん他のソフトの割り当てと
-// 取り違えて誤爆しうる。**既定では効かせず**、⚙ で入にした人にだけ効かせる
+// F9/F10 は画面を見ずに打てるのが利点だが、そのぶん他のソフトの割り当てと
+// 取り違えて誤操作しうる。**既定では効かせず**、⚙ で入にした人にだけ効かせる
 let hotkeys = {on: false};
 try {
   Object.assign(hotkeys,

@@ -133,7 +133,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         assert lane_chip(page, 0) == "実行中", "2P を止めたら 1P まで止まった"
         lane_at(page, 0).locator("button", has_text="今すぐ止める").click()
         wait_lane_state(page, 0, "待機中")
-    c.check("今すぐ止めるは押したレーンだけ(相方は継続)", t_stop_2p_keeps_1p)
+    c.check("今すぐ止めるは押したレーンだけ(相手は継続)", t_stop_2p_keeps_1p)
 
     def t_wait_branch_in_lane():
         lane_at(page, 1).locator(".lproc").select_option("選んで進む")
@@ -286,7 +286,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         # フェーズ番号(01)と末尾のフェーズ依存バイト(3c)は入らない
         assert "ID 5301" in text(page, "#consolelist"), \
             text(page, "#consolelist")
-        # ID は名前の右(装置の行と同じ作法)。フル識別子は title に
+        # ID は名前の右(装置の行と同じ形)。フル識別子は title に
         idspan = page.locator("#consolelist .rowid").first
         assert idspan.get_attribute("title") == "00005e005301", \
             "フル識別子が title に無い"
@@ -325,7 +325,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         row2 = page.locator("#consolelist .devrow", has_text="ID 22BB")
         prompt_value[0] = "1台目本体"
         row1.locator(".rowops button").click()
-        # 相方の✎を、間を置かずに続けて押す(壊れていれば取れない/反映されない)
+        # 相手の✎を、間を置かずに続けて押す(壊れていれば取れない/反映されない)
         prompt_value[0] = "2台目本体"
         row2.locator(".rowops button").click()
         page.wait_for_function(
@@ -355,7 +355,7 @@ def run_multi(c: Checker, page, proj: Project, d1: MockDevice,
         assert lane_chip(page, 0) == "待機中", "2P の未接続が 1P に波及"
         assert lane_at(page, 0).locator("button", has_text="1回実行") \
             .is_enabled(), "2P 未接続で 1P の操作まで塞がった"
-    c.check("未接続になるのは片方のレーンだけで、相方は無傷",
+    c.check("未接続になるのは片方のレーンだけで、相手は無傷",
             t_unreachable_lane_isolated)
 
     def t_remove_returns_to_solo():

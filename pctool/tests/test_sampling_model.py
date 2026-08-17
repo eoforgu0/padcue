@@ -46,7 +46,7 @@ def sweep(n_frames: int, delay_ratio: float, steps: int = 60):
     return lo, hi
 
 
-# bInterval=1ms 相当(本命) / 8ms 相当(保険モード)
+# bInterval=1ms 相当(中核) / 8ms 相当(保険モード)
 REAL_DELAYS = [0.06, 0.48]
 
 

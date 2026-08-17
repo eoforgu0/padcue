@@ -1,7 +1,7 @@
 """装置台帳の検証: 設定移行・個体ID照合・乗り換え禁止・横取り。
 
 守りたい不変条件:
- - 旧設定(host/port 単一)は自動で devices へ移行し、元ファイルの控えが残る
+ - 旧設定(host/port 単一)は自動で devices へ移行し、元ファイルの記録が残る
  - 接続は登録した個体ID(MAC)と照合され、別個体は絶対に操作されない
  - 接続不調時の探索は「同じ個体」への追跡のみ(黙って別の1台へ乗り換えない)
  - mock は実機と同じ「後着優先の横取り」をする(2台化の故障モードを再現できる)
@@ -27,7 +27,7 @@ def test_old_config_migrates_to_devices(tmp_path):
                                "host": "10.0.0.9", "port": 5556}]
     # 旧キーは1台目の写しとして残る(移行期間中の旧ツールが読める)
     assert cfg["host"] == "10.0.0.9" and cfg["port"] == 5556
-    # 元ファイルの控えが残る(事故時に手で戻せる)
+    # 元ファイルの記録が残る(事故時に手で戻せる)
     assert (tmp_path / "padcue.json.bak").is_file()
 
 
@@ -56,7 +56,7 @@ def test_update_device_mirrors_legacy_keys(tmp_path):
 # ---- 個体ID照合 ----
 
 def test_connect_verified_rejects_wrong_individual():
-    """登録と違う個体には絶対に繋がせない(誤爆防止の核)。"""
+    """登録と違う個体には絶対に繋がせない(誤操作防止の核)。"""
     with MockDevice(device_id="aaaa00000001") as d:
         dev = {"id": "bbbb00000002", "name": "2P",
                "host": "127.0.0.1", "port": d.port}
@@ -96,7 +96,7 @@ def test_two_mocks_have_distinct_identities():
 # ---- 後着優先の横取り(実機と同じ) ----
 
 def test_mock_steals_connection_like_real_firmware():
-    """先客が1秒以上黙っていると、後から来た接続が優先されること。"""
+    """先に繋いでいた側が1秒以上黙っていると、後から来た接続が優先されること。"""
     with MockDevice(device_id="aaaa00000001") as d:
         c1 = DeviceClient("127.0.0.1", d.port, timeout=3.0)
         c1.connect()
@@ -105,7 +105,7 @@ def test_mock_steals_connection_like_real_firmware():
         c2.connect()                          # 後着が奪う
         assert c2.status()["state"] == "IDLE"
         with pytest.raises((ConnectionError, OSError)):
-            c1.status()                       # 先客は手放されている
+            c1.status()                       # 先に繋いでいた側は手放されている
         c2.close()
         c1.close()
 
@@ -150,24 +150,24 @@ def _wait_awaiting(c):
 def test_stale_select_is_rejected(tmp_path):
     """古い世代を指した SELECT は拒否され、正しい世代は通ること。
 
-    実機は周回のたびに待機分岐で毎回駐機する(mock も同じ)。世代は装置の
-    通し番号で、2周目の駐機に対して1周目宛ての選択(遅れて届いた自動合流の
-    再送など)が通らないこと、が本命のケース。
+    実機は周回のたびに待機分岐で毎回選択待ちする(mock も同じ)。世代は装置の
+    通し番号で、2周目の選択待ちに対して1周目宛ての選択(遅れて届いた自動合流の
+    再送など)が通らないこと、が中心のケース。
     """
     with MockDevice(speed=2000.0, device_id="aaaa00000001") as d:
         c = DeviceClient("127.0.0.1", d.port)
         c.connect()
         r = _push_wait_flow(tmp_path, c)
-        c.run(r.name, proc_hash(r.blob), loop_n=2)   # 2周 = 駐機も2回
+        c.run(r.name, proc_hash(r.blob), loop_n=2)   # 2周 = 選択待ちも2回
         st = _wait_awaiting(c)
         assert st.get("awaiting") is True
         g1 = st.get("await_gen")
         assert g1 == 1
         with pytest.raises(DeviceError) as e:
-            c.select(0, gen=0)               # 過去(存在しない駐機)宛て
+            c.select(0, gen=0)               # 過去(存在しない選択待ち)宛て
         assert e.value.code == "STALE_SELECT"
         c.select(0, gen=g1)                   # 正しい世代は通る
-        st = _wait_awaiting(c)                # 2周目の駐機
+        st = _wait_awaiting(c)                # 2周目の選択待ち
         assert st.get("awaiting") is True
         assert st.get("await_gen") == 2
         with pytest.raises(DeviceError) as e:
@@ -181,8 +181,8 @@ def test_stale_select_is_rejected(tmp_path):
 def test_await_gen_is_monotonic_across_runs(tmp_path):
     """世代は実行をまたいでも増え続けること。
 
-    実行ごとに 0 へ戻すと「前の実行の駐機1回目」宛ての遅れた SELECT が、
-    「新しい実行の駐機1回目」と偶然一致して通ってしまう。
+    実行ごとに 0 へ戻すと「前の実行の選択待ち1回目」宛ての遅れた SELECT が、
+    「新しい実行の選択待ち1回目」と偶然一致して通ってしまう。
     """
     with MockDevice(speed=2000.0, device_id="aaaa00000001") as d:
         c = DeviceClient("127.0.0.1", d.port)
@@ -275,8 +275,8 @@ def test_cli_device_flag_selects_registered_device(tmp_path, capsys):
 def test_cli_never_switches_to_wrong_individual(tmp_path, capsys):
     """登録した個体が居ないとき、別個体へ黙って乗り換えないこと。
 
-    「実際に繋がった最初の1台」へ乗り換えて控え直すと、2台環境では
-    意図しない実機の操作(誤爆)になる。ID 不一致なら失敗して止まるのが
+    「実際に繋がった最初の1台」へ乗り換えて記録し直すと、2台環境では
+    意図しない実機の操作(誤操作)になる。ID 不一致なら失敗して止まるのが
     正しい。
     """
     with MockDevice(device_id="dddd00000004") as d:
@@ -287,17 +287,17 @@ def test_cli_never_switches_to_wrong_individual(tmp_path, capsys):
                         host="127.0.0.1", port=d.port)
         with pytest.raises(SystemExit):
             _cli(tmp_path, "status")
-        # 控えが書き換わっていない(乗り換えていない)こと
+        # 記録が書き換わっていない(乗り換えていない)こと
         cfg = p.load_config()
         assert cfg["devices"][0]["id"] == "eeee00000005"
 
 
 def test_mock_is_refused_while_real_id_is_registered(tmp_path):
-    """実機のIDを控えたまま mock に繋がると、黙って操作せず止まること。
+    """実機のIDを記録したまま mock に繋がると、黙って操作せず止まること。
 
     練習の設定(host=127.0.0.1)が残ったまま実機セッションを始めた場合、
     mock 上で実行が「成功」して実機は無反応、という偽成功が最悪の事故。
-    照合で確実に止め、練習への正しい切替(ID控えの解除)を案内する。
+    照合で確実に止め、練習への正しい切替(ID記録の解除)を案内する。
     """
     with MockDevice() as d:                  # 既定 id = mock00000000
         dev = {"id": "00005e005311", "name": "1P",
@@ -309,7 +309,7 @@ def test_mock_is_refused_while_real_id_is_registered(tmp_path):
 
 
 def test_device_command_switches_to_mock_by_clearing_id(tmp_path, capsys):
-    """practice への明示切替(device 127.0.0.1)はIDの控えを解除して通すこと。
+    """practice への明示切替(device 127.0.0.1)は ID の記録を解除して通すこと。
 
     padcue-練習.bat がこのコマンドを使う。解除は明示操作のときだけで、
     探索が勝手に mock を採用してIDを消すことはない。
@@ -322,7 +322,7 @@ def test_device_command_switches_to_mock_by_clearing_id(tmp_path, capsys):
         out = capsys.readouterr().out
         assert "模擬" in out and "解除" in out
         cfg = p.load_config()
-        assert cfg["devices"][0]["id"] == ""       # 控えは解除
+        assert cfg["devices"][0]["id"] == ""       # 記録は解除
         assert cfg["devices"][0]["host"] == "127.0.0.1"
         # 以後は繋がる(ID未学習+mock は許可)。mock のIDは学習しない
         c, info = connect_verified(cfg["devices"][0])
@@ -334,7 +334,7 @@ def test_device_command_switches_to_mock_by_clearing_id(tmp_path, capsys):
 
 
 def test_cli_device_forget_and_remove(tmp_path, capsys):
-    """装置交換の正規手順: forget でID控え解除、remove で台帳から外す。"""
+    """装置交換の正規手順: forget でID記録の解除、remove で台帳から外す。"""
     with MockDevice(device_id="cccc00000003") as d:
         p = Project(tmp_path)
         cfg = p.load_config()
@@ -367,7 +367,7 @@ def test_update_device_does_not_clobber_other_writers(tmp_path):
     """古い cfg を持ったままの update_device が、他所の変更を消さないこと。
 
     例: GUI が「探す」の走査中(古い cfg を保持)に、別端末で device add した
-    2P の登録が、走査後の host 控え直しで消える事故。
+    2P の登録が、走査後の host 記録し直しで消える事故。
     """
     p = Project(tmp_path)
     stale = p.load_config()                  # 古いスナップショット
@@ -376,7 +376,7 @@ def test_update_device_does_not_clobber_other_writers(tmp_path):
     cfg2["devices"].append({"id": "ffff00000006", "name": "2P",
                             "host": "10.0.0.7", "port": 5555})
     p.save_config(cfg2)
-    # 古い cfg のまま 1P の host を控え直す
+    # 古い cfg のまま 1P の host を記録し直す
     p.update_device(stale, 0, host="10.0.0.99")
     cfg = p.load_config()
     assert cfg["devices"][0]["host"] == "10.0.0.99"     # 変更は効く

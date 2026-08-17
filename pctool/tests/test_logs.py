@@ -131,7 +131,7 @@ def test_log_kinds_are_known_to_the_gui():
     assert m, "LOG_JA が見つかりません"
     ja = set(re.findall(r"^\s{2}([A-Z_]+):", m.group(1), re.M))
     # 種別はファームウェアが増やす。ここに書き写すと、増えた種別が
-    # 「書き写した表にも無い」ので黙って検査を素通りする。
+    # 「書き写した表にも無い」ので黙って検査を読み飛ばしする。
     # 正本(app_log.c の KIND_NAMES)から読む
     from tests.conftest import REPO
     src = (REPO / "firmware" / "main" / "app_log.c").read_text(encoding="utf-8")
@@ -250,7 +250,7 @@ def test_stop_cancel_revokes_graceful(dev):
     待って running を見るだけだと、境界に届く前を見ているに過ぎない
     (200倍速では 32 フレームの手順が1周 3ms 弱)。逆に予約と取り消しの
     隙間に境界が来ると仕様どおり本当に停止するため、そのまま書くと負荷しだいで
-    落ちる検査になる。周の頭に合わせてから予約し、次の境界を跨ぐまで見張る。
+    落ちる検査になる。周の頭に合わせてから予約し、次の境界を跨ぐまで監視する。
     """
     c = _client(dev)
     # 1周を長めに取る(200倍速で約 0.5 秒)。予約と取り消しの隙間に周回境界が

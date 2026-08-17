@@ -49,7 +49,7 @@ def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
     c.check("コントローラー図のクリックが入力になる", t_pad_figure)
 
     def t_manual_highlight():
-        """手動操作中はカードが強調される(終い忘れ防止)。"""
+        """手動操作中はカードが強調される(終了し忘れ防止)。"""
         assert "on" not in (page.locator("#manualcard")
                             .get_attribute("class") or "")
         page.click("#manual")

@@ -41,7 +41,7 @@
    - 墨  : 彩度をほぼ落とす(中立 0.18・強調 0.28・分類 0.45 倍)。0 に
            しないのは、手順の色分けが見分けられなくなるため
    - 琥珀: 地と線だけを暖色へ倒す(3.4 倍)。文字は倒さない(読む対象に色を
-           持たせない)。取り柄は暗い部屋で画面全体の明るさが下がることで、
+           持たせない)。利点は暗い部屋で画面全体の明るさが下がることで、
            「青白い光が目に刺さる」ためではない——ブルーライトを減らしても
            短期の眼精疲労は軽減しないという結論が出ている(17研究のメタ分析)
    純黒(OLED 向け)は、文字が主体の本ツールでは境界が滲んで読みにくいので
@@ -135,7 +135,7 @@ header { display:flex; align-items:center; gap:10px; padding:9px 18px;
   border-bottom:1px solid var(--line); background:var(--surface); flex-wrap:wrap;
   flex:none; position:relative; }
 header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
-/* ⚙ = この画面そのものの設定(通知・配色)。運転席にも格納庫にも属さない
+/* ⚙ = この画面そのものの設定(通知・配色)。操作領域にも管理領域にも属さない
    ものはヘッダに置く(設計原則 §1)。設定の入口は1つに保つ */
 .setmenu { margin-left:auto; position:relative; }
 /* ヘッダの手動操作中の印。チップの形だが押せる(その場で終えられる) */
@@ -208,7 +208,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .devrow:not(.foldable) b, .devrow:not(.foldable) .meta { cursor:default; }
 .devrow .meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 /* 開閉式の詳細を持つ行(装置の台帳)。折りたたみ三角ぶんだけ列を1つ増やす
-   (手順を編集のフォルダ行 .folder-row と同じ作法。原則 §5 同じ意味は同じ形) */
+   (手順を編集のフォルダ行 .folder-row と同じ形。原則 §5 同じ意味は同じ形) */
 .devrow.foldable { grid-template-columns:14px 16px 1fr auto; cursor:pointer; }
 .devrow.foldable .meta { grid-column:3 / -1; }
 .devtoggle { border:0; background:transparent; cursor:pointer;
@@ -230,7 +230,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .fjoin { color:var(--muted); font-size:var(--fs-sub); }
 .fdevs { display:flex; flex-direction:column; gap:3px; }
 /* 装置 / 手順 / 開始ラベル / 周回。周回は右端で桁を揃え、1P と 2P の値を
-   目で突き合わせられるようにする(手順一覧の所要フレーム数と同じ作法) */
+   目で突き合わせられるようにする(手順一覧の所要フレーム数と同じ形) */
 .fdev { display:grid; grid-template-columns:auto minmax(0, 1fr) auto auto;
   column-gap:6px; align-items:baseline; font-size:var(--fs-sub); }
 .fdevname { color:var(--muted); }
@@ -238,7 +238,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .fresume { color:var(--muted); white-space:nowrap; }
 .floops { color:var(--muted); font-variant-numeric:tabular-nums;
   white-space:nowrap; }
-/* 2行目の操作。行アイコン(✎ 🗑)は一覧の作法どおり右端へ(原則 §3) */
+/* 2行目の操作。行アイコン(✎ 🗑)は一覧と同じ形で右端へ(原則 §3) */
 .fact { display:flex; align-items:center; gap:6px; margin-top:5px; }
 .fact .rowops { margin-left:auto; }
 /* 装置ごとの縦レーン(台数に関わらず常に1本以上。原則 §1 系: 1台と2台は
@@ -277,7 +277,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 .coupler { border-left:4px solid var(--accent); }
 .coupler .lbl { font-size:var(--fs-sub); color:var(--muted); letter-spacing:.06em;
   font-weight:700; }
-/* 上部バーは「2台にまたがること」だけを置く場所。連結の語彙(まとめて開始・
+/* 上部バーは「2台にまたがること」だけを置く場所。連結の操作(まとめて開始・
    自動合流・両方停止・開始ズレ)は連結しているときだけ現れ、外すと消える。
    プリセットは2台ぶんの割り当てに名前を付けたもの=またがるものなので、
    連結の有無に関わらず残る(1台で閉じることはレーンの仕事) */
@@ -285,7 +285,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
 #coupler.linked #clink { display:none; }
 .chip.link { color:var(--accent); border-color:var(--accent);
   font-weight:700; }
-/* 相方待ち(連結中の正常な待ち)は藍。黄色は「人の操作が要る」専用、
+/* 相手待ち(連結中の正常な待ち)は藍。黄色は「人の操作が要る」専用、
    赤は装置の異常専用(specs/coupling.md §5 の三態色) */
 .chip.wait { color:var(--accent); border-color:var(--accent); }
 .msg.wait { background:var(--accent-soft); color:var(--accent); }
@@ -335,7 +335,7 @@ main > .card { min-width:0; }
 .proc .meta { grid-column:2 / -1; color:var(--muted); font-size:var(--fs-sub);
   margin-top:2px; }
 /* 手順名と、その右に置く所要フレーム数。桁を揃えて(tabular-nums)縦に並べ、
-   1P と 2P の長さを目で突き合わせられるようにする(2台運用で「相方と同じ
+   1P と 2P の長さを目で突き合わせられるようにする(2台運用で「相手と同じ
    時間だけ待つ」を手順に書くため)。名前が長いときは名前側を詰める */
 .pname { display:flex; align-items:baseline; gap:8px; min-width:0; }
 .pname b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -544,7 +544,7 @@ tr.off td.ax input, tr.off td.fn { opacity:.38; }
 /* 有効が通常なので、入っているチェックは目立たせない。
    外したもの(=今は無いもの)だけがはっきり見えるようにする */
 .en { float:right; margin-left:8px; cursor:pointer; }
-/* ブロック右端の削除ボタン。誤爆しないよう普段は薄く、ブロックに乗せた時だけ
+/* ブロック右端の削除ボタン。誤操作しないよう普段は薄く、ブロックに乗せた時だけ
    はっきり出す(有効チェックと同じ出し方) */
 .delx { float:right; margin-left:6px; border:0; background:transparent;
   color:var(--muted); opacity:.28; cursor:pointer;
@@ -581,7 +581,7 @@ button.armed { border-color:var(--warn); color:var(--warn);
 .blk:hover .en input, .nest > .head:hover .en input,
 .en input:focus-visible { opacity:1; }
 /* 有効チェック。寸法や配置は指定せず既定のまま素直に並べ、行ボタンとの
-   誤クリック防止の余白(当たり判定の無い死帯)だけを右マージンで足す */
+   誤クリック防止の余白(当たり判定の無い隙間)だけを右マージンで足す */
 table.grid td.ops input[type=checkbox] { opacity:.28; margin-right:16px; }
 table.grid td.ops input[type=checkbox]:not(:checked) { opacity:1;
   outline:2px solid var(--warn); outline-offset:1px; }
@@ -697,7 +697,7 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
 /* 中身が空の注釈行は、余白だけを占めない(実行していないときの ETA 行) */
 .hint:empty { display:none; }
 /* タイムラインの見出しに出す進み具合。実行中だけ文字が入る(枠は動かない)。
-   中は注釈行と同じ「項目どうしは余白で切る」作法(全角空白1つで区切ると、
+   中は注釈行と同じ「項目どうしは余白で切る」形(全角空白1つで区切ると、
    どこまでが1つの値なのか読み取れない) */
 .tlprog { float:right; color:var(--accent); font-weight:700;
   letter-spacing:0; font-variant-numeric:tabular-nums; }
@@ -738,7 +738,7 @@ table.grid td.cellwarn { outline:2px solid var(--warn); outline-offset:-2px; }
 /* 対象を切り替えている間は、図を薄くして触れなくする(押せてしまうと、
    その入力がどちらの装置へ行ったのか言えない) */
 #padfig.busy { opacity:.45; pointer-events:none; }
-/* 手動操作中はカード全体を縁取って、終い忘れに気づけるようにする */
+/* 手動操作中はカード全体を縁取って、終了し忘れに気づけるようにする */
 #manualcard.on { border-color:var(--ok); box-shadow:0 0 0 2px var(--ok-bg); }
 #manualcard.on h2::after { content:' ● 操作中'; color:var(--ok);
   font-weight:700; letter-spacing:0; }

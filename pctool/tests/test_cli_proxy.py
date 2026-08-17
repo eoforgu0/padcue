@@ -3,7 +3,7 @@
 実機は同時1接続・後着優先なので、画面が開いている間に CLI が直結すると
 毎秒の収集と接続を奪い合って両方が間欠故障になる。装置に触るコマンドは
 画面のサーバ経由(プロキシ)に切り替わり、装置を専有する操作(OTA・設定・
-方式切替)は理由つきで断られること。マーカーの残骸(クラッシュ後)は無視
+方式切替)は理由つきで断られること。マーカーの古い設定(クラッシュ後)は無視
 して直結に戻ること。
 """
 import json
@@ -63,7 +63,7 @@ def test_status_shows_the_same_rows_through_both_paths(env, capsys):
     """同じ status が、画面経由でも直結でも同じ項目を出すこと。
 
     経路ごとに表示を書き分けると、直結のときだけ出る行(記録落ち・送出失敗・
-    ロールバック)が生まれる。操作画面を開いているかどうかで計器の見え方が
+    ロールバック)が生まれる。操作画面を開いているかどうかで計測値の見え方が
     変わるのは、それ自体が不具合。
     """
     _proj, _dev, tmp = env
@@ -113,7 +113,7 @@ def test_exclusive_ops_are_refused_while_gui(env, capsys):
 
 def test_stale_marker_falls_back_to_direct(env, capsys):
     _proj, _dev, tmp = env
-    # 死んだポートを指す残骸マーカー → 直結で動く(従来どおり)
+    # 死んだポートを指す古い設定マーカー → 直結で動く(従来どおり)
     (tmp / "gui_server.json").write_text(
         json.dumps({"port": 1, "pid": 0}), encoding="utf-8")
     assert cli.cmd_status(_args(tmp)) == 0

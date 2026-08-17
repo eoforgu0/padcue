@@ -57,9 +57,9 @@ class DeviceLink:
         self.info = None                 # DeviceInfo(直近の HELLO)
         self.status: dict = {}           # 直近の STATUS
         self.listing: dict = {}          # 手順名 -> ハッシュ(直近の LIST)
-        self.error: str = ""             # 直近の収集エラー(空 = 健康)
+        self.error: str = ""             # 直近の収集エラー(空 = 正常)
         self.error_exc: Exception | None = None   # 同・例外そのもの(表示整形用)
-        # 直近の想定外の例外。同じ理由の traceback を毎秒出さないための控え
+        # 直近の想定外の例外。同じ理由の traceback を毎秒出さないための記録
         self._last_unexpected: Exception | None = None
         self.host_info: str = ""         # つながっている本体の識別子(MAC 12桁hex)
         self.at: float = 0.0             # キャッシュ時刻(UNIX 秒)
@@ -92,7 +92,7 @@ class DeviceLink:
                 pass
 
     def _learn(self, info) -> None:
-        """初回接続で個体IDを台帳へ控える(mock は控えない)。"""
+        """初回接続で個体IDを台帳へ記録する(mock は記録しない)。"""
         if self.cfg.get("id") or not info.device_id \
                 or is_mock(info.device_id):
             return
@@ -111,7 +111,7 @@ class DeviceLink:
         やり直すのは **要求を送り出す前に切れていたと分かるとき**だけ
         (NotSentError)。装置が受け取ってしまった可能性がある切れ方で
         やり直すと、実行や転送が二重に効く —— 実機は同時1接続・後着優先
-        なので、相方の接続に横取りされた直後にここへ来るのは普通に起きる。
+        なので、相手の接続に横取りされた直後にここへ来るのは普通に起きる。
         RUN を送り直せば BUSY で拒否され、呼び出し元は「拒否された」と
         受け取って走っている装置を監視外に置いてしまう。
 
@@ -127,7 +127,7 @@ class DeviceLink:
                 self._drop()
                 raise
             except DeviceError:
-                raise                    # プロトコル上の拒否。接続は健康
+                raise                    # プロトコル上の拒否。接続は正常
             except (ConnectionError, OSError):
                 self._drop()
                 raise
@@ -148,13 +148,13 @@ class DeviceLink:
             self.listing = listing
 
     def _note_run(self, status: dict) -> None:
-        """実行の開始時刻を控える(画面の「終了予定」の表示に使う)。
+        """実行の開始時刻を記録する(画面の「終了予定」の表示に使う)。
 
         装置は「いつ始めたか」を持たず、経過フレーム数だけを返す。待機分岐で
         止まっている間はフレームが進まないので、経過から逆算した開始時刻は
-        待った分だけ後ろへずれていく。そこで実行中になった瞬間を控える
+        待った分だけ後ろへずれていく。そこで実行中になった瞬間を記録する
         (操作の書き戻しでは即座に、外(CLI)からの実行は収集の周期ぶん=最大
-        1秒の遅れで気づく。秒どまりの表示には足りる)。
+        1秒の遅れで気づく。秒単位の表示には足りる)。
         """
         on = bool(status.get("running") or status.get("awaiting"))
         if not on:
@@ -224,7 +224,7 @@ class DeviceLink:
                 # 想定外の例外(壊れた応答での KeyError など)でこの輪が
                 # 終わると、収集だけが黙って止まる。画面は最後に取れた値を
                 # 出し続け、error も空のままなので誰も気づけない。
-                # 理由を控えて輪は回し続ける(notify.py・coupler.py と同じ扱い)
+                # 理由を記録してループは回し続ける(notify.py・coupler.py と同じ扱い)
                 self.error = f"収集で想定外の異常: {type(e).__name__}: {e}"
                 self.error_exc = e
                 if type(e) is not type(self._last_unexpected):
@@ -315,7 +315,7 @@ class DevicePool:
             return [self._links[n] for n in self._order if n in self._links]
 
     def has_healthy(self, host: str, port: int) -> bool:
-        """その宛先を健康な登録済みリンクが使用中か(探索の到達確認が
+        """その宛先を正常な登録済みリンクが使用中か(探索の到達確認が
         自分の接続を横取りして壊すのを防ぐ)。"""
         with self._lock:
             return any(link.client is not None and not link.error

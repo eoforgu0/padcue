@@ -266,7 +266,7 @@ def run_flow_list(c: Checker, page, proj: Project, prompt_value: list):
     def t_proc_row_frames():
         """一覧の各手順に、名前の右で所要フレーム数が読めること。
 
-        2台運用では「相方の操作と同じ時間だけ待つ」を手順に書くので、
+        2台運用では「相手の操作と同じ時間だけ待つ」を手順に書くので、
         一覧を開いたまま2つの手順の長さを突き合わせられる必要がある。
         """
         rows = page.locator("#flowlist > .proc:not(.folder-row)")
@@ -602,7 +602,7 @@ def run_flow_branch_and_folders(c: Checker, page, proj: Project, prompt_value: l
     c.check("フォルダに入れて開閉でき、改名・解体が効く", t_proc_folder_dnd)
 
     def org_setup(folders):
-        """フォルダ分けを直接組んで、その状態から D&D を試すための下ごしらえ。"""
+        """フォルダ分けを直接組んで、その状態から D&D を試すための準備。"""
         page.evaluate(
             "async f => { await api('/api/proc_org', 'POST',"
             " {folders: f, hidden: []}); await refresh(); renderFlowList(); }",

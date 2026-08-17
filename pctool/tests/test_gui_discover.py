@@ -1,7 +1,7 @@
 """画面の「探す」の振る舞い。
 
-探索の返事は「届いた経路の住所」で見えるため、PC に仮想アダプタ(VPN や
-仮想マシン)があると、自分の別の住所が候補に混じる。確かめずに採用すると
+探索の返事は「届いた経路のアドレス」で見えるため、PC に仮想アダプタ(VPN や
+仮想マシン)があると、自分の別のアドレスが候補に混じる。確かめずに採用すると
 **いま繋がっているのに未接続へ落ちる**。だから採用前に必ず到達を確かめる。
 
 「いまつながっているか」は装置プールの収集キャッシュで判る。改めて
@@ -98,7 +98,7 @@ def test_does_not_adopt_an_unreachable_candidate(env, monkeypatch):
     proj, dev, base = env
     monkeypatch.setattr(gui, "discover", lambda *a, **k: [])
     cfg = proj.load_config()
-    cfg["host"] = "192.0.2.9"        # 応答しない住所にしておく
+    cfg["host"] = "192.0.2.9"        # 応答しないアドレスにしておく
     proj.save_config(cfg)
     dev.stop()                          # 探しても見つからない状態にする
     r = post(base, "/api/discover")

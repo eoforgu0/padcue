@@ -3,7 +3,7 @@
 // 設計: docs/design/firmware-architecture.md §3・§4
 // - 転送層モード(プロコン / HID パッド)はディスクリプタごと切り替える。
 //   切替は NVS へ保存し再起動で反映する(USB 再列挙の複雑さを避ける)
-// - 送出は必ず pademu_tx を経由する(応答優先・定期入力は埋め草)
+// - 送出は必ず pademu_tx を経由する(応答優先・定期入力は穴埋め)
 // - tud_hid_report() の report_id には 0 を渡す(バッファ自身が ID を含む)
 #pragma once
 
@@ -48,7 +48,7 @@ uint8_t app_usb_pair_step(void);   // 直近のペアリングフェーズ(0=未
 uint8_t app_usb_input_mode(void);  // 本体が設定した入力モード(0x30=通常)
 
 // 送出まわりの実測値。「割り込みは定刻だったが実際の出力は遅れた」を
-// 見逃さないための計器一式
+// 見逃さないための計測値一式
 typedef struct {
     uint32_t dropped_replies;   // キューに積めず/再送しきれず捨てた応答(0 であるべき)
     uint32_t failed_replies;    // 送出に失敗して再送した回数(0 であるべき)
@@ -65,7 +65,7 @@ typedef struct {
 
 void app_usb_get_tx_stats(app_usb_tx_stats_t *out);
 // 実行開始時に呼ぶ。実行ごとの値として読めるようにする。
-// USB タスクと同時に触れるが、取りこぼしても最大 1 カウントで計器としての
+// USB タスクと同時に触れるが、取りこぼしても最大 1 カウントで計測値としての
 // 意味は変わらないため、ロックは置かない
 void app_usb_reset_tx_stats(void);
 

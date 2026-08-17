@@ -34,7 +34,7 @@ static void on_button_long(void)
 {
     ESP_LOGW(TAG, "ボタン長押し: 即時停止");
     app_engine_stop(false);
-    // 中断の記録は supervisor の着地(app_run_end_land)に任せる。
+    // 中断の記録は supervisor の終了処理(app_run_end_land)に任せる。
     // ここで RUN_ABORT(a=1) を書くと、「1 フレーム時点」という偽の行に
     // なるうえ、実行していないときの長押しでも記録されてしまう
 }
@@ -57,7 +57,7 @@ static void on_usb_umount(void)
     if (app_engine_is_running()) {
         ESP_LOGE(TAG, "実行中に USB 切断。中断してニュートラル化");
         app_engine_stop(false);
-        // ERROR にラッチすると supervisor の着地が走らないので、
+        // ERROR にラッチすると supervisor の終了処理が走らないので、
         // 「何周・何フレームで中断したか」はここで記録する
         app_run_abort_log();
         app_state_fault(APP_LOG_USB_UMOUNT);
@@ -132,7 +132,7 @@ static void supervisor_task(void *arg)
         if (awaiting && st == APP_STATE_RUNNING) {
             app_state_set(APP_STATE_AWAITING);   // 待機分岐で選択待ちになった
         }
-        // 駐機タイムアウト(手順に書いてあれば)。永久駐機の保険
+        // 選択待ちタイムアウト(手順に書いてあれば)。永久選択待ちの保険
         app_engine_poll_await_timeout();
         // 逆向きのレベル同期: タイムアウトの自動進行はエンジンを直接再開
         // するため、状態機械が AWAITING のまま残る(RUNNING の書き手は
@@ -142,10 +142,10 @@ static void supervisor_task(void *arg)
             && app_engine_is_running() && !app_engine_is_awaiting()) {
             app_state_set(APP_STATE_RUNNING);
         }
-        // ペアリング引数の控えがあれば記録する(本体識別子の調査。
+        // ペアリング引数の記録があれば記録する(本体識別子の調査。
         // specs/coupling.md §1:
         // 同じ本体で毎回同じ値が出るなら、どの Switch に繋がっているかの
-        // 自動識別に昇格できる。違えば物理記名で確定)
+        // 自動識別に昇格できる。違えばラベル貼りで確定)
         {
             uint8_t hi[8];
             uint8_t hilen;
@@ -161,7 +161,7 @@ static void supervisor_task(void *arg)
         // 立ち上がり検出だと、100ms より短い実行を取りこぼすうえ、手順名や
         // 周回数(RUN コマンドしか知らない情報)を載せられない
         // レベル同期: 状態機械が「実行系」なのにエンジンが動いていなければ、
-        // 必ず結果に応じて着地させる。running の立ち下がりエッジでしか
+        // 必ず結果に応じて終了処理へ移す。running の立ち下がりエッジでしか
         // 反映しないと、1ポーリング窓(100ms)より短い実行や開始直後の異常
         // では true を一度も標本化できず、RUNNING が永久に残る(実機で
         // 起きる。実行も停止もできなくなる)。
@@ -179,7 +179,7 @@ static void supervisor_task(void *arg)
         }
         last_late = p.late_events;
         // 送出まわり。割り込みが定刻でも、実際に USB へ渡すのが遅れたり
-        // 送出そのものに失敗したりすれば出力はずれる。別の計器として見る
+        // 送出そのものに失敗したりすれば出力はずれる。別の計測値として見る
         app_usb_tx_stats_t tx;
         app_usb_get_tx_stats(&tx);
         // 記録するのは **1フレームを超えて届いた入力が増えたとき** だけ。
@@ -243,7 +243,7 @@ void app_main(void)
 
     // 起動時にボタンを押しっぱなしにしていたら USB を開始しない(診断モード)。
     // USB を始めるとシリアルが消えてログが一切見えなくなるため、
-    // 異常時に原因を追う唯一の手段としてこの逃げ道を用意する。
+    // 異常時に原因を追う唯一の手段としてこの代替手段を用意する。
     // コントローラーとしては動かないので、診断が済んだら普通に再起動する
     bool diag = app_button_is_pressed();
     if (diag) {

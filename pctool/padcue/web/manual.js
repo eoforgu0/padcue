@@ -82,7 +82,7 @@ function paintManual() {
   fig.classList.toggle('busy', manualSwitching);
   document.getElementById('manualcard').classList.toggle('on', manualOn);
   // ヘッダの印はどのタブでも見える(入力はタブを移っても送られ続けるので、
-  // 印だけが消えると終い忘れに気づけない)
+  // 印だけが消えると終了し忘れに気づけない)
   const badge = document.getElementById('manualbadge');
   badge.style.display = manualOn ? '' : 'none';
   badge.textContent = manualSwitching ? '● 手動操作 切り替え中…'
@@ -102,7 +102,7 @@ async function setManual(on) {
 }
 document.getElementById('manual').onclick = () => setManual(!manualOn);
 // ヘッダの印からもその場で終えられる(気づいた場所で終えられないと、
-// 終い忘れに気づいてもタブを戻す一手間が挟まる)
+// 終了し忘れに気づいてもタブを戻す一手間が挟まる)
 document.getElementById('manualbadge').onclick = () => setManual(false);
 
 // 手動操作を続けたまま対象を替える。内部では「前の装置の手動操作を終える →
@@ -270,7 +270,7 @@ document.getElementById('rec').onclick = async () => {
     return;
   }
   save.style.display = '';
-  // 尾の導線は削る(「部品として保存」ボタンが現れるのが見える。原則 §5)
+  // 末尾の案内文は削る(「部品として保存」ボタンが現れるのが見える。原則 §5)
   show('manualmsg', 'ok', `${r.frames} フレーム記録しました`);
 };
 document.getElementById('recsave').onclick = async () => {
@@ -282,7 +282,7 @@ document.getElementById('recsave').onclick = async () => {
   document.getElementById('rec').textContent = '● 記録を開始';
   document.getElementById('recchip').textContent = '';
   document.getElementById('recsave').style.display = 'none';
-  // 尾の導線は削る(「部品を編集」タブは常設で、いつでも行ける。原則 §5)
+  // 末尾の案内文は削る(「部品を編集」タブは常設で、いつでも行ける。原則 §5)
   show('manualmsg', 'ok',
        `部品「${r.name}」として保存しました(${r.frames} フレーム)`);
 };

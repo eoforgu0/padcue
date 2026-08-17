@@ -182,7 +182,7 @@ function renderPart() {
         b.onkeydown = (e) => {
           if (e.key === 'Enter') {
             // ボタンセルでも Enter は「移動」。切り替えは Space(ボタンの標準)。
-            // 素通しにするとブラウザ既定で click が発火し、数値セルで身につく
+            // そのまま通すにするとブラウザ既定で click が発火し、数値セルで身につく
             // 「Enter=下へ」の手癖が、ここでは黙って値を反転させてしまう
             if (e.isComposing) return;
             e.preventDefault();

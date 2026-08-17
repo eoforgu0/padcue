@@ -112,12 +112,12 @@ def test_pairing_phase3_and_known_host_keep_capture_reply(device):
 
 
 def test_pairing_phase23_do_not_clobber_host_identity(device):
-    """フェーズ 0x02/0x03 は本体識別子の控えを上書きしないこと。
+    """フェーズ 0x02/0x03 は本体識別子の記録を上書きしないこと。
 
-    実機の出力レポートはゼロ埋めで届くため、0x02/0x03 まで控えると
+    実機の出力レポートはゼロ埋めで届くため、0x02/0x03 まで記録すると
     識別子が「02+ゼロ」になり、どの本体でも同じ値になって命名が壊れる。"""
-    run_handshake(device)                          # 0x04 で控えが入る
-    # フェーズ 02(引数の残りはゼロ埋め=実機と同じ形)を受けても控えは不変
+    run_handshake(device)                          # 0x04 で記録が入る
+    # フェーズ 02(引数の残りはゼロ埋め=実機と同じ形)を受けても記録は不変
     device.send_output(
         bytes([0x01, 0x00]) + bytes(8) + bytes([0x01, 0x02]) + bytes(36))
     device.send_output(
@@ -125,7 +125,7 @@ def test_pairing_phase23_do_not_clobber_host_identity(device):
     seen = device.host_info()
     assert seen is not None
     assert seen[:8] == PAIRING_PAYLOAD[:8]         # 0x04 の中身のまま
-    # 取り出した後にフェーズ 01 が来れば、新しい識別子として控え直す
+    # 取り出した後にフェーズ 01 が来れば、新しい識別子として記録し直す
     assert device.host_info() is None
     device.send_output(
         bytes([0x01, 0x00]) + bytes(8) + bytes([0x01]) + PAIR_PHASE1_SWITCH2)
@@ -455,7 +455,7 @@ def test_imu_calibration_defines_the_scale():
     で、分母はコントローラーが自己申告した値。つまり係数はこちらの選択で決まる。
     角度指定は作らないので換算そのものは運用に影響しないが、この値は
     **出せる回転速度の上限**を決める(係数を小さくすると上限が上がる)。
-    意図せず変わると挙動が変わるので固定して見張る。
+    意図せず変わると挙動が変わるので固定して監視する。
     """
     import re
     src = (CORE / "pademu_procon.c").read_text(encoding="utf-8")

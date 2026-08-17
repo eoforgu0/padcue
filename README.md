@@ -38,15 +38,15 @@ PC で書いた手順を、マイコン(M5Stack AtomS3 Lite)が Switch 2 のコ�
 
 ---
 
-## 取ってくる
+## 入手
 
 ```powershell
 git clone https://github.com/eoforgu0/padcue.git
 cd padcue
 ```
 
-git を使わない場合は、このページの **Code → Download ZIP** から取って展開して
-ください。**インストールは要りません**(PC 側は Python の標準ライブラリだけで
+git を使わない場合は、このページの **Code → Download ZIP** から取得して
+展開してください。**インストールは要りません**(PC 側は Python の標準ライブラリだけで
 動きます)。以下のコマンドは、この `padcue` フォルダの中で実行します。
 
 ---
@@ -181,7 +181,7 @@ pctool/         PC 側(Python。コンパイラ・通信・CLI・GUI・模擬デ
 
 ## 開発
 
-道具立て(利用者には不要。開発するときだけ):
+開発用の依存(利用者には不要):
 
 ```powershell
 pip install -e "./pctool[dev]"   # pytest と playwright
@@ -232,7 +232,7 @@ python -m padcue ota
 Windows でのブラウザ検査、ファームウェアのビルドと割り込み経路の配置確認)。
 
 - 版ごとの変更は [CHANGELOG.md](CHANGELOG.md)
-- 手を入れるときの作法は [CONTRIBUTING.md](CONTRIBUTING.md)
+- 変更するときの決まりは [CONTRIBUTING.md](CONTRIBUTING.md)
 - 安全上の前提と脆弱性の報告先は [SECURITY.md](SECURITY.md)
 
 ---

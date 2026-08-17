@@ -5,7 +5,7 @@
  - 人が「今すぐ止める」を押した停止では知らせない(本人が見ている)。
    「今の周で止める」(予約)は待つことになるので知らせる
  - 連結中は両方が終わっても知らせは1回(連結=1つの仕事)
- - 操作待ちは「自動では解けない駐機」だけ。自動合流中の相方待ちは黙る
+ - 操作待ちは「自動では解けない選択待ち」だけ。自動合流中の相手待ちは黙る
  - 画面を開いた瞬間に、すでに終わっている実行の知らせを鳴らさない
 """
 import json
@@ -117,7 +117,7 @@ def test_manual_stop_mark_does_not_carry_over():
 
 
 def test_awaiting_counts_as_running():
-    """待機分岐で駐機しただけでは「終わった」ではない。"""
+    """待機分岐で選択待ちしただけでは「終わった」ではない。"""
     link = FakeLink("1P", running=False, awaiting=True, state="AWAITING")
     w = watcher(FakePool(link))
     w.tick()
@@ -128,7 +128,7 @@ def test_awaiting_counts_as_running():
 # ---- 操作待ち ----
 
 def test_notifies_when_waiting_for_a_choice():
-    """人が腕を選ぶまで進まない駐機は知らせること。"""
+    """人が腕を選ぶまで進まない選択待ちは知らせること。"""
     link = FakeLink("1P", running=True, state="RUNNING")
     w = watcher(FakePool(link))
     w.tick()
@@ -138,7 +138,7 @@ def test_notifies_when_waiting_for_a_choice():
 
 
 def test_silent_while_auto_join_handles_the_wait():
-    """自動合流が効いている相方待ちでは鳴らさないこと(人の出番が無い)。"""
+    """自動合流が効いている相手待ちでは鳴らさないこと(人の操作が要らない)。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     c = FakeCoupler(on=True, auto_join=True, oneshot_manual=False,
@@ -151,7 +151,7 @@ def test_silent_while_auto_join_handles_the_wait():
 
 
 def test_notifies_the_wait_when_auto_join_is_off():
-    """自動合流を切っていれば、同じ駐機でも人の出番なので知らせること。"""
+    """自動合流を切っていれば、同じ選択待ちでも人の操作が要るときので知らせること。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     b = FakeLink("2P", running=True, state="RUNNING")
     c = FakeCoupler(on=True, auto_join=False, oneshot_manual=False,
@@ -221,7 +221,7 @@ def test_solo_run_while_coupled_notifies_once():
 
 
 def test_removed_device_leaves_no_stale_state():
-    """台帳から外した装置の控えを残さないこと(登録解除は終了ではない)。"""
+    """台帳から外した装置の記録を残さないこと(登録解除は終了ではない)。"""
     a = FakeLink("1P", running=True, state="RUNNING")
     pool = FakePool(a)
     w = watcher(pool)
@@ -287,7 +287,7 @@ def test_stream_skips_events_from_before_connect(server):
 def test_watcher_survives_errors_and_records_why(capsys):
     """tick が例外を投げ続けても、ループは回り続けて理由が残ること。
 
-    見張りを死なせない方針は正しいが、黙って捨てると「終了の知らせが
+    監視を死なせない方針は正しいが、黙って捨てると「終了の知らせが
     来ない」としか見えない。24時間の放置運転では、それが原因究明の
     唯一の手がかりを奪う。同じ理由で端末が埋まらないよう、出すのは
     理由が変わったときだけ。
@@ -302,7 +302,7 @@ def test_watcher_survives_errors_and_records_why(capsys):
     try:
         time.sleep(RunWatcher.POLL_S * 3)
         assert w._tick_error == "RuntimeError: わざと壊す"
-        assert w._thread.is_alive(), "見張りが死んでいる"
+        assert w._thread.is_alive(), "監視が死んでいる"
         # 出るのは1回だけ(毎周期は出さない)
         err = capsys.readouterr().err
         assert err.count("Traceback (most recent call last)") == 1, err

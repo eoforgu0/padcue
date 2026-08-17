@@ -205,7 +205,7 @@ def run_look_and_alerts(c: Checker, page):
     def t_lane_proc_survives_reload():
         """読み込み直しても、そのレーンで最後に選んだ手順が選ばれたままなこと。
 
-        select に選択肢を並べた時点で先頭が選ばれてしまうと、控え
+        select に選択肢を並べた時点で先頭が選ばれてしまうと、記録
         (localStorage)を読む段に到達しない。
         """
         ln = lane(page)
@@ -265,7 +265,7 @@ def run_look_and_alerts(c: Checker, page):
             t_notify_settings)
 
     def t_hotkeys_off_by_default():
-        """F9/F10 は既定で効かず、⚙ で入にすると効くこと(誤爆防止)。"""
+        """F9/F10 は既定で効かず、⚙ で入にすると効くこと(誤操作防止)。"""
         page.click("#setbtn")
         page.wait_for_timeout(200)
         assert not page.locator("#hotkeys").is_checked(), \
@@ -298,7 +298,7 @@ def run_look_and_alerts(c: Checker, page):
         """実行が終わると通知が届く(タブ名の点滅で確かめる)。
 
         音は自動では聴けないので、同じ知らせを受け取る「タブで知らせる」に
-        して見る。届く経路(サーバの見張り → /api/events)は同じ。
+        して見る。届く経路(サーバの監視 → /api/events)は同じ。
         """
         page.click("#setbtn")
         page.wait_for_timeout(200)
@@ -353,7 +353,7 @@ def run_look_and_alerts(c: Checker, page):
         wait_state(page, "実行中")
         ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        page.wait_for_timeout(2500)      # 見張りの周期を十分に跨ぐ
+        page.wait_for_timeout(2500)      # 監視の周期を十分に跨ぐ
         assert page.title() == "padcue", \
             f"自分で止めたのに知らせが出た: {page.title()!r}"
         ln.locator(".lloops").fill("1")

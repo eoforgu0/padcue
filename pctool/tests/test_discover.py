@@ -100,7 +100,7 @@ def test_name_resolution_is_tried_first(monkeypatch):
 
 
 def test_default_host_is_the_name():
-    """初期状態の接続先が名前になっていること(IP を控えなくて済む)。"""
+    """初期状態の接続先が名前になっていること(IP を記録なくて済む)。"""
     import tempfile
 
     from padcue.project import Project

@@ -93,8 +93,8 @@ class MockDevice:
     _thread: threading.Thread | None = None
     _stop: bool = False
     _lock: threading.Lock = field(default_factory=threading.Lock)
-    # 駐機の通し番号(装置レベル。実行をまたいでも増え続ける。前の実行に
-    # 宛てた SELECT が新しい実行の駐機と偶然一致しないように)
+    # 選択待ちの通し番号(装置レベル。実行をまたいでも増え続ける。前の実行に
+    # 宛てた SELECT が新しい実行の選択待ちと偶然一致しないように)
     _await_gen: int = 0
     # ペアリングの観測値(実機と同形)。既定は「既知本体の記録手渡し(0x04)を
     # 1回受けて登録済み」の健全な姿。登録未完(step=0x01 のまま回数増)は
@@ -274,7 +274,7 @@ class MockDevice:
                 self._finish("RUN_ABORT")
                 return
             if r.get("awaiting"):
-                # 駐機タイムアウト(実機は supervisor が 100ms ごとに見る)。
+                # 選択待ちタイムアウト(実機は supervisor が 100ms ごとに見る)。
                 # 経過は実時間×speed をフレームに直して数える
                 tf = r.get("await_timeout", 0)
                 if tf:
@@ -297,7 +297,7 @@ class MockDevice:
                            if r["total_frames"] else frames)
             if (r.get("await_at") is not None
                     and r["frames"] >= r["await_at"]):
-                # 実機は周回のたびに待機分岐で毎回駐機する。次の駐機点は
+                # 実機は周回のたびに待機分岐で毎回選択待ちする。次の選択待ち点は
                 # SELECT で進める(自動合流の検証土台)
                 r["awaiting"] = True
                 self._await_gen += 1
@@ -319,14 +319,14 @@ class MockDevice:
                 self._finish("RUN_ABORT")
 
     def _resume_from_await(self, r: dict, arm: int) -> None:
-        """駐機からの再開(SELECT とタイムアウトの腕進みが共用)。
+        """選択待ちからの再開(SELECT とタイムアウトの腕進みが共用)。
         呼び出し元が self._lock を握っていること。"""
         del arm   # どの腕でも所要時間は同じ扱い(時間モデルの簡略化)
         r["awaiting"] = False
         r["t0"] = time.monotonic()   # 待っていた時間ぶんずらす
         r["frames_at_await"] = r["frames"]
-        # 次の周回の駐機点(実機は周回のたびに毎回駐機する)。
-        # 全周ぶん終わる位置なら駐機はもう無い
+        # 次の周回の選択待ち点(実機は周回のたびに毎回選択待ちする)。
+        # 全周ぶん終わる位置なら選択待ちはもう無い
         nxt = r["await_at"] + r["loop_frames"]
         if r["total_frames"] and nxt >= r["total_frames"]:
             r["await_at"] = None
@@ -394,7 +394,7 @@ class MockDevice:
             if self._staged is None:
                 return self._err("NO_STAGED", "転送されたデータがありません")
             name, data = self._staged
-            # 実機は緩衝を転送と実行で共用しているので、確定の前に
+            # 実機はバッファを転送と実行で共用しているので、確定の前に
             # 「いま載っているのが本当にその名前で転送されたものか」を見る
             # (app_store.c の app_store_commit)。模擬も同じ判定にする
             want = (msg.obj or {}).get("name", name)
@@ -421,7 +421,7 @@ class MockDevice:
                     # 上の冪等分岐で成功が返る(=取り消しは間に合わなかった)
                     self._run["stop_graceful"] = False
                 elif o.get("mode") == "graceful":
-                    # 再送では控えを更新しない(実機と同じ。更新すると
+                    # 再送では記録を更新しない(実機と同じ。更新すると
                     # 不安になっての二度押しで停止が1周先送りされる)
                     if not self._run["stop_graceful"]:
                         self._run["stop_graceful"] = True
@@ -456,11 +456,11 @@ class MockDevice:
                 arm = int(o.get("arm", -1))
                 if not (0 <= arm < r["await_arms"]):
                     return self._err("BAD_ARG", "腕の番号が範囲外です")
-                # 世代照合(実機と同じ): 別の駐機に宛てた古い選択を拒否する
+                # 世代照合(実機と同じ): 別の選択待ちに宛てた古い選択を拒否する
                 if (isinstance(o.get("gen"), (int, float))
                         and int(o["gen"]) != self._await_gen):
                     return self._err("STALE_SELECT",
-                                     "その選択は前の駐機に宛てたものです"
+                                     "その選択は前の選択待ちに宛てたものです"
                                      "(状態を取り直してください)")
                 self._resume_from_await(r, arm)
             return Message(proto.T_SELECT | proto.T_RESP, {})
@@ -556,7 +556,7 @@ class MockDevice:
                 # 待機分岐があれば、そのフレームに達したら選択待ちで止まる
                 "await_at": await_rel,
                 "await_arms": await_arms,
-                # 駐機タイムアウト(AWAIT レコード)。0 = 無期限
+                # 選択待ちタイムアウト(AWAIT レコード)。0 = 無期限
                 "await_timeout": await_timeout,
                 "await_on_timeout": await_on_timeout,
                 "await_since": 0.0,

@@ -18,7 +18,7 @@
     padcue device list             登録済みの一覧
     padcue device add <IP> [名前]  新しい装置を登録(繋いで個体IDを覚える)
     padcue device rename <旧> <新> 表示名を変える(参照は個体IDなので切れない)
-    padcue device forget <名前>    個体IDの控えだけ解除する(基板の交換用)
+    padcue device forget <名前>    個体IDの記録だけ消すする(基板の交換用)
     padcue device remove <名前>    台帳から外す
     padcue device auto             登録した個体のIPを探索で追いかける
     padcue device <IP>             接続先を手で設定する
@@ -67,7 +67,7 @@ def _gui_base(p: Project) -> str | None:
         with urllib.request.urlopen(base + "/api/state", timeout=2.0) as r:
             json.loads(r.read())
         return base
-    except Exception:   # noqa: BLE001  残骸マーカーは無視して直結
+    except Exception:   # noqa: BLE001  古い設定マーカーは無視して直結
         return None
 
 
@@ -155,21 +155,21 @@ def _learn_id(p, cfg: dict, dev: dict, info) -> None:
         return
     if not dev.get("id") and info.device_id:
         p.update_device(cfg, cfg["devices"].index(dev), id=info.device_id)
-        print(f"装置 {dev.get('name')} の個体ID {info.device_id} を控えました",
+        print(f"装置 {dev.get('name')} の個体ID {info.device_id} を記録ました",
               file=sys.stderr)
 
 
 def _client(args) -> DeviceClient:
     """接続先を決めて繋ぎ、個体ID(MAC)を照合する。
 
-    控えた IP で繋がらなければ LAN 内を探すが、控え直すのは**同じ個体**
+    記録した IP で繋がらなければ LAN 内を探すが、記録し直すのは**同じ個体**
     (ID が一致する応答)だけ。「実際に繋がった最初の1台」へ黙って乗り
     換えると、2台環境では意図しない実機を操作する事故になる。--host 指定は
-    照合なしの直結(復旧用の逃げ道)。
+    照合なしの直結(復旧用の代替手段)。
     """
     p = _project(args)
     cfg = p.load_config()
-    if args.host:                       # 明示指定 = 直結(控えもしない)
+    if args.host:                       # 明示指定 = 直結(記録もしない)
         c = DeviceClient(args.host, int(cfg.get("port", proto.DEFAULT_PORT)))
         c.connect()
         return c
@@ -196,7 +196,7 @@ def _client(args) -> DeviceClient:
         try:
             c, info = connect_verified(dict(dev, host=name_host))
             p.update_device(cfg, cfg["devices"].index(dev), host=name_host)
-            print(f"見つかりました: {name_host}(名前で控え直しました)",
+            print(f"見つかりました: {name_host}(名前で記録し直しました)",
                   file=sys.stderr)
             return c
         except (OSError, ConnectionError, DeviceError):
@@ -228,14 +228,14 @@ def _client(args) -> DeviceClient:
         target, c, info = connected[0]
         p.update_device(cfg, cfg["devices"].index(dev),
                         host=target.host, port=target.port)
-        print(f"見つかりました: {target.host}(控え直しました)", file=sys.stderr)
+        print(f"見つかりました: {target.host}(記録し直しました)", file=sys.stderr)
         return c
     if not want_id and len(connected) == 1:
         target, c, info = connected[0]
         p.update_device(cfg, cfg["devices"].index(dev),
                         host=target.host, port=target.port)
         _learn_id(p, cfg, dev, info)
-        print(f"見つかりました: {target.host}(控え直しました)", file=sys.stderr)
+        print(f"見つかりました: {target.host}(記録し直しました)", file=sys.stderr)
         return c
     for _t, c, _i in connected:
         c.close()
@@ -252,7 +252,7 @@ def _client(args) -> DeviceClient:
         "  ・操作画面(padcue.bat)を開いていませんか? "
         "実機は同時に1つのプログラムしか受け付けません。"
         "閉じてからやり直してください" + "\n"
-        "  ・別の個体しか居ない場合は乗り換えません(誤爆防止)。"
+        "  ・別の個体しか居ない場合は乗り換えません(誤操作防止)。"
         "新しい装置なら登録してください: padcue device add <IPアドレス> <名前>")
 
 
@@ -404,7 +404,7 @@ def _print_status(d: dict) -> None:
 
     経路ごとに書き分けると、直結のときだけ出る行(記録落ち・送出失敗・
     ロールバック)が生まれる。同じ `padcue status` の出力が、操作画面を
-    開いているかどうかで変わるのは、計器として壊れている。
+    開いているかどうかで変わるのは、計測値として壊れている。
 
     ラベルはコロンの前を11セルで揃える。印(⚠)は値の側に置く — 端末や
     フォントによって幅が変わる文字を、桁を担う位置に置かないため。
@@ -426,7 +426,7 @@ def _print_status(d: dict) -> None:
               f"{d.get('session_loop')} 周目 / "
               f"{d.get('frames_elapsed')} フレーム")
     # ずれの実測は 0 でも出す。出ていないのが「遅れていない」のか
-    # 「測っていない」のか分からないと、計器として意味を成さない
+    # 「測っていない」のか分からないと、計測値として意味を成さない
     if "max_late_us" in d:
         line = f"ずれ最大   : フレームの刻み {d['max_late_us']}µs"
         if "deliver_max_us" in d:
@@ -476,7 +476,7 @@ def cmd_status(args) -> int:
 def cmd_mode(args) -> int:
     """転送方式を切り替える(プロコン方式 ⇔ 保険モード)。
 
-    プロコン方式が Switch 2 で受理されない場合の逃げ道。無線で切り替えられる
+    プロコン方式が Switch 2 で受理されない場合の代替手段。無線で切り替えられる
     ので、書き込みモードに入れ直す必要はない(切替後に USB を挿し直す)。
     """
     if _refuse_while_gui(_project(args), "方式の切り替え"):
@@ -596,7 +596,7 @@ def cmd_device(args) -> int:
     device list                    登録済み装置の一覧
     device add <IP> [名前]         新しい装置を登録(接続して個体IDを学習)
     device rename <名前> <新名前>  表示名の変更(IDで参照するため履歴は切れない)
-    device forget <名前>           個体IDの控えだけ解除(基板が変わったとき)
+    device forget <名前>           個体IDの記録だけ消す(基板が変わったとき)
     device remove <名前>           台帳から外す
     device auto                    1台目のIPを探索で追跡(ID一致のみ)
     device <IP>                    1台目の接続先を手で設定(従来互換)
@@ -621,7 +621,7 @@ def cmd_device(args) -> int:
             return 1
         # 受け入れモード: 接続して個体IDを確認してから登録する。
         # IDを名乗らない旧ファームは登録できない(照合できない装置を台帳に
-        # 入れると誤爆防止が成り立たない)。先に有線か --host 直結で OTA する
+        # 入れると誤操作防止が成り立たない)。先に有線か --host 直結で OTA する
         # ポート指定は模擬デバイス2台での練習用(実機はどれも既定 5555)
         host = args.extra[0]
         port = None
@@ -642,7 +642,7 @@ def cmd_device(args) -> int:
         return 0 if ok else 1
 
     if a == "forget":
-        # 装置の交換(基板が変わり MAC も変わった)用: IDの控えだけを解除する
+        # 装置の交換(基板が変わり MAC も変わった)用: ID の記録だけを解除する
         if len(args.extra) != 1:
             print("使い方: padcue device forget <名前>")
             return 1
@@ -671,7 +671,7 @@ def cmd_device(args) -> int:
                 print(r["error"])
                 return 1
             print(("いまの接続先でつながっています: " if r.get("kept")
-                   else "接続先を控え直しました: ") + str(r.get("host"))
+                   else "接続先を記録し直しました: ") + str(r.get("host"))
                   + "(操作画面経由)")
             return 0
         dev = _pick_device(args, cfg)
@@ -697,8 +697,8 @@ def cmd_device(args) -> int:
         return 1
     dev = _pick_device(args, cfg)
     fields = {"host": addr}
-    # 向け先を確かめる。相手が模擬デバイス(練習)なら、IDの控えを解除して
-    # 向け替える(控えたまま向けると照合で止まり練習が成立しない。解除は
+    # 向け先を確かめる。相手が模擬デバイス(練習)なら、ID の記録を解除して
+    # 向け替える(記録したまま向けると照合で止まり練習が成立しない。解除は
     # この明示操作のときだけ。探索が黙って mock を採用することはない)
     try:
         probe = DeviceClient(addr, int(cfg.get("port", proto.DEFAULT_PORT)),
@@ -707,7 +707,7 @@ def cmd_device(args) -> int:
         probe.close()
         if is_mock(info.device_id) and dev.get("id"):
             fields["id"] = ""
-            print("相手は練習用の模擬デバイスです。IDの控えを解除して向けます"
+            print("相手は練習用の模擬デバイスです。ID の記録を解除して向けます"
                   "(実機へ戻るときは「探す」か device auto で学習し直します)")
     except (OSError, ConnectionError, DeviceError):
         pass          # まだ起動していない宛先も設定はできる(従来どおり)
@@ -728,8 +728,8 @@ def cmd_discover(args) -> int:
 
 
 def cmd_mock(args) -> int:
-    # 模擬デバイスと操作画面は、その小道具(HTTP サーバ・ブラウザ起動・
-    # 記録)を芋づるで連れてくる。使う命令のときだけ読み込んで、
+    # 模擬デバイスと操作画面は、その付随部品(HTTP サーバ・ブラウザ起動・
+    # 記録)を連鎖的にで連れてくる。使う命令のときだけ読み込んで、
     # `padcue status` のような短い命令の立ち上がりを鈍らせない
     from .discover import PORT as DISCOVER_PORT
     from .mockdevice import MockDevice

@@ -150,7 +150,7 @@ class DeviceClient:
     def put(self, name: str, data: bytes, chunk: int = 4096) -> str:
         """手順データを RAM へ転送し、デバイスが返したハッシュを検証して返す。
 
-        分割して送る。1パケットに全部載せると実機側に 64KB の緩衝が要り、
+        分割して送る。1パケットに全部載せると実機側に 64KB のバッファが要り、
         内蔵 RAM に収まらないため(comm-protocol.md の PUT を参照)。
         """
         if not data:
@@ -185,8 +185,8 @@ class DeviceClient:
     def select(self, arm: int, gen: int | None = None) -> None:
         """待機分岐で止まっているときに、進む腕を選ぶ。
 
-        gen は STATUS の await_gen(この実行で何回目の駐機か)。渡すと装置側が
-        照合し、別の駐機に宛てた古い選択を拒否する(2台の自動合流用)。
+        gen は STATUS の await_gen(この実行で何回目の選択待ちか)。渡すと装置側が
+        照合し、別の選択待ちに宛てた古い選択を拒否する(2台の自動合流用)。
         省略すれば従来どおり無条件に選ぶ。
         """
         obj: dict = {"arm": int(arm)}
@@ -254,13 +254,13 @@ class DeviceClient:
 # ---- 個体照合つきの接続(装置台帳の唯一の入口) ----
 # 接続を作る経路をここ1箇所に集約する。IP は DHCP で変わるため、接続のたびに
 # HELLO の個体ID(MAC)を登録簿と突き合わせ、意図しない実機への操作
-# (取り違え誤爆)を構造的に防ぐ。
+# (取り違え誤操作)を構造的に防ぐ。
 
 def is_mock(device_id: str) -> bool:
     """その個体IDが模擬デバイスのものか。
 
     実機と模擬を取り違えると「実機で動いた」という偽の成功になる。判定を
-    文字列リテラルのまま散らすと、1箇所でも綴りを外した時点で防波堤が
+    文字列リテラルのまま散らすと、1箇所でも綴りを外した時点で防止策が
     崩れるので、ここに集約する(模擬デバイスは mock で始まる ID を名乗る。
     mockdevice.MockDevice の既定)。
     """
@@ -287,8 +287,8 @@ def connect_verified(dev: dict, timeout: float = 3.0,
         raise
     want = dev.get("id", "")
     if not want and is_mock(info.device_id):
-        # 模擬デバイスは、IDを控えていない(=練習に向けた)ときだけ許す。
-        # 学習もしない。控えがあるのに相手が mock なら下で拒否する —
+        # 模擬デバイスは、IDを記録していない(=練習に向けた)ときだけ許す。
+        # 学習もしない。記録があるのに相手が mock なら下で拒否する —
         # 黙って mock を操作して「実機で動いた」と誤認する偽成功の方が、
         # 止まるより害が大きい
         return c, info
@@ -301,14 +301,14 @@ def connect_verified(dev: dict, timeout: float = 3.0,
                 f"{dev.get('host')} にいるのは練習用の模擬デバイスです"
                 f"(登録 {name}={want})。練習に切り替えるなら"
                 " padcue-練習.bat か「padcue device 127.0.0.1」"
-                "(IDの控えを解除して向け替えます)を使ってください")
+                "(ID の記録を解除して接続先を切り替えます)を使ってください")
         if info.device_id:
             raise DeviceError(
                 "DEVICE_MISMATCH",
                 f"{dev.get('host')} にいるのは別の個体です"
                 f"(登録 {name}={want} / 実際 {info.device_id})。"
                 "IP が入れ替わったなら探索で追跡されます。装置を交換したなら"
-                f" padcue device forget {name} で控えを解除してください")
+                f" padcue device forget {name} で記録を解除してください")
         raise DeviceError(
             "DEVICE_MISMATCH",
             f"{dev.get('host')} の相手は個体IDを名乗らない古いファームです。"

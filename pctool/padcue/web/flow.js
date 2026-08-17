@@ -20,7 +20,7 @@ function resolve(path) {
 }
 function nodeAt(path) { const r = resolve(path); return r.arr[r.idx]; }
 function samePath(a, b) { return a && b && a.join() === b.join(); }
-// ブロックの実体から今のパスを引く。描画時に控えたパスは「動かす前」の位置
+// ブロックの実体から今のパスを引く。描画時に記録したパスは「動かす前」の位置
 // なので、自分より前にあったブロックを抜くと1つずれ、別のブロックを指す
 function pathOfNode(target, arr, prefix) {
   arr = arr || flowDoc.body;
@@ -752,7 +752,7 @@ function renderProcRow(p) {
   g.title = 'ドラッグで並べ替え・フォルダへ移動(実行・監視と共通の並び)';
   bindOrgDrag(g, d, 'proc', p.name);
   d.append(g);
-  // 名前の右に所要フレーム数。2台運用では「相方の操作と同じ時間だけ待つ」を
+  // 名前の右に所要フレーム数。2台運用では「相手の操作と同じ時間だけ待つ」を
   // 手順に書くので、一覧を見たまま2つの手順の長さを突き合わせられるようにする。
   // 単位は毎行「フレーム」と書くと名前がそのぶん切れるので F と略す。
   // 読み方はその場に触れれば分かるようにしておく

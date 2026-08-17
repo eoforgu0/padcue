@@ -75,7 +75,7 @@ def test_cli_without_device_reports_clearly(proj, monkeypatch):
     """
     monkeypatch.setattr(cli, "discover", lambda *a, **k: [])
     # 既定の接続先は pademu.local。実機が同じ LAN にいると名前が引けてしまうので、
-    # 届かない住所を明示しておく
+    # 届かないアドレスを明示しておく
     cfg = proj.load_config()
     cfg["host"] = "192.0.2.9"
     proj.save_config(cfg)
@@ -102,7 +102,7 @@ def guiserver(proj, device):
     cfg["port"] = device.port
     proj.save_config(cfg)
     gui._Handler.project = proj
-    drop_handler_state()          # 前の検査のプール・見張りを持ち込まない
+    drop_handler_state()          # 前の検査のプール・監視を持ち込まない
     srv = ThreadingHTTPServer(("127.0.0.1", 0), gui._Handler)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()

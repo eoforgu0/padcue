@@ -32,7 +32,7 @@ def run_coupling(c: Checker, page, proj: Project,
     c2 = MockDevice(speed=1.0, device_id="mockcp200000")
     c1.start()
     c2.start()
-    # 相方待ちの色を見るための「遅い」版(分岐の前が5秒長い)
+    # 相手待ちの色を見るための「遅い」版(分岐の前が5秒長い)
     slow = {
         "schema": 1, "name": "選んで進む(遅)", "body": [
             {"type": "wait", "frames": 300},
@@ -61,7 +61,7 @@ def run_coupling(c: Checker, page, proj: Project,
     def t_cta_only_before_link():
         # 上部バーは2台以上なら常にある。連結していないときに残るのは
         # 「2台にまたがるもの」= 連結の入口とプリセットの保存だけで、
-        # 連結の語彙(まとめて開始・合流・両方停止・開始ズレ)は消えている
+        # 連結の操作(まとめて開始・合流・両方停止・開始ズレ)は消えている
         assert page.locator("#coupler").is_visible(), "上部バーが無い"
         assert page.locator("#clink").is_visible(), "連結の入口が無い"
         bar = page.locator("#coupler").inner_text()
@@ -72,7 +72,7 @@ def run_coupling(c: Checker, page, proj: Project,
                    "連結を外す", "開始ズレ"):
             assert ng not in bar, f"連結していないのに「{ng}」が出ている"
         body = page.locator("#lanes").inner_text()
-        assert "連結して開始" not in body, "連結の語彙がレーンに漏れている"
+        assert "連結して開始" not in body, "連結の操作がレーンに漏れている"
     c.check("連結する前は、入口とプリセットの保存だけが残る",
             t_cta_only_before_link)
 
@@ -110,7 +110,7 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_timeout(150)
         page.keyboard.press("Escape")
         page.wait_for_timeout(250)
-    c.check("連結すると上部バーに連結の語彙が一式現れる", t_link_shows_bar)
+    c.check("連結すると上部バーに連結の操作が一式現れる", t_link_shows_bar)
 
     def t_unlink_and_relink():
         page.click("#cunlink")
@@ -200,18 +200,18 @@ def run_coupling(c: Checker, page, proj: Project,
         set_lane_proc(page, 1, "選んで進む(遅)")
         page.wait_for_timeout(300)
         page.click("#crun1")
-        # 早い 1P が先に駐機 → 青の「相方待ち」(黄や赤ではない)。
+        # 早い 1P が先に選択待ち → 青の「相手待ち」(黄や赤ではない)。
         # 毎秒の待ち文は出さない決まりなので、チップだけで見る
         page.wait_for_function(
             "() => {"
             "  const l1 = document.querySelectorAll('#lanes .lane')[0];"
             "  const ch = l1 && l1.querySelector('.chip:not(.runchip)');"
-            "  return ch && ch.textContent === '相方待ち'; }",
+            "  return ch && ch.textContent === '相手待ち'; }",
             timeout=10000)
         assert lane_at(page, 0).locator(".lawait .msg.wait").count() == 0, \
-            "出さないと決めた毎秒の相方待ち文が出ている"
+            "出さないと決めた毎秒の相手待ち文が出ている"
         assert lane_at(page, 0).locator(".lawait .msg.warn").count() == 0, \
-            "正常な相方待ちに黄色が使われている"
+            "正常な相手待ちに黄色が使われている"
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
         assert "だけ進める" in lane_at(page, 0).locator(".soloadv").inner_text()
         # そろって進んだことは知らせない。チップが「実行中」へ戻るので状態で
@@ -221,14 +221,14 @@ def run_coupling(c: Checker, page, proj: Project,
             "() => {"
             "  const l1 = document.querySelectorAll('#lanes .lane')[0];"
             "  const ch = l1 && l1.querySelector('.chip:not(.runchip)');"
-            "  return ch && ch.textContent !== '相方待ち'; }",
+            "  return ch && ch.textContent !== '相手待ち'; }",
             timeout=15000)
         assert page.locator("#lanes .lane .lawait .msg.ok").count() == 0, \
             "そろっただけで知らせが出ている(状態で伝わるので要らない)"
         wait_lanes_idle(page)
         set_lane_proc(page, 1, "選んで進む")
         page.wait_for_timeout(300)
-    c.check("相方待ちは青。そろったら知らせを出さない(黄は使わない)",
+    c.check("相手待ちは青。そろったら知らせを出さない(黄は使わない)",
         t_wait_colors)
 
     def t_oneshot_manual():
@@ -279,7 +279,7 @@ def run_coupling(c: Checker, page, proj: Project,
         assert abs(geo["r"] - want_r) < 0.6, (
             f"リングの丸みが同心でない: {geo['r']} "
             f"(ボタン {geo['br']} + 余白 {geo['pad'][0]} = {want_r} のはず)")
-        # レーンの選択肢と同じ姿(同じ大きさ)。名前に「(両方へ)」は付けない
+        # レーンの選択肢と同じ見た目(同じ大きさ)。名前に「(両方へ)」は付けない
         # ——すぐ左の見出しが「選択肢を両方へ同時に送る」
         arm = page.locator("#cbotharms button", has_text="出た").first
         cls = arm.get_attribute("class") or ""
@@ -333,8 +333,8 @@ def run_coupling(c: Checker, page, proj: Project,
 
     def t_solo_restart_after_manual_stop_not_auto_joined():
         # 連結実行中、片方を人為停止 → その装置で単独実行を開始できること。
-        # かつ単独実行が駐機に達しても、連結の自動合流が誤発火して勝手に
-        # 選択肢を選ばないこと(相方=1P はまだ連結実行中のまま)
+        # かつ単独実行が選択待ちに達しても、連結の自動合流が誤発火して勝手に
+        # 選択肢を選ばないこと(相手=1P はまだ連結実行中のまま)
         lane_at(page, 0).locator(".lloops").fill("0")
         lane_at(page, 1).locator(".lloops").fill("0")
         page.click("#crun")
@@ -349,8 +349,8 @@ def run_coupling(c: Checker, page, proj: Project,
         page.wait_for_function(
             "() => state.devices[1].running || state.devices[1].awaiting",
             timeout=10000)
-        # 1Pは連結実行として毎周駐機し、来ない相方(2P)を待ち続けている状況。
-        # 誤発火する実装では、この駐機と2Pのソロ駐機が「2台そろった」と
+        # 1Pは連結実行として毎周選択待ちし、来ない相手(2P)を待ち続けている状況。
+        # 誤発火する実装では、この選択待ちと2Pのソロ選択待ちが「2台そろった」と
         # 誤認され、2Pへ勝手にSELECTが送られて進んでしまう
         page.wait_for_timeout(3000)
         assert page.evaluate("state.devices[1].awaiting"), \
@@ -391,7 +391,7 @@ def run_coupling(c: Checker, page, proj: Project,
     c.check("異常の連動停止: 理由と再開・片方だけ続けるがその場に出る",
             t_linked_stop_banner)
 
-    # 2P を復活させる(以降の検査は2台とも健康な前提。実機なら電源を
+    # 2P を復活させる(以降の検査は2台とも正常な前提。実機なら電源を
     # 入れ直して「探す」に相当)
     c2b = MockDevice(speed=1.0, device_id="mockcp200000")
     c2b.start()
@@ -421,7 +421,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
     run_coupling の続きとして、2台が待機中で連結できる状態から始める。
     """
     def t_formation_roundtrip():
-        # 保存の作法は上部バーに一本化(原則 §4)。未使用時は #cformsave が
+        # 保存の決まりは上部バーに一本化(原則 §4)。未使用時は #cformsave が
         # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に化ける
         assert page.locator("#cformsaveas").is_hidden(), \
             "上書きする相手がいないのに「別名で保存」が出ている"
@@ -500,7 +500,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             " === '保存済み'", timeout=8000)
         assert lane_at(page, 0).locator(".lloops").input_value() == "9", \
             "呼び出しても上書き保存した割り当てに戻らない"
-        # 改名(格納庫の行アイコン ✎)。上部バーの名前チップも追従する
+        # 改名(管理領域の行アイコン ✎)。上部バーの名前チップも追従する
         prompt_value[0] = "いつものB"
         row_icon(page, "#formlist", "いつもの", 0).click()
         page.wait_for_function(
@@ -552,7 +552,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
         page.wait_for_function(
             "() => document.querySelectorAll('#lanes .lane .lloops')[0]"
             ".value === '9'", timeout=8000)
-        # 後片づけ
+        # 後始末
         row_icon(page, "#formlist", "いつものC", 1).click()
         page.wait_for_timeout(600)
         prompt_value[0] = "自動テスト"
@@ -566,7 +566,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
         page.wait_for_function(
             "() => document.querySelector('#coupler').classList"
             ".contains('linked')", timeout=8000)
-        # 割り当ては連結していなくても編集する。保存の導線は連結の語彙では
+        # 割り当ては連結していなくても編集する。保存の導線は連結の操作では
         # なく「2台にまたがるもの」なので、外しても上部バーに残り続ける
         page.click("#cunlink")
         page.wait_for_function(
@@ -602,7 +602,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             ".contains('linked')", timeout=8000)
         assert lane_at(page, 0).locator(".lloops").input_value() == "4", \
             "単独のプリセットを呼び出しても割り当てが戻らない"
-        # 後片づけ(以後の検査は連結中が前提)
+        # 後始末(以後の検査は連結中が前提)
         row_icon(page, "#formlist", "単独で回す", 1).click()
         page.wait_for_timeout(600)
         page.click("#clink")
@@ -614,7 +614,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
             t_solo_formation)
 
     def t_f10_starts_together():
-        # F10 = 現在の盤面のままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)。
+        # F10 = 現在の割り当てのままいまの割り当てでまとめて開始(⟳ 周回実行と同じ)。
         # 成功文は出ない(両装置が動き出すこと自体で伝わる。原則 §5)
         page.keyboard.press("F10")
         page.wait_for_function(
@@ -623,9 +623,9 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
         assert page.locator("#cactmsg").inner_text().strip() == "", \
             "まとめて開始の成功文が残っている"
         wait_lanes_idle(page)
-    c.check("F10 で現在の盤面をまとめて開始", t_f10_starts_together)
+    c.check("F10 で現在の割り当てをまとめて開始", t_f10_starts_together)
 
-    # あと片づけ: プリセットを消し、1台に戻す(改名後の名前で消す)
+    # 後始末: プリセットを消し、1台に戻す(改名後の名前で消す)
     row = page.locator("#formlist .devrow", has_text="いつものB")
     if row.count():
         row_icon(page, "#formlist", "いつものB", 1).click()

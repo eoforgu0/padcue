@@ -1,4 +1,4 @@
-"""駐機タイムアウト(AWAIT レコードの timeout_frames / on_timeout)。
+"""選択待ちタイムアウト(AWAIT レコードの timeout_frames / on_timeout)。
 
 ここは mock の検査。実機は同じ規則を supervisor(100ms 周期)で実装しており、
 実機2台での確認は runbook の受け入れ手順に含める。

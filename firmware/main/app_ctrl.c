@@ -45,7 +45,7 @@ static const char *TAG = "ctrl";
 #define T_RESP 0x80
 #define T_ERROR 0xFF
 
-// パケット緩衝の大きさ。理論上の最大(65535)を送受で2本取ると、手順バッファ
+// パケットバッファの大きさ。理論上の最大(65535)を送受で2本取ると、手順バッファ
 // 96KB と合わせて約 229KB になり、WiFi/USB を足すと内蔵 RAM(約 320KB)に
 // 収まらない(malloc が失敗して起動できない)。
 // 大きな転送(手順の PUT・OTA)はすべて分割して送るので、1パケットは小さくてよい。
@@ -176,7 +176,7 @@ static int cmd_hello(int sock) {
     return r;
 }
 
-// 手順の転送は分割して受ける。1パケットに全部載せると 64KB の緩衝が要り、
+// 手順の転送は分割して受ける。1パケットに全部載せると 64KB のバッファが要り、
 // 内蔵 RAM に収まらない。受け取ったそばから手順バッファへ直接書き、
 // 最後の断片で確定する(total と一致した時点で完了)
 static int cmd_put(int sock, cJSON *req, const uint8_t *blob, size_t blob_len) {
@@ -285,7 +285,7 @@ static int cmd_run(int sock, cJSON *req) {
             start_base = (uint64_t)rb->valuedouble;
         }
     }
-    // 遅れの計器は実行ごとの値にする(エンジン側の late_* は start が 0 に戻す)
+    // 遅れの計測値は実行ごとの値にする(エンジン側の late_* は start が 0 に戻す)
     app_usb_reset_tx_stats();
     err = app_engine_start(app_store_buffer(), len, loops, start_index, start_base);
     if (err != ESP_OK) return send_error(sock, "START_FAILED", esp_err_to_name(err));
@@ -317,7 +317,7 @@ static int cmd_stop(int sock, cJSON *req) {
     if (!app_engine_is_running() && !app_engine_is_awaiting()) {
         app_state_t st = app_state_get();
         if (st == APP_STATE_RUNNING || st == APP_STATE_AWAITING) {
-            // supervisor のレベル同期と同じ分類で着地させる。無条件に ABORT
+            // supervisor のレベル同期と同じ分類で終了処理へ移す。無条件に ABORT
             // 扱いにすると、直前に完走/異常停止していた場合に RUN_DONE や
             // ERROR ラッチ(異常の痕跡)を潰してしまう
             app_run_end_land();
@@ -350,7 +350,7 @@ static int cmd_status(int sock) {
     // 進捗バーと「周回 n / N」の表示に使う(無いと PC 側が 0% のままになる)
     cJSON_AddNumberToObject(j, "total_frames", (double)p.total_frames);
     cJSON_AddNumberToObject(j, "loop_n", p.loop_n);
-    // 遅れの計器。割り込みが定刻に入ったか(late_*)と、実際に USB へ渡すまで
+    // 遅れの計測値。割り込みが定刻に入ったか(late_*)と、実際に USB へ渡すまで
     // 遅れなかったか(deliver_*)は別物なので、両方そのまま出す。
     // 最大値はしきい値と無関係に記録しているので、件数 0 でも実力が見える
     cJSON_AddNumberToObject(j, "late_events", p.late_events);
@@ -561,15 +561,15 @@ static int cmd_select(int sock, cJSON *req) {
         || arm->valuedouble >= app_engine_await_arm_count()) {
         return send_error(sock, "BAD_ARG", "腕の番号が範囲外です");
     }
-    // 世代照合(任意): gen は「この実行で何回目の駐機か」。一致しない SELECT は
-    // 別の駐機に宛てた古い指示なので拒否する(2台の自動合流で、遅れて届いた
-    // 選択が次の周回の駐機を誤って進める事故を防ぐ)。
+    // 世代照合(任意): gen は「この実行で何回目の選択待ちか」。一致しない SELECT は
+    // 別の選択待ちに宛てた古い指示なので拒否する(2台の自動合流で、遅れて届いた
+    // 選択が次の周回の選択待ちを誤って進める事故を防ぐ)。
     // gen なしの SELECT は従来どおり受ける(1台運用・手動操作の互換)
     cJSON *gen = cJSON_GetObjectItem(req, "gen");
     if (cJSON_IsNumber(gen)
         && (uint32_t)gen->valuedouble != app_engine_await_gen()) {
         return send_error(sock, "STALE_SELECT",
-                          "その選択は前の駐機に宛てたものです(状態を取り直してください)");
+                          "その選択は前の選択待ちに宛てたものです(状態を取り直してください)");
     }
     esp_err_t err = app_engine_select((uint8_t)arm->valuedouble);
     if (err != ESP_OK) return send_error(sock, "SELECT_FAILED", esp_err_to_name(err));
@@ -796,7 +796,7 @@ esp_err_t app_ctrl_start(void) {
     s_rx = malloc(MAX_FRAME + 8);
     s_tx = malloc(MAX_FRAME + 8);
     if (!s_rx || !s_tx) {
-        ESP_LOGE(TAG, "パケット緩衝 %d バイト×2 を確保できません(空き %u)",
+        ESP_LOGE(TAG, "パケットバッファ %d バイト×2 を確保できません(空き %u)",
                  MAX_FRAME + 8, (unsigned)esp_get_free_heap_size());
         free(s_rx); free(s_tx); s_rx = NULL; s_tx = NULL;
         return ESP_ERR_NO_MEM;

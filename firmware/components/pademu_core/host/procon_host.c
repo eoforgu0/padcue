@@ -117,7 +117,7 @@ int main(void) {
             pademu_tx_discard(&tx);
             printf("discarded\n");
         } else if (strncmp(line, "txnext", 6) == 0) {
-            // IN エンドポイントが空いたときの送出(応答優先・定期入力は埋め草)
+            // IN エンドポイントが空いたときの送出(応答優先・定期入力は穴埋め)
             size_t rn = pademu_tx_next(&tx, procon_build_cb, &pc, &st, resp);
             if (rn == 0) {
                 printf("empty\n");
@@ -150,7 +150,7 @@ int main(void) {
             printf("pair %u %02x\n", (unsigned)pc.pair_reqs,
                    pc.pair_last_step);
         } else if (strncmp(line, "hostinfo", 8) == 0) {
-            // ペアリング引数の控え(取り出すと消える。app_usb と同じ作法)
+            // ペアリング引数の記録(取り出すと消える。app_usb と同じ扱い)
             if (!pc.host_info_seen) {
                 printf("none\n");
             } else {

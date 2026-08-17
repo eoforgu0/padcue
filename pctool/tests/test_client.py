@@ -204,7 +204,7 @@ def test_bad_procedure_data_is_rejected(client):
 def test_commit_refuses_a_name_that_was_not_staged():
     """転送した名前とは違う名前での確定を断ること。
 
-    実機は転送の受け皿と実行時の読み込みで同じ緩衝を使う(96KB を2つ持てない)。
+    実機は転送の受け皿と実行時の読み込みで同じバッファを使う(96KB を2つ持てない)。
     実行のたびにそこが塗り替わるので、確定の前に名前を照合しないと
     「PUT foo -> RUN bar -> COMMIT foo」で foo に bar の中身が保存される。
     模擬デバイスも実機と同じ判定にしてある(app_store.c の app_store_commit)。

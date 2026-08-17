@@ -1,8 +1,8 @@
-"""検査道具が本物のマイコンに触れないようにするための歯止め。
+"""検査道具が本物のマイコンに触れないようにするための安全策。
 
 uicheck.py / runbook_walk.py は「探す」を押し、見つかった相手に手順を転送して
 実行する。本物のマイコンが同じ LAN にいると `pademu.local` がそちらへ解決する
-ため、素通しにすると **実機が繋がっている Switch 2 を実際に操作してしまう**
+ため、そのまま通すにすると **実機が繋がっている Switch 2 を実際に操作してしまう**
 (実際に起こりうる)。
 
 対策は二重にする。
@@ -35,7 +35,7 @@ def forbid_remote() -> None:
     """loopback 以外へは、実際には一切繋がないようにする。
 
     例外の種類は「届かなかった」と同じ(DeviceError)にする。検査には
-    わざと繋がらない住所を入れて画面の出方を見る項目があり、そこだけ
+    わざと繋がらないアドレスを入れて画面の出方を見る項目があり、そこだけ
     別の壊れ方をすると検査自体が成り立たなくなるため。
     握りつぶしたことは端末に出す。
     """
@@ -45,7 +45,7 @@ def forbid_remote() -> None:
         def __init__(self, host, port, *a, **kw):
             self._blocked = host not in _LOCAL
             if self._blocked:
-                print(f"  [歯止め] 実機への接続を止めました: {host}:{port}",
+                print(f"  [安全策] 実機への接続を止めました: {host}:{port}",
                       file=sys.stderr, flush=True)
             super().__init__(host, port, *a, **kw)
 

@@ -78,7 +78,7 @@ static bool name_ok(const char *name) {
 }
 
 // すでに app_store_buffer() へ書き込んである内容を確定する(分割転送用)。
-// 転送のたびに 96KB の第二の緩衝を持たずに済ませるための入口
+// 転送のたびに 96KB の第二のバッファを持たずに済ませるための入口
 esp_err_t app_store_stage_buffered(const char *name, size_t len, char *hash_out) {
     if (!name_ok(name)) return ESP_ERR_INVALID_ARG;
     if (len == 0 || len > APP_STORE_MAX_PROC_SIZE) return ESP_ERR_INVALID_SIZE;
@@ -92,7 +92,7 @@ static void path_of(const char *name, char *out, size_t cap) {
     snprintf(out, cap, "%s/%s.bin", BASE, name);
 }
 
-// 緩衝(s_buf)は転送の受け皿と実行時の読み込みで共用している。実行のたびに
+// バッファ(s_buf)は転送の受け皿と実行時の読み込みで共用している。実行のたびに
 // app_store_load が中身と s_staged_name を塗り替えるので、**確定は「いま載って
 // いるのが本当にその名前で転送されたものか」を見てから**行う。見ないと
 // 「PUT foo -> RUN bar -> COMMIT foo」で foo に bar の中身が保存される

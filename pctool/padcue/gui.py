@@ -116,9 +116,9 @@ class _Handler(BaseHTTPRequestHandler):
     lock = threading.Lock()      # 記録(recorder)など PC 側共有物の直列化
     pool = None                  # DevicePool(装置への接続・収集の唯一の窓口)
     coupler = None               # Coupler(連結・セット実行・自動合流の持ち主)
-    watcher = None               # RunWatcher(通知のきっかけを見張る)
-    # 見張りを作るときだけの錠。lock(装置操作の直列化)とは別にする。
-    # /api/stop は lock を持ったまま見張りに触るので、同じ錠だと自分で詰まる
+    watcher = None               # RunWatcher(通知のきっかけを監視する)
+    # 監視を作るときだけのロック。lock(装置操作の直列化)とは別にする。
+    # /api/stop は lock を持ったまま監視に触るので、同じロックだと自分で詰まる
     watcher_lock = threading.Lock()
     recorder: Recorder | None = None   # 手動操作の記録中だけ存在する
 
@@ -153,7 +153,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # ---- 装置プール(接続・収集・キャッシュの唯一の窓口) ----
     # 接続の張り方・個体ID照合・繋ぎ直しの規則は devicepool.DeviceLink が
-    # 一手に持つ。ここは「どの装置へ」を選んで渡すだけ
+    # 一元的に持つ。ここは「どの装置へ」を選んで渡すだけ
 
     @classmethod
     def _pool(cls):
@@ -198,12 +198,12 @@ class _Handler(BaseHTTPRequestHandler):
             return cls.watcher
 
     def _reachable(self, host: str, port: int) -> bool:
-        """その住所で本当に pademu が応答するか(短い待ちで確かめる)。
+        """そのアドレスで本当に pademu が応答するか(短い待ちで確かめる)。
 
-        健康な登録済み装置がその宛先を使用中なら、試さずに到達可とする
+        正常な登録済み装置がその宛先を使用中なら、試さずに到達可とする
         (実機は同時1接続・後着優先。試すと自分の接続を横取りして壊す)。
-        待ちを 3 秒取るのは、実機が「先客が黙ってから」新しい接続へ乗り換える
-        ため(最大1秒。app_ctrl.c handle_client)。
+        待ちを 3 秒取るのは、実機が「先に繋いでいた側が黙ってから」新しい
+        接続へ乗り換えるため(最大1秒。app_ctrl.c handle_client)。
         """
         if self._pool().has_healthy(host, int(port)):
             return True
@@ -220,7 +220,7 @@ class _Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0"))
         return json.loads(self.rfile.read(n) or b"{}")
 
-    # ---- 入口の門番 ----
+    # ---- 入口のアクセス制御 ----
     # 127.0.0.1 で待つだけでは足りない。利用者が別のタブで開いた任意の
     # Web ページから fetch を投げられ、応答は同一生成元規則で読めなくても
     # **副作用は起きる**(実機が動き出す)。Host と Origin で弾く。
@@ -279,7 +279,7 @@ class _Handler(BaseHTTPRequestHandler):
         if u.path in _STATIC:
             return self._static(u.path)
         if u.path == "/api/state":
-            # 実機は同時に1接続しか受けないので POST と同じ錠で直列化する
+            # 実機は同時に1接続しか受けないので POST と同じロックで直列化する
             with self.lock:
                 return self._json(self._state())
         if u.path == "/api/events":
@@ -296,7 +296,7 @@ class _Handler(BaseHTTPRequestHandler):
             tl["resume_points"] = r.resume_points
             return self._json(tl)
         if u.path == "/api/logs":
-            # 回収は装置プールの収集係が装置ごとに行い、装置タグ付きで保存
+            # 回収は装置プールの収集スレッドが装置ごとに行い、装置タグ付きで保存
             # 済み(装置側は読むと消えるので、読み手はプール1つに限る)。
             # ここは溜まっている記録を返すだけ
             self._pool()                     # 収集が動いていることを保証
@@ -396,8 +396,8 @@ class _Handler(BaseHTTPRequestHandler):
             return {"ok": True, "host": host}
         if path == "/api/discover":
             # 探して「実際につながる」ものだけを採用する。
-            # 探索の返事は届いた経路の住所で見えるため、PC に仮想アダプタが
-            # あると「自分の別の住所」が候補に混じる。確かめずに採用すると、
+            # 探索の返事は届いた経路のアドレスで見えるため、PC に仮想アダプタが
+            # あると「自分の別のアドレス」が候補に混じる。確かめずに採用すると、
             # いま繋がっているのに未接続へ落ちる
             cfg = self.project.load_config()
             # dev 指定でその装置を追跡する(レーンの「探す」)。省略時は1台目
@@ -408,10 +408,10 @@ class _Handler(BaseHTTPRequestHandler):
             dev0 = devs_all[didx]
             cur_host = (dev0.get("host") or "").strip()
             cur_port = int(dev0.get("port", proto.DEFAULT_PORT))
-            # 今つながっているなら何も変えない。収集キャッシュが健康なら
+            # 今つながっているなら何も変えない。収集キャッシュが正常なら
             # 生きている(改めて試すと自分の接続を横取りして壊す)。
             # 先にプールを設定へ追従させる(接続先を書き換えた直後に押された
-            # 場合、古い宛先の健康さで「維持」と答えないように)
+            # 場合、古い宛先が正常だからと「維持」と答えないように)
             self._pool().refresh()
             if cur_host and self._pool().has_healthy(cur_host, cur_port):
                 return {"ok": True, "host": cur_host, "kept": True}
@@ -424,9 +424,9 @@ class _Handler(BaseHTTPRequestHandler):
             # 対象にし、実機を差し置いて mock を採用しない(127.0.0.1 は
             # IP 順で先頭に来がち)。mock への切替は明示操作
             # (padcue-練習.bat / device 127.0.0.1)だけで行う
-            # 他のレーンが控えている個体は、ID 未学習でも採用しない。
+            # 他のレーンが記録している個体は、ID 未学習でも採用しない。
             # 1P が落ちている状態で 1P の「探す」を押すと、応答するのは 2P
-            # だけになる。ここを見ないと 1P の接続先が 2P の住所に書き換わり、
+            # だけになる。ここを見ないと 1P の接続先が 2P のアドレスに書き換わり、
             # 両方のレーンが同じ実機を掴む(片方の操作がもう片方に出る)。
             # 追加登録(/api/device_scan)と CLI も同じ形でここを防ぐ
             others = {d.get("id") for i, d in enumerate(devs_all)
@@ -579,14 +579,14 @@ class _Handler(BaseHTTPRequestHandler):
             link = self._pool().get(body.get("dev", ""))
             if mode == "immediate":
                 # 押した本人は画面を見ているので、この停止では通知しない。
-                # 送る**前に**印を付ける(止まった状態が控えに乗るのと
-                # 見張りの周期は競争するため、届いてから付けたのでは間に合う
+                # 送る**前に**印を付ける(止まった状態が記録に乗るのと
+                # 監視の周期は競争するため、届いてから付けたのでは間に合う
                 # 保証がない)。印は次に止まった1回で使い切る
                 self._watcher().note_manual_stop([link.cfg.get("name", "")])
             link.write_through(
                 status=link.call(lambda c: (c.stop(mode), c.status())[1]))
             # 人が押した停止の印。連結実行中でも「人為停止は連動しない」
-            # (coupling.md §1)ため、監視係が異常停止と区別できるように記す。
+            # (coupling.md §1)ため、監視スレッドが異常停止と区別できるように記す。
             # 停止が**実際に届いてから**記す(届く前に印だけ付くと、その
             # 装置の本物の異常が連動停止にならない)。予約の取り消しは
             # 印も取り消す(走り続けるので)
@@ -654,7 +654,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._coupler().stop_both(mode)
         if path == "/api/select_both":
             return self._coupler().select_both(int(body.get("arm", 0)))
-        # ---- プリセット(盤面のスナップショット。sets/<名前>.json) ----
+        # ---- プリセット(割り当てのスナップショット。sets/<名前>.json) ----
         if path == "/api/formation_save":
             self.project.save_formation(body.get("name", ""),
                                         body.get("data") or {})
@@ -790,7 +790,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _events(self):
         """通知のきっかけを押し出す(SSE)。lock は取らない。
 
-        この接続は開いたままになるので、装置操作の錠を持ってはいけない。
+        この接続は開いたままになるので、装置操作のロックを持ってはいけない。
         繋いだ時点より前の事象は流さない(画面を開き直したとき、すでに
         終わっている実行の知らせが遅れて鳴らないように)。
         """
@@ -974,7 +974,7 @@ def serve(project: Project, host: str, port: int, open_browser: bool) -> int:
               "または本体ボタンを1.5秒長押し)")
     finally:
         marker.unlink(missing_ok=True)
-        # 見張りを先に終わらせる(開いたままの通知の配信を起こして返す)
+        # 監視を先に終わらせる(開いたままの通知の配信を起こして返す)
         if _Handler.watcher is not None:
             _Handler.watcher.close()
             _Handler.watcher = None

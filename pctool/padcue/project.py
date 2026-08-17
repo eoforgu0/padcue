@@ -156,7 +156,7 @@ class Project:
           ここで両方を同時に揃える)
         - 手元の cfg が古いまま全量保存して、他プロセスの変更(別端末の
           device add 等)を消すこと。保存直前にディスクから読み直し、
-          対象エントリ(IDが控えてあればID、なければ名前、最後は位置で特定)
+          対象エントリ(IDが記録してあればID、なければ名前、最後は位置で特定)
           にだけ変更を当てる
         """
         target = cfg["devices"][idx]
@@ -213,7 +213,7 @@ class Project:
                 f.write("\n".join(lines) + "\n")
             # 毎回 _trim_logs を呼ぶと、保持上限に達したあとは**追記のたびに
             # 5000〜10000 行(約1MB)を読んでは捨てる**ことになる。しかもこれは
-            # 書き込みの錠の内側なので、装置2台の収集スレッドがその全読みで
+            # 書き込みのロックの内側なので、装置2台の収集スレッドがその全読みで
             # 直列化する。上限ぶん溜まったときだけ整理する
             self._since_trim += len(lines)
             if self._since_trim >= self.LOG_KEEP:
@@ -251,7 +251,7 @@ class Project:
         if not dev:
             self.log_path().unlink(missing_ok=True)
             return
-        # 読み→選別→書き戻しの間に収集係が追記すると消えてしまうので、
+        # 読み→選別→書き戻しの間に収集スレッドが追記すると消えてしまうので、
         # 全体を書き込み lock の中で行う
         with self._log_write_lock:
             try:
@@ -312,7 +312,7 @@ class Project:
     #                                                実体は procedures/ 直下のまま)
     # 表示順は「フォルダ(配列順)→フォルダ外(procedures 順)」、どこにも
     # 載っていない手順は名前順で末尾(既存の並び順規則の延長)。
-    # 存在しない手順名の参照は読み込み時に無視する(改名・削除の残骸対策)
+    # 存在しない手順名の参照は読み込み時に無視する(改名・削除の古い設定対策)
 
     def load_proc_org(self) -> dict:
         d = self._load_order()
@@ -417,7 +417,7 @@ class Project:
             return []
         return self._apply_order([p.stem for p in d.glob("*.csv")], "parts")
 
-    # ---- プリセット(連結実行の盤面スナップショット。sets/<名前>.json) ----
+    # ---- プリセット(連結実行の割り当てスナップショット。sets/<名前>.json) ----
     # 利用者の資産(手順・部品と同格)なのでプロジェクト直下に置く。
     # 保存キーは装置の個体ID(改名してもプリセットが切れないように。計画 D6)
 
@@ -439,7 +439,7 @@ class Project:
                    "arm": int(data.get("arm", 0)),
                    "devices": [
                        {"id": str(x.get("id", "")),
-                        # 名前は ID が空のときの解決の綱(練習の mock は設計上
+                        # 名前は ID が空のときの解決の手がかり(練習の mock は設計上
                         # ID を学習しないため、ID だけだと装置を引けない)
                         "name": str(x.get("name", "")),
                         "proc": str(x.get("proc", "")),

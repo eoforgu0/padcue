@@ -50,7 +50,7 @@ static bool s_pending_is_await;
 
 static uint64_t s_start_us;
 // この実行の終了報告(RUN_DONE/ABORT/FAULT のログ)がまだ書かれていないか。
-// 着地処理は STOP コマンドと supervisor の2箇所にあり、際どいタイミングで
+// 終了処理は STOP コマンドと supervisor の2箇所にあり、際どいタイミングで
 // 両方が走るとログが二重になるため、報告の権利を1回だけ渡す
 static _Atomic bool s_end_unreported;
 static _Atomic uint32_t s_late_events;
@@ -70,7 +70,7 @@ static bool s_graceful_armed;
 static uint32_t s_graceful_passes;
 // 待機分岐
 static _Atomic bool s_awaiting;
-// 駐機の通し番号(起動から単調増加。SELECT の宛先照合用。実行をまたいだ
+// 選択待ちの通し番号(起動から単調増加。SELECT の宛先照合用。実行をまたいだ
 // 古い選択も弾けるよう、実行ごとにリセットしない)
 static _Atomic uint32_t s_await_gen;
 
@@ -152,7 +152,7 @@ static bool IRAM_ATTR advance_to_next_emission(void) {
             // 待機分岐に到達。ニュートラル(コア側で設定済み)を予約する。
             // 選択待ちの公開(s_awaiting)は予定時刻のアラームで行う。
             // 進捗もここで公開する。しないと、END を跨いだ直後に AWAIT へ
-            // 到達したとき完了周回数が古いままになり、駐機中の中断ログが
+            // 到達したとき完了周回数が古いままになり、選択待ち中の中断ログが
             // 1 周少ない値で残る
             s_pending = s_engine.state;
             s_pending_abs_frame = abs;
@@ -287,7 +287,7 @@ static bool IRAM_ATTR on_alarm(gptimer_handle_t timer,
         stop_engine_from_isr();
         return false;
     }
-    // 区切り停止: 要求を観測した時点の周回数を控え、次に END を跨いだら止める
+    // 区切り停止: 要求を観測した時点の周回数を記録、次に END を跨いだら止める
     if (atomic_load_explicit(&s_stop_graceful, memory_order_acquire)) {
         if (!s_graceful_armed) {
             s_graceful_armed = true;
@@ -298,8 +298,8 @@ static bool IRAM_ATTR on_alarm(gptimer_handle_t timer,
             return false;
         }
     } else {
-        // 予約が取り消された(あるいは元々無い)。控えも捨てる。
-        // これが無いと「予約→取り消し→次の周でまた予約」のとき、古い控えと
+        // 予約が取り消された(あるいは元々無い)。記録も捨てる。
+        // これが無いと「予約→取り消し→次の周でまた予約」のとき、古い記録と
         // 比較して予約した瞬間に止まってしまう
         s_graceful_armed = false;
     }
@@ -394,8 +394,8 @@ esp_err_t app_engine_start(const uint8_t *data, size_t len, uint32_t session_loo
     atomic_store(&s_pub_index, 0);
     atomic_store(&s_pub_done, 0);
     // s_await_gen は実行をまたいでも 0 に戻さない(起動からの通し番号)。
-    // 実行ごとに戻すと「前の実行の1回目の駐機」宛ての遅れた SELECT が、
-    // 「新しい実行の1回目の駐機」と偶然一致して通ってしまう
+    // 実行ごとに戻すと「前の実行の1回目の選択待ち」宛ての遅れた SELECT が、
+    // 「新しい実行の1回目の選択待ち」と偶然一致して通ってしまう
     atomic_store(&s_status, APP_ENGINE_RUNNING);
     s_graceful_armed = false;
     s_graceful_passes = 0;
@@ -460,7 +460,7 @@ bool app_engine_claim_end_report(void) {
 }
 
 void app_engine_stop_cancel(void) {
-    // フラグを消すだけ。ISR は次のアラームで else 側に入り、控え
+    // フラグを消すだけ。ISR は次のアラームで else 側に入り、記録
     // (s_graceful_armed)を自分で捨てる。停止が先に成立していた場合は
     // 何にも効かない = 「取り消しが間に合わなかった」として停止のまま
     atomic_store_explicit(&s_stop_graceful, false, memory_order_release);
@@ -495,16 +495,16 @@ esp_err_t app_engine_select(uint8_t arm) {
     if (!app_engine_is_awaiting()) {   // 停止済みの残留 awaiting は受けない
         return ESP_ERR_INVALID_STATE;
     }
-    // 入場券: awaiting の取り下げを先に行う。PC からの SELECT(ctrl タスク)
-    // と駐機タイムアウト(supervisor タスク)が同瞬に入っても、通るのは
-    // 片方だけになる。失敗時は下で戻す(取りっぱなしだと駐機が迷子になる)
+    // 占有権: awaiting の取り下げを先に行う。PC からの SELECT(ctrl タスク)
+    // と選択待ちタイムアウト(supervisor タスク)が同瞬に入っても、通るのは
+    // 片方だけになる。失敗時は下で戻す(取りっぱなしだと選択待ちが迷子になる)
     if (!atomic_exchange_explicit(&s_awaiting, false,
                                   memory_order_acq_rel)) {
         return ESP_ERR_INVALID_STATE;
     }
-    // 駐機中はアラームが鳴らないため、区切り停止の取り消し(cancel)をしても
-    // ISR の else 分岐(控えの破棄)が走っていない。ここで捨てないと、
-    // 「予約→取り消し→選択で再開→再予約」のとき古い控えの周回数と比較して
+    // 選択待ち中はアラームが鳴らないため、区切り停止の取り消し(cancel)をしても
+    // ISR の else 分岐(記録の破棄)が走っていない。ここで捨てないと、
+    // 「予約→取り消し→選択で再開→再予約」のとき古い記録の周回数と比較して
     // 周回の途中で止まってしまう。
     // タイマー停止中なので ISR と競合しない
     if (!atomic_load_explicit(&s_stop_graceful, memory_order_acquire)) {
@@ -518,7 +518,7 @@ esp_err_t app_engine_select(uint8_t arm) {
     // その値は必ず 0 で、「測っているつもりで測っていない」コードになる
     pademu_err_t perr = pademu_engine_select(&s_engine, arm, 0);
     if (perr != PADEMU_OK) {
-        // 腕が不正など。入場券(awaiting)を戻さないと、エンジンは駐機した
+        // 腕が不正など。占有権(awaiting)を戻さないと、エンジンは選択待ちした
         // ままなのに選択待ちが見えなくなり、誰も選べなくなる
         atomic_store_explicit(&s_awaiting, true, memory_order_release);
         return ESP_ERR_INVALID_ARG;
@@ -541,14 +541,14 @@ esp_err_t app_engine_select(uint8_t arm) {
     return gptimer_start(s_timer);
 }
 
-// ---- 駐機タイムアウト(AWAIT レコードの timeout_frames / on_timeout) ----
-// 駐機中は精度タイマー(gptimer)を止めてあるため、経過は esp_timer の
+// ---- 選択待ちタイムアウト(AWAIT レコードの timeout_frames / on_timeout) ----
+// 選択待ち中は精度タイマー(gptimer)を止めてあるため、経過は esp_timer の
 // 実時間で数える(秒スケールの保険なので µs 精度は要らない)。
-// supervisor(100ms 周期)から呼ばれる。駐機中は gptimer が止まっていて
+// supervisor(100ms 周期)から呼ばれる。選択待ち中は gptimer が止まっていて
 // ISR と競合しないので、s_engine を直接読んでよい
 
-static uint32_t s_await_seen_gen;     // 経過を測り始めた駐機の世代
-static int64_t s_await_seen_us;       // その駐機を最初に見た時刻
+static uint32_t s_await_seen_gen;     // 経過を測り始めた選択待ちの世代
+static int64_t s_await_seen_us;       // その選択待ちを最初に見た時刻
 
 void app_engine_poll_await_timeout(void) {
     if (!app_engine_is_awaiting()) {
@@ -556,7 +556,7 @@ void app_engine_poll_await_timeout(void) {
     }
     uint32_t gen = atomic_load_explicit(&s_await_gen, memory_order_acquire);
     if (gen != s_await_seen_gen) {
-        // 新しい駐機。ここから数え始める(公開の 100ms 後から数え始まる
+        // 新しい選択待ち。ここから数え始める(公開の 100ms 後から数え始まる
         // ことになるが、タイムアウトは秒スケールの保険なので誤差の内)
         s_await_seen_gen = gen;
         s_await_seen_us = esp_timer_get_time();
@@ -575,7 +575,7 @@ void app_engine_poll_await_timeout(void) {
         (uint32_t)((uint64_t)waited_us * 1000 / s_period_ns);
     if (on_to == 0) {
         // 中断。PC の SELECT(ctrl タスク)と同瞬に走る可能性があるため、
-        // こちらも入場券(awaiting の取り下げ)を先に取る。取れなければ
+        // こちらも占有権(awaiting の取り下げ)を先に取る。取れなければ
         // SELECT が通って再開済みなので、停止してはいけない
         if (!atomic_exchange_explicit(&s_awaiting, false,
                                       memory_order_acq_rel)) {
@@ -586,7 +586,7 @@ void app_engine_poll_await_timeout(void) {
         app_engine_stop(false);   // supervisor が RUN_ABORT として記録する
     } else {
         // 指定の腕へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)。
-        // 入場券は app_engine_select 自身が取る。負けたら何もしない
+        // 占有権は app_engine_select 自身が取る。負けたら何もしない
         if (app_engine_select((uint8_t)(on_to - 1)) == ESP_OK) {
             app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,
                         waited_frames, on_to);
@@ -607,7 +607,7 @@ void app_engine_get_progress(app_engine_progress_t *out) {
     // (「待つ間はタイミングを刻まない」の定義どおり)。
     // **停止後も読む**: 停止はタイマーを止めるだけでカウンタは凍結される
     // (次の実行開始で 0 に戻る)ので、凍結値がそのまま「中断した時点」になる。
-    // 実行中しか読まないと、停止のあと終了ログの順で必ず素通りし、
+    // 実行中しか読まないと、停止のあと終了ログの順で必ず読み飛ばしし、
     // 中断ログが「最後の状態変化のフレーム」に化ける
     uint64_t fe = atomic_load(&s_frames_elapsed);
     uint64_t now_us = 0;

@@ -6,7 +6,7 @@
 失敗した項目はスクリーンショットを残す。
 
 このファイルは入口と流す順だけを持つ。項目の中身は画面の区画ごとに
-uicheck_regions/ にあり、合否の記録と小道具は uicheck_regions/_harness.py。
+uicheck_regions/ にあり、合否の記録と補助関数は uicheck_regions/_harness.py。
 **なぜ pytest ではなく独自の仕組みなのかは _harness.py の冒頭にある。**
 """
 from __future__ import annotations
@@ -60,7 +60,7 @@ def main() -> int:
     dev = MockDevice(speed=1.0, host="0.0.0.0")
     dev.start(discover_port=5557)   # 探索の問いかけにも応える(実機と同じ番号)
     # 装置台帳は毎回まっさらにする。出力フォルダは使い回されるため、前回の
-    # 実行が控えた個体IDが残っていると、今回の模擬デバイスが別個体として
+    # 実行が記録した個体IDが残っていると、今回の模擬デバイスが別個体として
     # 拒否される
     cfg = proj.load_config()
     cfg["devices"] = [{"id": "", "name": "1P",

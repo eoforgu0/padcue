@@ -1,10 +1,10 @@
-"""装置台帳の操作(登録・改名・控え解除・削除)。CLI と GUI の共通実装。
+"""装置台帳の操作(登録・改名・記録の解除・削除)。CLI と GUI の共通実装。
 
 規則(docs/specs/coupling.md D2):
 - 登録は「接続して個体IDを確認してから」。IDを名乗らない旧ファームは断る
-  (照合できない装置を台帳に入れると誤爆防止が成り立たない)
+  (照合できない装置を台帳に入れると誤操作防止が成り立たない)
 - 名前は一意(重複すると指名で取り違える)。改名してもID参照は切れない
-- 控え解除(forget)は装置交換(MACが変わった)ときの正規手順
+- 記録の解除(forget)は装置交換(MACが変わった)ときの正規手順
 """
 from __future__ import annotations
 
@@ -78,13 +78,13 @@ def rename_device(project, old: str, new: str) -> tuple[bool, str]:
 
 
 def forget_device(project, name: str) -> tuple[bool, str]:
-    """IDの控えだけを解除する(装置交換=MACが変わったときの正規手順)。"""
+    """ID の記録だけを解除する(装置交換=MACが変わったときの正規手順)。"""
     cfg = project.load_config()
     for d in cfg.get("devices", []):
         if d.get("name") == name:
             d["id"] = ""
             project.save_config(cfg)
-            return True, (f"{name} のIDの控えを解除しました"
+            return True, (f"{name} の ID の記録を解除しました"
                           "(次の接続で学習し直します)")
     return False, f"装置「{name}」は登録されていません"
 

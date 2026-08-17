@@ -73,7 +73,7 @@ pademu_err_t pademu_decode(const uint8_t *data, size_t len, pademu_proc_t *out) 
     // 割り算で照合する。`count * 32` と掛けると、実機の size_t は 32bit なので
     // count が 2^27 以上で積が回り込む。0x08000000 なら積はちょうど 0 になり、
     // レコード部が空(len = 50)のデータが検査を通り抜けて、直後のループが
-    // 1億3千万回ぶん確保外を読む。crc はヘッダだけが対象なので合わせられる。
+    // 1億3千万回ぶん確保していない領域を読む。crc はヘッダだけが対象なので合わせられる。
     // PC 側(binfmt.py)は多倍長整数なので同じ入力を正しく弾く = 両実装の
     // 振る舞いが分かれる。ホスト検査は 64bit で走るため、この形でしか防げない
     if (rec_len % PADEMU_RECORD_SIZE != 0
@@ -157,7 +157,7 @@ pademu_err_t pademu_engine_init_at(pademu_engine_t *e, const pademu_proc_t *p,
     memset(e, 0, sizeof(*e));
     // 全ゼロの state は自由落下(az=0)を意味してしまう。ニュートラル
     // (重力あり)へ直す。最初の送出は必ず STATE/AWAIT なので現状この値が
-    // 線に乗ることはないが、「0 埋め = ニュートラル」という誤解を残さない
+    // 送出されることはないが、「0 埋め = ニュートラル」という誤解を残さない
     pademu_state_neutral(&e->state);
     e->recs = p->recs;
     e->count = p->count;

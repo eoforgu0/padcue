@@ -1,6 +1,6 @@
 """検査どうしで使い回す道具(fixture ではないもの)。
 
-pytest の作法として、検査モジュールは互いに import しない(収集の順で
+pytest の慣習として、検査モジュールは互いに import しない(収集の順で
 壊れるうえ、どこに何があるか追えなくなる)。共有するものはここか
 conftest.py に置く —— fixture は conftest.py、ただの関数とクラスはここ。
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 from padcue.project import Project
 from padcue.switchsim import handshake_sequence, verify_reply
 
-# ---- プロジェクトの下ごしらえ ----
+# ---- プロジェクトの準備 ----
 
 
 def make_project(tmp_path, flows: dict, parts: dict | None = None) -> Project:
@@ -149,7 +149,7 @@ class Device:
         return int(reqs), int(step, 16)
 
     def host_info(self) -> bytes | None:
-        """本体識別子の控え(取り出すと消える)。無ければ None。"""
+        """本体識別子の記録(取り出すと消える)。無ければ None。"""
         r = self._cmd("hostinfo")
         if r == "none":
             return None
@@ -167,17 +167,17 @@ def run_handshake(device: Device) -> None:
         verify_reply(exp, reply)
 
 
-# ---- 操作画面(gui._Handler)の後片づけ ----
+# ---- 操作画面(gui._Handler)の後始末 ----
 
 def drop_handler_state():
-    """見張り・連結・装置プールを畳んで、クラス属性を空に戻す。
+    """監視・連結・装置プールを畳んで、クラス属性を空に戻す。
 
     畳まずに残すと、繋がらない接続先を掴んだ収集スレッドが次の検査まで
     生き残る。しかも DevicePool.close() は閉鎖の印を持たないので、生きて
-    いる見張り(Coupler / RunWatcher)が links() を呼んだ拍子に**閉じた
-    はずのプールへ新しい接続と収集スレッドが生える**。誰も止められない。
+    いる監視(Coupler / RunWatcher)が links() を呼んだ拍子に**閉じた
+    はずのプールへ新しい接続と収集スレッドが作られる**。誰も止められない。
 
-    プールだけ畳んで見張りを残すのが一番危ない組み合わせなので、3つを
+    プールだけ畳んで監視を残すのが一番危ない組み合わせなので、3つを
     まとめて畳む入口をここに置く(検査ごとに書き写さない)。
     """
     from padcue import gui

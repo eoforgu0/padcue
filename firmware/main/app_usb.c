@@ -176,11 +176,11 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
     return 0;
 }
 
-// HOST_INFO(ペアリング引数の控え)のコア間受け渡し。
+// HOST_INFO(ペアリング引数の記録)のコア間受け渡し。
 // 書き手 = usb_task(コア1、下の set_report_cb)、読み手 = supervisor(コア0)。
 // s_procon の中身を直接読ませると、コピー中に次の 0x01 が上書きする競合が
-// 起きる(0x01 が 100ms 間隔で洪水する状況では現実に起きる)ので、
-// ここでスピンロック越しの控えに移してから渡す
+// 起きる(0x01 が 100ms 間隔で殺到する状況では現実に起きる)ので、
+// ここでスピンロック越しの写しに移してから渡す
 static portMUX_TYPE s_hi_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t s_hi[8];
 static uint8_t s_hi_len;
@@ -195,7 +195,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
     uint8_t resp[PADEMU_PROCON_REPORT_SIZE];
     size_t n = pademu_procon_handle_output(&s_procon, buffer, bufsize, resp);
     if (s_procon.host_info_seen) {
-        // このタスクだけが s_procon に触る(競合しない)。ロックは控えの側
+        // このタスクだけが s_procon に触る(競合しない)。ロックは記録の側
         taskENTER_CRITICAL(&s_hi_mux);
         memcpy(s_hi, s_procon.host_info, sizeof(s_hi));
         s_hi_len = s_procon.host_info_len;
@@ -380,9 +380,9 @@ uint32_t app_usb_get_breadcrumb(void) { return s_procon.breadcrumb; }
 bool app_usb_imu_enabled(void) { return s_procon.imu_enabled; }
 
 // ペアリング(サブコマンド 0x01)の引数先頭を1回だけ取り出す(本体識別子の
-// 調査用)。取り出したら控えは消える(同じ内容を毎周期ログに積まないため)。
-// supervisor(コア0)から呼ばれる。控えは usb_task がスピンロック越しに
-// 移してある(set_report_cb 参照)ので、ここは控えだけを見ればよい
+// 調査用)。取り出したら記録は消える(同じ内容を毎周期ログに積まないため)。
+// supervisor(コア0)から呼ばれる。記録は usb_task がスピンロック越しに
+// 移してある(set_report_cb 参照)ので、ここは記録だけを見ればよい
 bool app_usb_take_host_info(uint8_t out[8], uint8_t *len) {
     bool got = false;
     taskENTER_CRITICAL(&s_hi_mux);

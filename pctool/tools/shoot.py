@@ -106,7 +106,7 @@ def main() -> int:
     cfg["host"], cfg["port"] = "127.0.0.1", dev.port
     proj.save_config(cfg)
     # 【重要】実機に触れないよう固定する(理由は tools/_localonly.py)。
-    # 接続先を loopback に書いた上での二段目の歯止め
+    # 接続先を loopback に書いた上での二段目の安全策
     lock_to_mock(dev.port)
 
     gui._Handler.project = proj

@@ -1,10 +1,10 @@
-"""連結(coupler)の本命: セット開始・同時SELECT・自動合流・連動停止。
+"""連結(coupler)の中核: セット開始・同時SELECT・自動合流・連動停止。
 
 守りたい不変条件(specs/coupling.md §1 / D7 / D8):
  - 連結しての開始は2台まとめて(転送→連発)、開始ズレを ms で記録する
  - 同時 SELECT は両方が選択待ちのときだけ。世代を添えて誤配を装置側でも防ぐ
  - 自動合流: 両方そろったら設定の腕で自動で進む(人の操作なし)
- - 人為停止は連動しない。人が止めた相方を残った側は待たず、ソロで自動進行
+ - 人為停止は連動しない。人が止めた相手を残った側は待たず、ソロで自動進行
  - 異常(装置の異常報告・約5秒見えない)は連動停止。残り周回を記録し
    「続きから再開」できる
 """
@@ -22,7 +22,7 @@ from padcue.mockdevice import MockDevice
 from padcue.project import Project
 from tests.helpers import drop_handler_state
 
-# 待機分岐込みの短い手順(speed=2000 でほぼ即座に駐機まで進む)
+# 待機分岐込みの短い手順(speed=2000 でほぼ即座に選択待ちまで進む)
 JOIN_FLOW = {
     "schema": 1, "name": "合流", "body": [
         {"type": "press", "buttons": ["A"], "frames": 2},
@@ -139,14 +139,14 @@ def test_couple_run_refuses_when_one_busy(env):
 def test_select_both_requires_both_parked(env):
     _proj, _d1, _d2, base = env
     wait_ready(base)
-    # 1P だけ駐機させる → 断られる
+    # 1P だけ選択待ちさせる → 断られる
     assert post(base, "/api/push", {"name": "合流", "dev": "1P"}).get("ok")
     assert post(base, "/api/run", {"name": "合流", "loops": 1,
                                    "dev": "1P"}).get("ok")
     wait_until(lambda: devs(base)[0].get("awaiting"))
     r = post(base, "/api/select_both", {"arm": 0})
     assert "待機分岐" in str(r.get("error", "")), r
-    # 2P も駐機 → 通る。両方が進んで完走する
+    # 2P も選択待ち → 通る。両方が進んで完走する
     assert post(base, "/api/push", {"name": "合流", "dev": "2P"}).get("ok")
     assert post(base, "/api/run", {"name": "合流", "loops": 1,
                                    "dev": "2P"}).get("ok")
@@ -164,7 +164,7 @@ def test_auto_join_advances_both_without_human(env):
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
     r = post(base, "/api/couple_run", {"plan": plan(loops=2)})
     assert r.get("ok"), r
-    # 人が選ばなくても2周とも完走する(周回ごとに毎回駐機する仕様)
+    # 人が選ばなくても2周とも完走する(周回ごとに毎回選択待ちする仕様)
     assert wait_until(lambda: (lambda s: s["run"]["active"] is False
                                and not s["run"].get("linked_stop"))(
         get(base, "/api/state")["coupling"]), timeout=20), \
@@ -186,7 +186,7 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
     assert post(base, "/api/stop", {"mode": "immediate", "dev": "2P"}).get("ok")
     wait_until(lambda: not devs(base)[1].get("running")
                and not devs(base)[1].get("awaiting"))
-    for _ in range(3):        # 1P が駐機→ソロ自動 SELECT で進み続ける
+    for _ in range(3):        # 1P が選択待ち→ソロ自動 SELECT で進み続ける
         time.sleep(1.0)
         d = devs(base)[0]
         assert d.get("running") or d.get("awaiting"), \
@@ -198,17 +198,17 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
 
 
 def test_manual_restart_solo_not_auto_joined(env):
-    """人為停止 → その装置でソロ実行を開始しても、相方がまだ連結実行中の
+    """人為停止 → その装置でソロ実行を開始しても、相手がまだ連結実行中の
     自動合流に誤って巻き込まれない。
 
-    駐機の追跡が「連結実行のメンバーとして駐機したか」を区別していないと、
-    人為停止後にソロ再開した装置の駐機まで『2台そろった』と誤認し、独立の
+    選択待ちの追跡が「連結実行のメンバーとして選択待ちしたか」を区別していないと、
+    人為停止後にソロ再開した装置の選択待ちまで『2台そろった』と誤認し、独立の
     ソロ実行へ勝手に SELECT を送ってしまう。
     """
     proj, _d1, _d2, base = env
     wait_ready(base)
     post(base, "/api/couple", {"auto_join": True, "arm": 0})
-    # 1P は毎周駐機する連結実行を続ける(相方を待つ状況を作る)
+    # 1P は毎周選択待ちする連結実行を続ける(相手を待つ状況を作る)
     r = post(base, "/api/couple_run", {"plan": plan(loops=100000)})
     assert r.get("ok"), r
     wait_until(lambda: all(d.get("running") or d.get("awaiting")
@@ -217,13 +217,13 @@ def test_manual_restart_solo_not_auto_joined(env):
     assert post(base, "/api/stop", {"mode": "immediate", "dev": "2P"}).get("ok")
     wait_until(lambda: not devs(base)[1].get("running")
                and not devs(base)[1].get("awaiting"))
-    # その 2P でソロ実行を開始できる(1P はまだ連結実行として毎周駐機し、
-    # 来ない相方=2Pを待ち続けている状況)
+    # その 2P でソロ実行を開始できる(1P はまだ連結実行として毎周選択待ちし、
+    # 来ない相手=2Pを待ち続けている状況)
     assert post(base, "/api/run", {"name": "合流", "loops": 1,
                                    "dev": "2P"}).get("ok")
-    # 誤発火する実装では、ここで 1P の駐機と 2P のソロ駐機が「2台そろった」
+    # 誤発火する実装では、ここで 1P の選択待ちと 2P のソロ選択待ちが「2台そろった」
     # と誤認され、2P へ勝手に SELECT が送られて1周だけの実行が完走してしまう。
-    # 正しい実装では、SELECT する人がいないので 2P は駐機したまま止まる
+    # 正しい実装では、SELECT する人がいないので 2P は選択待ちしたまま止まる
     time.sleep(3.0)
     d2s = devs(base)[1]
     assert d2s.get("awaiting"), \
@@ -239,8 +239,8 @@ def test_manual_restart_solo_not_auto_joined(env):
 def test_transient_error_does_not_end_run(env):
     """一過性の収集エラー(5秒未満)で連動停止・完走確定を誤発しないこと。
 
-    数時間の周回では WiFi の単発タイムアウトが毎周の駐機窓に重なる。busy
-    判定に猶予が無いと、1回の失敗で「相方は完走した」と誤認して駐機側を
+    数時間の周回では WiFi の単発タイムアウトが毎周の選択待ち窓に重なる。busy
+    判定に猶予が無いと、1回の失敗で「相手は完走した」と誤認して選択待ち側を
     止めてしまう。
     """
     _proj, _d1, _d2, base = env
@@ -249,18 +249,18 @@ def test_transient_error_does_not_end_run(env):
     assert post(base, "/api/couple_run", {"plan": plan(loops=0)}).get("ok")
     wait_until(lambda: all(d.get("running") or d.get("awaiting")
                            for d in devs(base)))
-    # 2P の収集を一瞬だけ失敗させる。収集係(約1秒周期)が次の成功で
-    # 消してしまうので、**見張り(0.5秒周期)が1回は必ず見る**ように、
+    # 2P の収集を一瞬だけ失敗させる。収集スレッド(約1秒周期)が次の成功で
+    # 消してしまうので、**監視(0.5秒周期)が1回は必ず見る**ように、
     # 消される側を止めてから立てる。立てて 1.2 秒眠るだけだと、窓に
     # 入らなかったときに猶予の分岐を一度も通らないまま緑になる
     link2 = gui._Handler.pool.get("2P")
-    link2.stop()                      # 収集係だけ止める(接続は保つ)
+    link2.stop()                      # 収集スレッドだけ止める(接続は保つ)
     link2.error = "一過性の模擬エラー"
     time.sleep(1.2)
-    assert link2.error, "エラーが消えている(見張りが見る前に上書きされた)"
-    # 見るのは猶予(GONE_S)の内側だけ。収集係を止めてあるのでエラーは消えず、
+    assert link2.error, "エラーが消えている(監視が見る前に上書きされた)"
+    # 見るのは猶予(GONE_S)の内側だけ。収集スレッドを止めてあるのでエラーは消えず、
     # 猶予を過ぎれば連動停止が出るのが**正しい**動き。境目に判定を置くと、
-    # 見張りの位相しだいで落ちる検査になる
+    # 監視の位相しだいで落ちる検査になる
     assert Coupler.GONE_S >= 4.0, "猶予が短くなった。この検査の窓を見直すこと"
     end = time.monotonic() + 2.0
     while time.monotonic() < end:
@@ -281,8 +281,8 @@ def test_transient_error_does_not_end_run(env):
 def test_solo_progress_ignores_oneshot(env):
     """人為停止後のソロ自動進行は、ワンショット保留に妨げられないこと。
 
-    ワンショットは「合流の腕を人が選ぶ」ための保留で、相方のいないソロ進行
-    には合流が無い。保留すると解除経路(両方へ同時に選ぶ = 両方の駐機が必要)
+    ワンショットは「合流の腕を人が選ぶ」ための保留で、相手のいないソロ進行
+    には合流が無い。保留すると解除経路(両方へ同時に選ぶ = 両方の選択待ちが必要)
     も無く、恒久停止になる。
     """
     _proj, _d1, _d2, base = env
@@ -354,7 +354,7 @@ def test_formations(env):
                 {"plan": plan(loops=1), "formation": "検証A"}).get("ok")
     wait_until(lambda: get(base, "/api/state")["coupling"]["run"]["active"]
                is False, timeout=20)
-    # 同じ盤面でもう一度まとめて開始(⟳ 周回実行 / F10 と同じ経路)
+    # 同じ割り当てでもう一度まとめて開始(⟳ 周回実行 / F10 と同じ経路)
     r = post(base, "/api/couple_run",
              {"plan": plan(loops=1), "formation": "検証A"})
     assert r.get("ok"), r
@@ -376,7 +376,7 @@ def test_formations(env):
     assert "検証A" in names, names
     r = post(base, "/api/formation_load", {"name": "検証A"})
     assert r["data"]["devices"][0]["loops"] == 5
-    # 改名(格納庫の行アイコン ✎ から呼ぶ API。ファイル改名+中身の name も書き換え)
+    # 改名(管理領域の行アイコン ✎ から呼ぶ API。ファイル改名+中身の name も書き換え)
     assert post(base, "/api/formation_rename",
                 {"old": "検証A", "new": "検証B"}).get("ok")
     names = [f["name"] for f in get(base, "/api/state")["formations"]]
@@ -398,19 +398,19 @@ def test_formations(env):
 
 
 def test_watch_survives_a_failure_in_the_error_path(tmp_path, monkeypatch):
-    """見張りの後始末そのものが失敗しても、輪が止まらないこと。
+    """監視の後始末そのものが失敗しても、ループが止まらないこと。
 
     異常の記録は members() を呼んで「どの装置の記録か」を決めるが、異常の
     原因がその members() 自身(設定ファイルが壊れている等)だと、except の
     中で二度目の例外が出る。except から送出された例外は同じ try では
-    捕まらないので、守りが無ければ見張りスレッドごと死ぬ。そうなると連動停止も
+    捕まらないので、守りが無ければ監視スレッドごと死ぬ。そうなると連動停止も
     自動合流も黙って止まり、設定を直しても GUI を再起動するまで戻らない。
     """
     proj = Project(tmp_path)
     calls = []
 
     class _Boom(Coupler):
-        def __init__(self):        # 見張りは自分で回すので起こさない
+        def __init__(self):        # 監視は自分で回すので起こさない
             self.project = proj
             self._stop = False
             self._watch_error = ""
@@ -429,6 +429,6 @@ def test_watch_survives_a_failure_in_the_error_path(tmp_path, monkeypatch):
     time.sleep(0.2)
     c.close()
     th.join(timeout=2)
-    assert not th.is_alive(), "見張りが止まらない"
+    assert not th.is_alive(), "監視が止まらない"
     # 2周以上回っている = 1周目の二次例外で死んでいない
     assert len(calls) >= 4, calls

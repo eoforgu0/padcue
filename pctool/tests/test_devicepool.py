@@ -1,8 +1,8 @@
-"""装置プールの本命: 2台同時運用と、片方無応答の非干渉(要件 R3)。
+"""装置プールの中核: 2台同時運用と、片方無応答の非干渉(要件 R3)。
 
 守りたい不変条件:
  - 2台を登録すると /api/state の devices に両方が並び、独立に収集される
- - 片方が無応答でも、もう片方の表示は健康なまま・操作は即座に通る
+ - 片方が無応答でも、もう片方の表示は正常なまま・操作は即座に通る
    (単一 lock だと、片方のタイムアウト3〜6秒が全操作を塞ぐ)
  - 装置系 API は dev=名前 で対象を選べる(省略時は1台目)
 """
@@ -106,7 +106,7 @@ def test_one_dead_device_does_not_block_the_other(env):
     """片方が無応答でも、もう片方の表示と操作が妨げられないこと(R3)。
 
     プロセス唯一の lock で全操作を直列化すると、片方の接続タイムアウト
-    (3〜6秒)が毎秒の状態取得ごとに発生して、健康な装置の停止ボタンまで
+    (3〜6秒)が毎秒の状態取得ごとに発生して、正常な装置の停止ボタンまで
     数秒待たされる。
     """
     _proj, _d1, d2, base = env
@@ -116,8 +116,8 @@ def test_one_dead_device_does_not_block_the_other(env):
     wait_until(lambda: "error" in get(base, "/api/state")["devices"][1])
     st = get(base, "/api/state")
     assert "error" in st["devices"][1]
-    assert "fw" in st["devices"][0], "健康な 1P まで巻き添えになった"
-    # 健康な 1P への操作が即座に通る(2P のタイムアウトの後ろに並ばない)
+    assert "fw" in st["devices"][0], "正常な 1P まで巻き添えになった"
+    # 正常な 1P への操作が即座に通る(2P のタイムアウトの後ろに並ばない)
     t0 = time.monotonic()
     assert post(base, "/api/stop", {"mode": "immediate", "dev": "1P"}).get("ok")
     took = time.monotonic() - t0

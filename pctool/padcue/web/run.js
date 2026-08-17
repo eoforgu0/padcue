@@ -92,9 +92,9 @@ function buildLane(d) {
   return lane;
 }
 
-// 「このレーンで最後に選んだ手順」の控えの置き場所。個体IDが正だが、
+// 「このレーンで最後に選んだ手順」の記録の置き場所。個体IDが正だが、
 // 練習の mock は設計上 ID を学習しないので空になる。空 ID 同士だと2台
-// 練習で控えが1つに混ざるため、そのときだけ名前で分ける(laneMap を
+// 練習で記録が1つに混ざるため、そのときだけ名前で分ける(laneMap を
 // 名前キーにしたのと同じ理由)
 function laneProcKey(lane) {
   return 'laneProc.' + (lane.id || lane.name);
@@ -149,7 +149,7 @@ function setLaneStopgArmed(lane, armed) {
   lane.stopg.title = armed
     ? '今の周が終わったら止まります。もう一度押すと予約を取り消します'
     : `${lane.name} だけ、今の周を最後までやってから止まります`
-      + '(手で止めても相方は止まりません)';
+      + '(手で止めても相手は止まりません)';
 }
 
 // レーンの手順選択を一覧に追従させる。実行中はその手順で固定
@@ -159,9 +159,9 @@ function syncLaneProc(lane, d, runName) {
   const key = names.join('\n');
   if (lane.procKey !== key) {
     lane.procKey = key;
-    // 読み込み直した直後は select がまだ空なので、控えを起点にする。
+    // 読み込み直した直後は select がまだ空なので、記録を起点にする。
     // 選択肢を並べると value は勝手に先頭へ決まってしまい、後ろの want で
-    // 控えを読む段には永久に到達しない(= 最後に選んだ手順を覚える仕組みが
+    // 記録を読む段には永久に到達しない(= 最後に選んだ手順を覚える仕組みが
     // 読み込み直しで効かなくなる)
     const keep = lane.proc.value || localStorage.getItem(laneProcKey(lane));
     lane.proc.textContent = '';
@@ -247,8 +247,8 @@ function updateLane(lane, d) {
   // **連結して走っている間は、レーンには出さない**。
   // そのときの選択は上部バーの「選択肢を両方へ同時に送る」で行うので、
   // レーンを光らせると、押す物が無い場所へ目を向けさせることになる。
-  // ただし相方が来ないときだけは、そのレーンの「だけ進める…」を人が
-  // 判断する場面なので出す(状態チップ「選択待ち/相方待ち」は常に出る)
+  // ただし相手が来ないときだけは、そのレーンの「だけ進める…」を人が
+  // 判断する場面なので出す(状態チップ「選択待ち/相手待ち」は常に出る)
   const inCoupledRun = !!(state.coupling && state.coupling.run
                           && state.coupling.run.active
                           && (state.coupling.run.members || [])
@@ -276,7 +276,7 @@ function updateLane(lane, d) {
     lane.awaitbox.textContent = '';
     // 「前回どんな形で描いたか」も忘れる。忘れないと、収集が1周期
     // 失敗しただけで選択肢が消えたまま二度と描き直されない
-    // (駐機中は await_gen が動かないので、復帰後の鍵が前と同じになる)
+    // (選択待ち中は await_gen が動かないので、復帰後の鍵が前と同じになる)
     lane.awaitKey = '';
     return;
   }
@@ -335,7 +335,7 @@ function updateLane(lane, d) {
   }
   lane.stopi.disabled = !busy;
   lane.stopi.title = `${lane.name} だけ、その場で全ボタンを離して止めます`
-    + '(相方は止めません)';
+    + '(相手は止めません)';
   // 実行時に自動転送されるので、装置側の版のずれを事前に知らせる意味は無い
   // (実行すれば常に PC の今の版が走る)。ただし実行中の手順が転送後に
   // 編集された場合だけは「動いているのはどの版か」が実機と食い違うので
@@ -370,15 +370,15 @@ function updateLane(lane, d) {
     lane.badge.style.display = '';
     lane.badge.className = 'chip link runchip';
     lane.badge.textContent = '⧉ 連結して開始した組';
-    lane.badge.title = '連結して開始した組。相方の異常時は両方止まります。'
+    lane.badge.title = '連結して開始した組。相手の異常時は両方止まります。'
       + '手で止めた場合は連動しません';
   } else if ((running || awaiting) && (state.devices || []).length >= 2) {
-    // 「単独」は連結との対比なので、相方がいるときにだけ名乗る。1台構成では
+    // 「単独」は連結との対比なので、相手がいるときにだけ名乗る。1台構成では
     // 連結の概念そのものが無く(上部バーも出ない)、対比する相手がいない
     lane.badge.style.display = '';
     lane.badge.className = 'chip runchip';
     lane.badge.textContent = '単独で実行中';
-    lane.badge.title = '単独で開始した実行。相方の状態に影響されません';
+    lane.badge.title = '単独で開始した実行。相手の状態に影響されません';
   } else {
     lane.badge.style.display = 'none';
   }
@@ -387,21 +387,21 @@ function updateLane(lane, d) {
   // 開始・終了予定は、連結して開始した組では上部バーが組全体で出す
   etaLine(lane.eta, (!inRun && (running || awaiting)) ? d.run_started_at : 0,
           [runEndAt(d)]);
-  // 待機分岐の表示。三態色(specs/coupling.md §5): 青=相方待ち(自動で進む予定)/
-  // 緑=そろって進んだ直後/黄=人の操作が要る・相方が来ない。赤は装置異常専用
+  // 待機分岐の表示。三態色(specs/coupling.md §5): 青=相手待ち(自動で進む予定)/
+  // 緑=そろって進んだ直後/黄=人の操作が要る・相手が来ない。赤は装置異常専用
   const autoJoinLive = inRun && c.auto_join && !c.oneshot_manual;
   if (awaiting && lane.parkedGenSeen !== d.await_gen) {
     lane.parkedGenSeen = d.await_gen;
     lane.parkedAt = Date.now();
   }
-  // 超過警告は「今の駐機」についてだけ(サーバは合流できた時点で消すが、
-  // 古い駐機ぶんの警告を新しい駐機に重ねない保険)
+  // 超過警告は「今の選択待ち」についてだけ(サーバは合流できた時点で消すが、
+  // 古い選択待ちぶんの警告を新しい選択待ちに重ねない保険)
   const late = awaiting && autoJoinLive && c.run.late
     && c.run.late.dev === lane.name
     && c.run.late.at * 1000 >= (lane.parkedAt || 0) - 2000;
   if (awaiting && autoJoinLive) {
     lane.chip.className = 'chip wait';
-    lane.chip.textContent = '相方待ち';
+    lane.chip.textContent = '相手待ち';
   }
   // 作り直すのは形が変わったときだけ。毎秒作り直すと、開いた「だけ進める…」
   // が1秒で畳まれ、経過秒のためだけにボタンの DOM が捨てられる
@@ -415,11 +415,11 @@ function updateLane(lane, d) {
       if (autoJoinLive) {
         if (late) {
           lane.awaitbox.append(el('div', 'msg warn',
-            `相方(${c.run.late.partner})が来ません`
-            + '(このプリセットのいつもの待ちを超えました)。相方のレーンの状態を'
+            `相手(${c.run.late.partner})が来ません`
+            + '(このプリセットのいつもの待ちを超えました)。相手のレーンの状態を'
             + '確かめてください'));
         }
-        // 順調なときは何も出さない(チップ「相方待ち」で足りる。原則 §5)
+        // 順調なときは何も出さない(チップ「相手待ち」で足りる。原則 §5)
       } else if (inRun) {
         // 連結中だが自動合流オフ(本人が手動にした)。上部バーの
         // 「選択肢を両方へ同時に送る」が見えているので導線文は出さない
@@ -560,7 +560,7 @@ function manualTarget() {
 
 // ============ 上部バー(2台にまたがることだけの場所。D6〜D8) ============
 // 連結はそのうちの一つ(2台をまとめる唯一の入口)。連動の実体はサーバ
-// (coupler.py)で、ここは盤面の写像と操作の入口だけ
+// (coupler.py)で、ここは割り当ての写像と操作の入口だけ
 
 let loadedFormation = '';    // 呼び出したプリセットの名前('' = 未使用)
 let cplStopSeen = 0;         // 連動停止の知らせを × で閉じた時刻(at)
@@ -578,7 +578,7 @@ function laneByName(name) {
   return d ? laneMap.get(d.name) : null;
 }
 
-// 「進む先」の名前。レーンの手順の最初の待機分岐から取る(無ければ相方から)
+// 「進む先」の名前。レーンの手順の最初の待機分岐から取る(無ければ相手から)
 function armLabels() {
   for (const d of state.devices || []) {
     const lane = laneMap.get(d.name);
@@ -589,7 +589,7 @@ function armLabels() {
   return [];
 }
 
-// いまの盤面から開始の計画を作る(loops1 = 1回実行の強制)。
+// いまの割り当てから開始の計画を作る(loops1 = 1回実行の強制)。
 // 連結の対象は台帳の先頭2台(サーバの members() と同じ規則)
 function planFromLanes(once) {
   const plan = [];
@@ -610,7 +610,7 @@ async function coupleRun(once) {
   if (manualOn) await setManual(false);
   const plan = planFromLanes(once);
   if (!plan) return;
-  // 開始位置ぶんの再生位置の起点を各レーンに控える(単独実行と同じ理屈)
+  // 開始位置ぶんの再生位置の起点を各レーンに記録する(単独実行と同じ理屈)
   for (const p of plan) {
     const lane = laneByName(p.dev);
     const pt = ((lane.tl && lane.tl.resume_points) || [])
@@ -644,8 +644,8 @@ function beep(freq) {
   } catch (e) { /* 音が出せない環境では黙って続ける */ }
 }
 
-// F9 = 全部止める / F10 = まとめて開始(現在の盤面、⟳ 周回実行と同じ)。
-// 連結中のみ(誤爆防止)。⚙ で入にしていないときは何もしない
+// F9 = 全部止める / F10 = まとめて開始(現在の割り当て、⟳ 周回実行と同じ)。
+// 連結中のみ(誤操作防止)。⚙ で入にしていないときは何もしない
 document.addEventListener('keydown', async e => {
   if (!hotkeys.on) return;
   const c = cpl();
@@ -765,7 +765,7 @@ function renderFormations() {
   }
   const arms = armLabels();
   for (const f of forms) {
-    // 装置カードの開閉行と同型(原則 §5)。ドットの列は持たない(格納庫に
+    // 装置カードの開閉行と同型(原則 §5)。ドットの列は持たない(管理領域に
     // 生きた状態を並べない §3 と同じ理由で、プリセットに進行状態は無い)。
     // 呼び出し中の1件は、手順一覧の選択行と同じ強調にする
     const row = el('div', 'proc devrow foldable formrow');
@@ -860,7 +860,7 @@ function buildFormationData() {
   return data;
 }
 
-// 保存の作法(原則 §4): 使用中は同名で上書き、「別名で保存…」は名前を
+// 保存の決まり(原則 §4): 使用中は同名で上書き、「別名で保存…」は名前を
 // 聞いて新しいプリセットにする(以後はそちらを編集していることにする)。
 // 成功はバッジの点滅で伝える(文は出さない)
 async function saveFormation(asNew) {
@@ -892,7 +892,7 @@ async function saveFormation(asNew) {
 document.getElementById('cformsave').onclick = () => saveFormation(false);
 document.getElementById('cformsaveas').onclick = () => saveFormation(true);
 
-// 上部バーの毎秒更新。バーは2台以上なら常にあり、連結の語彙だけが出入りする
+// 上部バーの毎秒更新。バーは2台以上なら常にあり、連結の操作だけが出入りする
 // (連結していないときに残るのは、2台にまたがる唯一のもの=プリセット)
 function renderCoupling() {
   const devs = state.devices || [];
@@ -908,7 +908,7 @@ function renderCoupling() {
   const names = devs.slice(0, 2).map(d => d.name);
   const pair = `(${names.join('+')})`;
   bar.style.display = '';
-  // 連結の語彙の出入りは CSS の一手に任せる(.linked の有無だけで決まる)。
+  // 連結の操作の出入りは CSS の一元的に任せる(.linked の有無だけで決まる)。
   // 帯(.coupler)も同時に付け外しして、連結中であることを枠の形でも示す
   const cls = 'card' + (c.on ? ' coupler linked' : '');
   if (bar.className !== cls) bar.className = cls;
@@ -954,7 +954,7 @@ function renderCoupling() {
     fsaveas.style.display = 'none';
   }
   if (!c.on) {
-    // 連結の語彙は CSS が畳むが、中身も消しておく(次に連結したとき、前の
+    // 連結の操作は CSS が畳むが、中身も消しておく(次に連結したとき、前の
     // 組の開始ズレや連動停止の知らせが一瞬だけ蘇るのを防ぐ)
     statLine(document.getElementById('ceta'), []);
     statLine(document.getElementById('chint'), []);
@@ -990,7 +990,7 @@ function renderCoupling() {
     b.disabled = someBusy;
     b.title = someBusy ? 'いま実行中なので押せません' : base;
   }
-  // 予約中は、レーンの停止ボタンと同じ姿になる(原則 §5: 同じ意味は同じ形)。
+  // 予約中は、レーンの停止ボタンと同じ見た目になる(原則 §5: 同じ意味は同じ形)。
   // 走っている装置がすべて予約済みのときだけ「予約中」と名乗る——片方だけ
   // 予約された状態でバーが予約中を名乗ると、押せば両方取り消せると読める
   const gstop = document.getElementById('cstopg');
@@ -1034,7 +1034,7 @@ function renderCoupling() {
     both.dataset.key = bKey;
     both.textContent = '';
     (arms.length ? arms : ['選択肢1', '選択肢2']).forEach((a, i) => {
-      // レーンの選択肢と同じ姿にする(原則 §5: 同じ意味は同じ形)。
+      // レーンの選択肢と同じ見た目にする(原則 §5: 同じ意味は同じ形)。
       // 人を待っていることは外周のリングが言うので、ボタン自身は塗らない。
       // 押せないときは disabled の姿で置いたままにする。名前に「(両方へ)」は
       // 付けない —— すぐ左の見出しが「選択肢を両方へ同時に送る」なので
@@ -1077,7 +1077,7 @@ function renderCoupling() {
     row.style.marginTop = '7px';
     const remainTxt = Object.entries(ls.remain || {})
       .filter(([, v]) => v > 0).map(([k, v]) => `${k} 残り${v} 周`).join('・');
-    // 再開の成功も押したそばで数秒だけ(選択肢の同時送出と同じ作法)
+    // 再開の成功も押したそばで数秒だけ(選択肢の同時送出と同じ扱い)
     const ok = el('span', 'okflash');
     const rs = el('button', 'small',
                   `⟲ 続きから再開${remainTxt ? `(${remainTxt})` : ''}`);
@@ -1091,7 +1091,7 @@ function renderCoupling() {
       refresh();
     };
     row.append(rs);
-    // 片方だけ続ける(残った健康な側をソロで)。手順は止まった連結実行の
+    // 片方だけ続ける(残った正常な側をソロで)。手順は止まった連結実行の
     // 計画のもの(いまのレーンの選択に差し替えられていても、再開の意図は
     // 「同じ手順の続き」)
     for (const d of devs.slice(0, 2)) {
@@ -1157,7 +1157,7 @@ document.getElementById('cunlink').onclick = async () => {
 document.getElementById('crun1').onclick = () => coupleRun(true);
 document.getElementById('crun').onclick = () => coupleRun(false);
 document.getElementById('cstopg').onclick = async () => {
-  // 予約中に押したら取り消す(レーンの停止ボタンと同じ作法)
+  // 予約中に押したら取り消す(レーンの停止ボタンと同じ扱い)
   const cancel = document.getElementById('cstopg').classList.contains('armed');
   const r = await api('/api/stop_both', 'POST',
                       {mode: cancel ? 'cancel' : 'graceful'});
