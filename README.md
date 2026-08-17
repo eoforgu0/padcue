@@ -75,7 +75,8 @@ python -m padcue mock         # 模擬デバイス(別の端末で)
 操作画面で手順を選び、タイムライン(いつ何のボタンを押すか)を確認して実行します。
 手順の作成・編集も同じ画面で行います(ファイルを直接編集する必要はありません)。
 
-**実機がある場合**は `padcue device auto`(LAN 内を探して覚える)に変えるだけで、
+**実機がある場合**は `python -m padcue device auto`(LAN 内を探して覚える)に
+変えるだけで、
 同じ操作が実機に対して行われます。はじめての一台は
 [docs/runbook.md](docs/runbook.md) を参照。
 
@@ -194,6 +195,9 @@ playwright install chromium      # 画面を実際に動かす検査に使う
 # PC 側のテスト(実機不要。C 実装の検証も含む)
 python -m pytest -q
 
+# lint(CI と同じもの)
+python -m ruff check pctool
+
 # GUI を実際にブラウザで操作して想定と突き合わせる
 python pctool/tools/uicheck.py <出力先>
 
@@ -209,8 +213,10 @@ python pctool/tools/mdtable.py docs/<文書>.md
 # マイコン側のビルド(ESP-IDF 5.5 以上。Windows は PowerShell から)
 cd firmware
 idf.py build
+cd ..
 
 # 実機への無線更新(2回目以降。Switch に挿したまま更新できます)
+# 装置台帳 padcue.json はリポジトリ直下にあるので、必ずここから実行します
 python -m padcue ota
 ```
 

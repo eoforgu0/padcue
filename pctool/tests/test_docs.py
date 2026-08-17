@@ -93,6 +93,60 @@ def test_tables_are_valid_gfm(path):
 
 
 @pytest.mark.parametrize("path", docs(), ids=lambda p: p.name)
+def test_every_pipe_block_has_a_separator(path):
+    """パイプで始まる行の塊には、必ず区切り行があること。
+
+    上の検査は「区切り行が見出しと同じ列数か」を見るので、区切り行が最初から
+    無い形には気づけない。表の途中に空行が入ると、そこから下の行は区切り行を
+    持たない孤立した塊になり、GFM では生のパイプ文字のまま表示される。
+    """
+    src, inside, blocks, cur = lines_of(path), False, [], []
+    for i, ln in enumerate(src):
+        s = ln.strip()
+        if _fence(s):
+            inside = not inside
+            cur = []
+            continue
+        if not inside and s.lstrip(">").strip().startswith("|"):
+            cur.append((i + 1, s))
+            continue
+        if cur:
+            blocks.append(cur)
+            cur = []
+    if cur:
+        blocks.append(cur)
+
+    def is_sep(s: str) -> bool:
+        cs = [c.strip() for c in s.strip().lstrip(">").strip().split("|")[1:-1]]
+        return bool(cs) and all(re.fullmatch(r":?-{2,}:?", c) for c in cs)
+
+    bad = [b[0][0] for b in blocks if len(b) > 1 and not is_sep(b[1][1])]
+    assert not bad, (
+        f"{path.name}: 区切り行を持たないパイプ行の塊({bad} 行目)。"
+        "表の途中に空行が入っていないか確認")
+
+
+def test_tables_are_column_aligned():
+    """追跡している文書の表の桁が、mdtable.py の出力と一致すること。
+
+    桁揃えは CONTRIBUTING が求めているのに、これだけ人の目に頼っていた。
+    語を置き換えるとセル幅が変わるので、目視では取りこぼす。
+    """
+    import sys
+    sys.path.insert(0, str(REPO / "pctool" / "tools"))
+    import mdtable
+
+    bad = []
+    for p in docs():
+        src = p.read_text(encoding="utf-8")
+        if mdtable.process(src) != src:
+            bad.append(p.relative_to(REPO).as_posix())
+    assert not bad, (
+        f"表の桁が揃っていない: {bad}。"
+        "`python pctool/tools/mdtable.py <file>` で整形できる")
+
+
+@pytest.mark.parametrize("path", docs(), ids=lambda p: p.name)
 def test_relative_links_resolve(path):
     """文書中の相対リンクの指す先が実在すること。"""
     text = path.read_text(encoding="utf-8")

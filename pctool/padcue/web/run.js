@@ -644,7 +644,7 @@ function beep(freq) {
   } catch (e) { /* 音が出せない環境では黙って続ける */ }
 }
 
-// F9 = 全部止める / F10 = まとめて開始(現在の割り当て、⟳ 周回実行と同じ)。
+// F9 = 両方を今すぐ止める / F10 = まとめて周回実行(現在の割り当て、⟳ と同じ)。
 // 連結中のみ(誤操作防止)。⚙ で入にしていないときは何もしない
 document.addEventListener('keydown', async e => {
   if (!hotkeys.on) return;

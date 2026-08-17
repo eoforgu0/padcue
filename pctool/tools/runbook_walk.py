@@ -7,6 +7,7 @@
 ずれたときに気づくためのもの(実機が要る段階は模擬デバイスで代用する)。
 GUI の機能そのものの検査は tools/uicheck.py。
 """
+import re
 import shutil
 import sys
 import threading
@@ -199,9 +200,14 @@ def walk(page, proj, dev, prompt):
     if "テスト周回" not in opened:
         note(f"新規作成した手順が開かれていない(開いているのは {opened!r})")
 
-    # runbook 5-2 の表にあるブロックを順に足してみる
+    # runbook 5-2 の表にあるブロックを、表に書いてある名前のまま順に足してみる。
+    # 名前は runbook 側から書き写すこと。画面の名前を変えて手順書を直し忘れると、
+    # 読んだ人はパレットで探す物を見つけられない
     plan = [
         ("ラベル", "移動"),
+        ("押して離す", None),
+        ("押したまま", None),
+        ("離す", None),
         ("スティック", None),
         ("待つ", None),
         ("ラベル", "戦闘"),
@@ -210,7 +216,15 @@ def walk(page, proj, dev, prompt):
     ]
     for label, text_val in plan:
         before = page.locator("#flowbody .blk, #flowbody .nest").count()
-        page.locator("#palette .pal", has_text=label).click()
+        # 完全一致で探す(「離す」は「押して離す」の一部なので、部分一致だと
+        # 別のブロックを押してしまい、名前のずれを見逃す)
+        pal = page.locator("#palette .pal",
+                           has_text=re.compile(f"^{re.escape(label)}$"))
+        if pal.count() != 1:
+            note(f"runbook 5-2 の表にある「{label}」が"
+                 f"パレットに {pal.count()} 個(1個であるべき)")
+            continue
+        pal.click()
         page.wait_for_timeout(250)
         after = page.locator("#flowbody .blk, #flowbody .nest").count()
         if after <= before:

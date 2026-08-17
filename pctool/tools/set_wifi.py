@@ -8,8 +8,8 @@
 このファイルは git に入らず(.gitignore 済み)、sdkconfig を作り直しても
 ビルドのたびに自動で読み込まれる。
 
-使い方:
-    cd pctool && python tools/set_wifi.py
+使い方(リポジトリ直下から):
+    python pctool/tools/set_wifi.py
     (画面の指示どおり SSID とパスワードを入れる。パスワードは表示されない)
 
 入力した値はこの PC の中のファイルに書かれるだけで、どこにも送信されない。

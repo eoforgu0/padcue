@@ -15,10 +15,11 @@ pip install -e "./pctool[dev]"
 playwright install chromium
 
 python -m pytest -q                          # 実機なしで通ります
+python -m ruff check pctool                  # lint(CI と同じもの)
 python pctool/tools/uicheck.py <出力先>      # 画面を実際に動かす検査
 ```
 
-どちらも実機がなくても通ります。**通った件数を変更の説明に書いてください**
+いずれも実機がなくても通ります。**通った件数を変更の説明に書いてください**
 (「pytest 562 / uicheck 134」のように、**自分が流したときの数**を)。件数は
 増え続けるので、何件で通ったかが分かると、後から見たときにどの時点の話か
 辿れます。
