@@ -18,7 +18,7 @@ class NotSentError(ConnectionError):
 
     送ったあとに切れた場合と区別する。装置が受け取ってしまった可能性が
     あるなら、同じ操作をやり直してはいけない(実行や転送が二重に効く)。
-    送る前に落ちたと分かっているときだけ、上位が黙って繋ぎ直してよい。
+    送る前に切れたと分かっているときだけ、上位が黙って繋ぎ直してよい。
     """
 
 
@@ -71,8 +71,8 @@ class DeviceClient:
     def is_alive(self) -> bool:
         """接続を使い回してよいか。相手が閉じていたら False。
 
-        受信バッファを覗くだけで待たない。使い回しの接続が死んでいるのに
-        送ってしまうと、返事待ちのタイムアウト(数秒)を丸ごと損する。
+        受信バッファを覗くだけで待たない。使い回しの接続が切れているのに
+        送ってしまうと、返事待ちのタイムアウト(数秒)ぶん待たされる。
         """
         if self._sock is None:
             return False
@@ -82,7 +82,7 @@ class DeviceClient:
             self._sock.setblocking(False)
             return self._sock.recv(1, socket.MSG_PEEK) != b""
         except BlockingIOError:
-            return True            # まだ何も来ていない = 生きている
+            return True            # まだ何も来ていない = 切れていない
         except OSError:
             return False
         finally:
@@ -183,7 +183,7 @@ class DeviceClient:
         self._send(Message(proto.T_RUN, obj))
 
     def select(self, arm: int, gen: int | None = None) -> None:
-        """待機分岐で止まっているときに、進む腕を選ぶ。
+        """待機分岐で止まっているときに、進む選択肢を選ぶ。
 
         gen は STATUS の await_gen(この実行で何回目の選択待ちか)。渡すと装置側が
         照合し、別の選択待ちに宛てた古い選択を拒否する(2台の自動合流用)。

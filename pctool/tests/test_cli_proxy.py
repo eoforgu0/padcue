@@ -113,7 +113,7 @@ def test_exclusive_ops_are_refused_while_gui(env, capsys):
 
 def test_stale_marker_falls_back_to_direct(env, capsys):
     _proj, _dev, tmp = env
-    # 死んだポートを指す古い設定マーカー → 直結で動く(従来どおり)
+    # 応答しないポートを指す古い設定マーカー → 直結で動く(従来どおり)
     (tmp / "gui_server.json").write_text(
         json.dumps({"port": 1, "pid": 0}), encoding="utf-8")
     assert cli.cmd_status(_args(tmp)) == 0

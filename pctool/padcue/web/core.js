@@ -154,7 +154,7 @@ function el(tag, cls, text) {
   return e;
 }
 // メッセージは必ず閉じられるようにする。画面の面積は有限で、読み終わった
-// 文が高さを占有し続けるのはコストでしかない
+// 文が高さを占有し続けると、他の表示に使える場所が減る
 function show(msgId, cls, text) {
   showIn(document.getElementById(msgId), cls, text);
 }
@@ -162,7 +162,7 @@ function show(msgId, cls, text) {
 // closable=false は「直ればひとりでに消える知らせ」用(未接続の理由など)。
 // そういう知らせは毎秒作り直されるので、× を付けても押した1秒後に戻る
 // ——押せるのに消えないボタンは、原則 §5「知らせは必ず消せる」の見かけだけを
-// 満たして中身を裏切る。消える条件が別にあるものには最初から付けない
+// 満たす。消える条件が別にあるものには最初から付けない
 function showIn(box, cls, text, closable = true) {
   box.textContent = '';
   if (!text) return;
@@ -180,7 +180,7 @@ function showIn(box, cls, text, closable = true) {
 
 // 成功の一言を、押したボタンのそばに数秒だけ出して自ら消す。
 // 正常・軽量・自分で押したと分かっている操作(選択肢の同時送出など)は、
-// 消えない知らせの席を作るほどではない——出すたびに下の行がずれる方が邪魔
+// 消えない知らせにするほどではない——出すたびに下の行がずれる
 //。失敗と警告は残す(×で消す)
 function flashOk(box, text) {
   clearTimeout(box._t);

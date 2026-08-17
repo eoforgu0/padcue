@@ -46,7 +46,7 @@ function pathOfNode(target, arr, prefix) {
   return null;
 }
 
-// 生値のままだと「2047 がどっち向きか」が分からないので、向きと強さで見せる
+// 生値のままだと「2047 がどちら向きか」が分からないので、向きと強さで見せる
 function stickText(x, y) {
   if (!x && !y) return 'ニュートラル';
   const dirs = [];
@@ -246,7 +246,7 @@ function bindBlockDrag(handle, path, elem) {
   handle.addEventListener('pointercancel', () => done(false));
 }
 
-// パレット: クリック=選択の直後に追加(従来)、ドラッグ=好きな場所へ挿入。
+// パレット: クリック=選択の直後に追加(従来)、ドラッグ=任意の場所へ挿入。
 // 6px 動くまではクリック扱いにして両立させる
 function bindPaletteDrag(elp, type) {
   let start = null;
@@ -618,7 +618,7 @@ function newNode(type) {
   switch (type) {
     case 'label': return {type, text: '名前'};
     // 2F は「必ず1回は読まれる」最小の長さ(1F は消えることがある)。
-    // ちょんと押すだけならこれで足りるので、既定値にして手数を減らす
+    // 短く押すだけならこれで足りるので、既定値にして手数を減らす
     case 'press': return {type, buttons: ['A'], frames: 2};
     case 'hold': case 'release': return {type, buttons: ['ZL']};
     case 'wait': return {type, frames: 30};
@@ -755,7 +755,7 @@ function renderProcRow(p) {
   // 名前の右に所要フレーム数。2台運用では「相手の操作と同じ時間だけ待つ」を
   // 手順に書くので、一覧を見たまま2つの手順の長さを突き合わせられるようにする。
   // 単位は毎行「フレーム」と書くと名前がそのぶん切れるので F と略す。
-  // 読み方はその場に触れれば分かるようにしておく
+  // 読み方はその場にマウスを乗せれば分かるようにしておく
   const nm = el('span', 'pname');
   const b = el('b', null, p.name);
   b.title = p.name;   // 長い名前は詰めて出すので、確かめられるように

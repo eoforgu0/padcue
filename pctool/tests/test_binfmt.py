@@ -17,7 +17,7 @@ ALL_EVENTS = [
     SetCnt(3, 500),
     State(10, buttons=0),
     Djnz(3, target=2, advance=10),
-    # 待機分岐。腕ごとに飛び先を持つ唯一のレコードで、往復で崩れやすい
+    # 待機分岐。選択肢ごとに飛び先を持つ唯一のレコードで、往復で崩れやすい
     Await(20, targets=(5, 6), timeout_frames=600, on_timeout=2),
     Jmp(6),
     End(),
@@ -80,7 +80,7 @@ def test_out_of_range_values_rejected():
     with pytest.raises(ValueError, match="i16"):
         binfmt.encode("p", [State(0, gx=40000)], 0)
 
-    # 待機分岐の腕の本数と、時間切れの行き先
+    # 待機分岐の選択肢の本数と、時間切れの行き先
     with pytest.raises(ValueError, match="腕は"):
         binfmt.encode("p", [Await(0, targets=(1, 2, 3, 4, 5)), End()], 0)
     with pytest.raises(ValueError, match="腕は"):

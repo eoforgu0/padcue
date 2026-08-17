@@ -82,7 +82,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
             "() => [...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
         eta = ln.locator(".hint .stat")
-        # 項目名と値は別の席(単色の1行に連ねない)
+        # 項目名と値は別の欄に置く(単色の1行に連ねない)
         assert eta.count() == 2, eta.all_inner_texts()
         assert "残り" in eta.nth(1).inner_text(), eta.nth(1).inner_text()
         # 値の中の「(残り …)」の手前は詰めない
@@ -90,7 +90,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
             eta.nth(1).inner_text()
         ln.locator("button", has_text="今すぐ止める").click()
         wait_state(page, "待機中")
-        # 実行していない間は行ごと消える(空の行が余白を食わない)
+        # 実行していない間は行ごと消える(空の行が場所を取らない)
         page.wait_for_function(
             "() => ![...document.querySelectorAll('#lanes .lane .hint')]"
             "  .some(e => e.textContent.includes('終了予定'))", timeout=8000)
@@ -199,7 +199,7 @@ def run_devices(c: Checker, page, dev: MockDevice):
         row.locator(".devhost").fill(UNREACHABLE)
         row.locator("button", has_text="接続").click()
         wait_state(page, "未接続", timeout_ms=12000)
-        # 応答しない相手に定期取得を投げ続けても、操作がその後ろで詰まらないこと
+        # 応答しない装置に定期取得を送り続けても、操作がその後ろで詰まらないこと
         row.locator(".devhost").fill("127.0.0.1")
         row.locator("button", has_text="接続").click()
         wait_state(page, "待機中", timeout_ms=12000)

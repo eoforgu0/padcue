@@ -31,7 +31,7 @@ def test_discover_finds_device():
 
 
 def test_discover_ignores_unrelated_devices():
-    """無関係な機器が同じポートで喋っていても拾わないこと。"""
+    """無関係な機器が同じポートで応答していても拾わないこと。"""
     dport = free_udp_port()
     noise = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     noise.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

@@ -29,7 +29,7 @@ def test_all_button_lists_cover_the_same_buttons():
 
     ボタンを足すときに触る所は3つある(binfmt.BUTTONS / gui._BUTTON_ORDER /
     web/core.js の BTN_GROUPS)。1つ忘れると、そのボタンだけ帯に出ない、
-    部品表に列が無い、といった片手落ちになる。順序は用途ごとに違ってよい
+    部品表に列が無い、といった抜けが生じる。順序は用途ごとに違ってよい
     (送信のビット順・帯の並び・画面の組)ので種類だけを見る。
     """
     m = re.search(r"const BTN_GROUPS = \[(.*?)\];", web_asset("core.js"), re.S)

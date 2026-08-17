@@ -96,10 +96,10 @@ def test_counter_branch_expands_without_runtime_decision(tmp_path):
     assert c.total_frames == 72   # ×2 回
     ems = [(e.frame, e.buttons) for e in engine.run(c.events, c.total_frames)]
     assert ems == [
-        (0, A), (3, 0),            # 1周目: 腕0
-        (18, A), (21, B), (24, 0),  # 2周目: 腕1
-        (36, A), (39, 0),           # 3周目: 腕0
-        (54, A), (57, B), (60, 0),  # 4周目: 腕1
+        (0, A), (3, 0),            # 1周目: 選択肢0
+        (18, A), (21, B), (24, 0),  # 2周目: 選択肢1
+        (36, A), (39, 0),           # 3周目: 選択肢0
+        (54, A), (57, B), (60, 0),  # 4周目: 選択肢1
     ]
     # 実行時の分岐判定命令は存在しない(展開コンパイル)
     assert not any(isinstance(ev, binfmt.Jmp) for ev in c.events)
@@ -285,7 +285,7 @@ def test_part_does_not_cancel_hold_from_procedure(tmp_path):
     ems = [(e.frame, e.buttons, e.lx) for e in engine.run(c.events, c.total_frames)]
     assert ems == [
         (0, ZL | A, 1000),
-        (3, ZL, 0),     # 部品ぶんだけ元に戻り、hold は生き残る
+        (3, ZL, 0),     # 部品ぶんだけ元に戻り、hold は残る
         (13, 0, 0),     # release ZL
     ]
 

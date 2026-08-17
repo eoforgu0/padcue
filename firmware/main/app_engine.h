@@ -1,4 +1,4 @@
-// app_engine: ハードウェアタイマー駆動のシーケンス実行(コア1・R1 の心臓部)
+// app_engine: ハードウェアタイマー駆動のシーケンス実行(コア1・R1 を担う中核)
 //
 // 設計: docs/design/firmware-architecture.md §2
 // - GPTimer(1MHz)のアラーム ISR で「次のイベント時刻」に正確に状態を切り替える

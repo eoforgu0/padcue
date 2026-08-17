@@ -3,7 +3,7 @@
 正本の形式は flow.json(flowfmt.py)で、画面で作るのもそちら。本モジュールは
 その土台で、flowfmt が組み立てた Stmt の並びを受けてイベント列へ変換する。
 テキスト DSL の構文解析(compile_source)は同じ意味論を字面で書けるようにした
-もので、検査と手による実験で使う。画面から流れてくる経路には乗らない。
+もので、検査と手による実験で使う。画面からの経路では使わない。
 
 意味論(ブロックモデル):
 - 手順およびループ本体は「区間全体の入力状態を毎フレーム完全に定義する
@@ -342,7 +342,7 @@ class Compiled:
     # 途中から実行できる位置。ラベル(トップレベル)がそのまま再開点になる。
     # 各点には全状態スナップショットが置かれるので、そこから始めても状態が確定する
     resume_points: list = field(default_factory=list)  # [{name,index,base,frame}]
-    wait_branch_arms: list = field(default_factory=list)  # 待機分岐の腕の名前
+    wait_branch_arms: list = field(default_factory=list)  # 待機分岐の選択肢の名前
 
 
 @dataclass
@@ -370,7 +370,7 @@ class _Ctx:
     in_wait_branch: bool = False
     labels: list = field(default_factory=list)
     resume_points: list = field(default_factory=list)
-    wait_branch_arms: list = field(default_factory=list)  # 腕の名前(GUI 表示用)
+    wait_branch_arms: list = field(default_factory=list)  # 選択肢の名前(GUI 表示用)
     # ジャイロ定常リント: いまの (gx,gy,gz) がいつから続いているか
     motion_since: int = 0
     motion_line: int = 0
@@ -413,9 +413,9 @@ class _Ctx:
         self.motion_allow = allow
 
     def state_tuple(self) -> tuple:
-        # ジャイロ・加速度も含める。含めないと、待機分岐の腕の保存・復元や
+        # ジャイロ・加速度も含める。含めないと、待機分岐の選択肢の保存・復元や
         # ループの「状態を変えたまま終わる」検出からモーションが漏れ、
-        # 腕1で回したジャイロが腕2の先頭スナップショットに残留する
+        # 選択肢1で回したジャイロが選択肢2の先頭スナップショットに残留する
         return (self.buttons, self.lx, self.ly, self.rx, self.ry,
                 self.gx, self.gy, self.gz, self.ax, self.ay, self.az)
 
@@ -423,7 +423,7 @@ class _Ctx:
         """制御イベント挿入・ブロック境界での統合打ち切り。"""
         # ジャイロ定常の追跡もここで区切る(ループ・分岐をまたぐ定常は
         # 境界ごとに測り直しになるため過小評価し得るが、直線的な手順=
-        # 典型ケースは正しく捕まえる)
+        # 典型ケースは正しく検出する)
         self.warn_motion_const()
         self.motion_since = self.abs_frame
         self.last_state_index = None
@@ -514,7 +514,7 @@ def compile_procs(procs: dict[str, Proc], proc_name: str | None = None) -> Compi
     ctx.cur_line = proc.line
     ctx.emit()  # frame 0 の全状態スナップショット(ブロックモデルの起点)
     _compile_body(proc.body, ctx, procs, (name,))
-    # 待機分岐がある場合、各腕の末尾で既に End を置いている
+    # 待機分岐がある場合、各選択肢の末尾で既に End を置いている
     if not ctx.wait_branch_arms:
         ctx.events.append(End())
     # 手順の先頭も再開点(最初から実行する場合)
@@ -627,9 +627,9 @@ def _compile_wait_branch(
     st: Stmt, rest: list[Stmt], ctx: _Ctx, procs: dict[str, Proc],
     call_stack: tuple[str, ...]
 ) -> None:
-    """待機分岐: ここで全ニュートラルにして止まり、選ばれた腕へ進む。
+    """待機分岐: ここで全ニュートラルにして止まり、選ばれた選択肢へ進む。
 
-    各腕には「腕の中身 + この分岐より後ろの続き」を展開する。腕ごとに時刻が
+    各選択肢には「その中身 + この分岐より後ろの続き」を展開する。選択肢ごとに時刻が
     独立するので、続きを共有せず複製する(v0 は入れ子を許さないので増えない)。
     """
     arms, timeout_frames, on_timeout, names = st.args
@@ -638,14 +638,14 @@ def _compile_wait_branch(
     if ctx.in_wait_branch:
         raise CompileError(st.line, "待機分岐は入れ子にできません")
     if not (1 <= len(arms) <= MAX_ARMS):
-        raise CompileError(st.line, f"待機分岐の腕は 1〜{MAX_ARMS} 本です")
+        raise CompileError(st.line, f"待機分岐の選択肢は 1〜{MAX_ARMS} 個です")
 
     await_index = len(ctx.events)
     ctx.events.append(Await(ctx.abs_frame - ctx.base, (0,) * len(arms),
                             timeout_frames, on_timeout))
     ctx.barrier()
 
-    # 分岐時点の状態(腕はここから始まる)
+    # 分岐時点の状態(選択肢はここから始まる)
     snap = (ctx.abs_frame, ctx.base, ctx.state_tuple(), ctx.next_counter)
     targets = []
     end_frames = []
@@ -655,11 +655,11 @@ def _compile_wait_branch(
         (ctx.abs_frame, ctx.base, st_tuple, ctx.next_counter) = snap
         (ctx.buttons, ctx.lx, ctx.ly, ctx.rx, ctx.ry,
          ctx.gx, ctx.gy, ctx.gz, ctx.ax, ctx.ay, ctx.az) = st_tuple
-        # ジャイロ定常の追跡は腕の先頭から張り直す(時刻が巻き戻るため)
+        # ジャイロ定常の追跡は選択肢の先頭から張り直す(時刻が巻き戻るため)
         ctx.motion_since = ctx.abs_frame
         ctx.motion_line = st.line
         ctx.motion_allow = st.allow
-        ctx.emit()   # 腕の先頭に全状態スナップショット(自己完結にする)
+        ctx.emit()   # 選択肢の先頭に全状態スナップショット(自己完結にする)
         _compile_body(arm, ctx, procs, call_stack)
         _compile_body(rest, ctx, procs, call_stack)   # 分岐より後ろの続き
         ctx.events.append(End())
@@ -679,7 +679,7 @@ def _compile_body(
 ) -> None:
     for i, st in enumerate(stmts):
         if st.kind == "wait_branch":
-            # 以降の文は各腕の中へ展開されるので、ここで打ち切る
+            # 以降の文は各選択肢の中へ展開されるので、ここで打ち切る
             _compile_wait_branch(st, stmts[i + 1:], ctx, procs, call_stack)
             return
         ctx.cur_line = st.line
@@ -744,7 +744,7 @@ def _compile_body(
                 _warn_short(ctx, st, "スティック", frames)
 
             # side と st は既定引数で束縛する。呼ぶのはこの反復の中だけだが、
-            # ループ変数を暗黙に捕まえた形にしておくと、後で呼び出しを外へ
+            # ループ変数を暗黙に捕捉した形にしておくと、後で呼び出しを外へ
             # 動かしたときに黙って壊れる
             def _set(sx, sy, side=side, st=st):
                 if side == "L":
@@ -857,10 +857,10 @@ def _compile_part(st: Stmt, ctx: _Ctx) -> None:
 
 
 def _expand_counter_branch(st: Stmt) -> Stmt:
-    """周回分岐を含むループを、腕を並べた「まとめ周回」のループへ変換する。
+    """周回分岐を含むループを、選択肢を並べた「まとめ周回」のループへ変換する。
 
     loop N { 前 ; branch[a0,a1] ; 後 } は
-    loop N/A { (前,a0,後) , (前,a1,後) } と等価(周回 i は腕 i%A を使う)。
+    loop N/A { (前,a0,後) , (前,a1,後) } と等価(周回 i は選択肢 i%A を使う)。
     展開コンパイルなので実行時の判定は一切発生しない(R1 に完全非干渉)。
     """
     branches = [s for s in st.body if s.kind == "counter_branch"]
@@ -873,13 +873,13 @@ def _expand_counter_branch(st: Stmt) -> Stmt:
     (arms,) = br.args
     a = len(arms)
     if a < 2:
-        raise CompileError(br.line, "周回分岐には2つ以上の腕が必要です")
+        raise CompileError(br.line, "周回分岐には2つ以上の選択肢が必要です")
     (n,) = st.args
     if n % a != 0:
         raise CompileError(
             br.line,
-            f"ループ回数({n})が腕の数({a})で割り切れません。"
-            "どの腕も同じ回数だけ実行されるようにしてください",
+            f"ループ回数({n})が選択肢の数({a})で割り切れません。"
+            "どの選択肢も同じ回数だけ実行されるようにしてください",
         )
     new_body: list[Stmt] = []
     for arm in arms:
@@ -901,7 +901,7 @@ def _compile_loop(
         raise CompileError(st.line, "ループ(カウンタ)が多すぎます(最大256)")
     ctx.next_counter += 1
 
-    # 入口シーム: 直前の State が同一フレームなら、本体先頭スナップショットに
+    # 入口の継ぎ目: 直前の State が同一フレームなら、本体先頭スナップショットに
     # 完全に上書きされるため取り除く(同一フレームの過渡状態を作らない)
     if (
         ctx.last_state_index is not None

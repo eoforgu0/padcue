@@ -84,7 +84,7 @@ def run_part_editor(c: Checker, page, proj: Project):
         page.click("#savepart")
         page.wait_for_timeout(1000)
         # 保存成功は文で知らせない。バッジが「保存済み」になり、
-        # 一瞬光る(flash クラス)ことが「ちゃんと押せた」の合図
+        # 一瞬光る(flash クラス)ことが保存できた合図
         assert text(page, "#partmsg") == "", text(page, "#partmsg")
         assert text(page, "#partinfo") == "保存済み", text(page, "#partinfo")
         assert "flash" in (page.locator("#partinfo").get_attribute("class") or ""), \

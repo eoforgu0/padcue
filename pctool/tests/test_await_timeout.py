@@ -5,7 +5,7 @@
 
 守りたい不変条件:
  - timeout_frames = 0(既定)は無期限に待つ(従来と同じ)
- - 上限に達したら on_timeout に従う: 0 = 中断(RUN_ABORT)、n = その腕へ
+ - 上限に達したら on_timeout に従う: 0 = 中断(RUN_ABORT)、n = その選択肢へ
    自動で進む。どちらも AWAIT_TIMEOUT がログに残る
  - 上限内に SELECT が来れば何も起きない
 """

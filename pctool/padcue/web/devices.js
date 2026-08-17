@@ -109,7 +109,7 @@ function buildDevRow(d) {
   row.detail = el('div', 'devdetail');
   // 0) つながっていない理由。直したい相手(接続先・探す・接続)のすぐ上に
   //    置く(結論はレーン、原因と対処は装置カード。原則 §1)。× は付けない
-  //    ——直ればひとりでに消えるものに、消すボタンは要らない
+  //    ——直れば自動で消えるものに、消すボタンは要らない
   row.whymsg = el('div', 'devwhy');
   row.detail.append(row.whymsg);
   // 1) 接続行
@@ -672,7 +672,7 @@ function mkPlayAt(d) {
 
 // 状態が取れているか。取れていない間は画面全体を薄くし(.stale)、
 // 再生位置の補間も止める——古い値から先を描き続けると、止まっているものが
-// 動いて見える(この画面は監視のためにあるので、それが最も困る)
+// 動いて見える(この画面は監視のためにあるので、それは避ける)
 let staleNow = false;
 function setStale(on) {
   if (staleNow === on) return;

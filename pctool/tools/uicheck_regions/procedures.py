@@ -421,7 +421,7 @@ def run_stop_and_partial(c: Checker, page):
         page.wait_for_timeout(400)
         tlmsg = text(page, "#lanes .lane .ltlmsg")
         assert "終わりました" not in tlmsg and "予約どおり" not in tlmsg, \
-            f"出さないと決めた終了メッセージが出ている: {tlmsg!r}"
+            f"出さないはずの終了メッセージが出ている: {tlmsg!r}"
         assert not ln.locator("button", has_text="周回実行").is_disabled(), \
             "終了したのに実行ボタンが戻らない"
         # ログに「どの手順を何周指定で始め、何周で終えたか」が残ること
@@ -453,7 +453,7 @@ def run_stop_and_partial(c: Checker, page):
     c.check("実行を押すと手動操作は自動で終わる", t_manual_auto_off_on_run)
 
     def t_manual_stop_never_locked():
-        """手動操作が続いている限り「終了」は押せること(詰みを作らない)。
+        """手動操作が続いている限り「終了」は押せること(終える手段が無くなる)。
 
         実機が実行中で、かつ手動操作が残っている状態は、画面から実行を
         押す限り起こらない(上の検査のとおり自動で終わるため)。CLI など
@@ -465,7 +465,7 @@ def run_stop_and_partial(c: Checker, page):
         assert "操作中" in text(page, "#manualchip"), "手動操作が始まらない"
         locked = page.evaluate("""() => {
             const saved = JSON.parse(JSON.stringify(state.devices[0]));
-            state.devices[0].state = 'RUNNING';    // 実機が実行中だと画面に思わせる
+            state.devices[0].state = 'RUNNING';    // 実機が実行中の状態にする
             state.devices[0].running = true;
             renderLanes();
             const disabled = document.getElementById('manual').disabled;
@@ -473,7 +473,7 @@ def run_stop_and_partial(c: Checker, page):
             renderLanes();
             return disabled;
         }""")
-        assert not locked, "実行中に手動操作を終了できない(詰みの状態)"
+        assert not locked, "実行中に手動操作を終了できない(入力を止められない)"
         page.click("#manual")
         page.wait_for_timeout(500)
         assert "停止中" in text(page, "#manualchip")

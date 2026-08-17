@@ -84,7 +84,7 @@ function applyTheme(v) {
 const NOTIFY_KINDS = [['done', '実行が終わった'],
                       ['error', '異常で止まった'],
                       ['await', '操作を待っている']];
-// 既定の割り当ては、実際に聴き比べて決めたもの
+// 既定の割り当て
 const NOTIFY_DEFAULT = {
   done: {sound: true, snd: 'call', vol: 40, tab: true},
   error: {sound: true, snd: 'alert', vol: 60, tab: true},
@@ -120,7 +120,7 @@ let notify = (() => {
 // 音を出す土台。通知(チーン)と F9/F10 の受け付けビープが共用する
 let audioCtx = null;
 
-// 一声ぶん。立ち上がりを短く、減衰を長く取ると「チーン」になる
+// 1音ぶん。立ち上がりを短く、減衰を長く取ると「チーン」になる
 function tone(freq, at, dur, vol) {
   const o = audioCtx.createOscillator();
   const g = audioCtx.createGain();
@@ -137,7 +137,7 @@ function tone(freq, at, dur, vol) {
 // 鳴らせる音。意味が違えば形も違う(原則 §5)が、どれが聞き取りやすいかは
 // 部屋とゲーム音による。場面ごとに選べるようにする
 // 名前は**音そのものの形**で付ける。「呼び出し」「警告」のように用途を
-// 示す名前にすると、別の場面へ割り当てたときに名前と実感が食い違う
+// 示す名前にすると、別の場面へ割り当てたときに名前と用途が食い違う
 //。並びは短い順・単純な順。癖の強い音は入れない
 // —— 選ばれずに選択肢を増やすだけになるため
 const SOUNDS = {
@@ -293,7 +293,7 @@ try {
     paint();
   };
   // 行 = 場面、列 = 知らせ方。音を切った行は、種類と音量を押せなくする
-  // (残しておくと「切ってあるのに音量を触れる」ちぐはぐな欄になる)
+  // (残しておくと、音を切った行でも種類と音量を変えられる)
   const cells = [];
   grid.append(el('div'), el('div', 'nghead snd', '音'),
               el('div', 'nghead', 'タブで知らせる'));

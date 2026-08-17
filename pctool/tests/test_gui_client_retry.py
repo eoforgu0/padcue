@@ -2,7 +2,7 @@
 
 contextmanager の中で 2 回目の yield をすると、実機が応答を返さない
 (TimeoutError)ときに本来の理由が RuntimeError("generator didn't stop
-after throw()") に化け、端末に例外の山が出る。接続管理は
+after throw()") に置き換わり、端末に例外が大量に出る。接続管理は
 devicepool.DeviceLink が一元的に持つが、守るべき規則はどの経路でも同じ:
  - **やり直すのは「送り出す前に切れていた」と分かるときだけ**(NotSentError)。
    装置が受け取った可能性がある切れ方でやり直すと、実行や転送が二重に効く

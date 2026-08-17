@@ -53,7 +53,7 @@ OP_SETCNT = 2
 OP_DJNZ = 3
 OP_JMP = 4
 OP_END = 5
-OP_AWAIT = 6      # 待機分岐: 全ニュートラルで止まり、PC の選択で腕へ進む
+OP_AWAIT = 6      # 待機分岐: 全ニュートラルで止まり、PC が選んだ選択肢へ進む
 MAX_ARMS = 4
 
 
@@ -124,14 +124,14 @@ class Jmp:
 
 @dataclass(frozen=True)
 class Await:
-    """待機分岐。ここで全ニュートラルにして止まり、PC が腕を選ぶまで待つ。
+    """待機分岐。ここで全ニュートラルにして止まり、PC が選択肢を選ぶまで待つ。
 
     待つ間はタイミングを刻まないため、選択にかかる時間は精度に影響しない
     (設計文書 7.5 の「外部分岐」)。timeout_frames を超えたら on_timeout に従う。
-    on_timeout: 0 = 中断、1..n = その番号の腕へ進む。
+    on_timeout: 0 = 中断、1..n = その番号の選択肢へ進む。
     """
     frame: int                # セグメント基準の相対フレーム(待ち始める時刻)
-    targets: tuple            # 各腕の飛び先イベント index
+    targets: tuple            # 各選択肢の飛び先イベント index
     timeout_frames: int = 0   # 0 = 無期限に待つ
     on_timeout: int = 0
 
@@ -323,7 +323,7 @@ def _decode_record(rec: bytes) -> Event:
         vals = struct.unpack("<IBIBB" + "I" * MAX_ARMS + "5x", rec)
         frame, timeout, on_timeout, n = vals[0], vals[2], vals[3], vals[4]
         if not (1 <= n <= MAX_ARMS):
-            raise DecodeError(f"待機分岐の腕数が不正です: {n}")
+            raise DecodeError(f"待機分岐の選択肢の数が不正です: {n}")
         return Await(frame, tuple(vals[5:5 + n]), timeout, on_timeout)
     if op == OP_END:
         return End()

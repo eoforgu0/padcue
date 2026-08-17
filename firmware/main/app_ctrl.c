@@ -313,7 +313,7 @@ static int cmd_stop(int sock, cJSON *req) {
     // 実行系のままなら、その場で戻す。supervisor のレベル同期(100ms周期)
     // でも直るが、STOP の応答が返った時点で状態が正しいほうがよい。
     // 「状態は RUNNING なのにエンジンは停止」という固着からの脱出口を
-    // STOP 一発に一本化する(これが無いと再起動しか手が無い)
+    // STOP 1回に一本化する(これが無いと再起動でしか戻せない)
     if (!app_engine_is_running() && !app_engine_is_awaiting()) {
         app_state_t st = app_state_get();
         if (st == APP_STATE_RUNNING || st == APP_STATE_AWAITING) {
@@ -659,8 +659,8 @@ static void cleanup_client(void) {
 // 見るために持っておく(下の take_over を参照)
 static int s_listen_sock = -1;
 
-// いま繋がっている相手が黙っている間に、別のプログラムが繋ぎに来ていないかを
-// 見る。来ていれば今の相手を手放して新しい方に譲る(あとから来た方を優先)。
+// いま繋がっている相手から受信が無い間に、別のプログラムが繋ぎに来ていないかを
+// 見る。来ていれば今の接続を閉じて新しい接続を受ける(あとから来た方を優先)。
 //
 // 実機は同時に1つしか相手にできないので、これが無いと「先に繋いだ側が
 // 黙っている間、他は一切つながらない」ことになる。無通信の待ち時間が
@@ -775,8 +775,8 @@ static void ctrl_task(void *arg) {
             // 30 秒では短い: 画面が手順/部品タブにいる間や、ブラウザのタブが
             // 裏に回って setInterval が間引かれる間は状態取得が止まるため、
             // ふつうに使っていても切断が起きる。
-            // PC 側も無通信が続かないよう定期的に叩くようにしたうえで、
-            // ここは十分長く取る(死んだ PC は KEEPALIVE でも検出できる)
+            // PC 側も無通信が続かないよう定期的に要求を送ったうえで、
+            // ここは十分長く取る(PC の電源断や通信断は KEEPALIVE でも検出できる)
             struct timeval tv = { .tv_sec = 180, .tv_usec = 0 };
             setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
             int keepalive = 1;

@@ -3,8 +3,8 @@
 守りたい不変条件(specs/coupling.md §1 / D7 / D8):
  - 連結しての開始は2台まとめて(転送→連発)、開始ズレを ms で記録する
  - 同時 SELECT は両方が選択待ちのときだけ。世代を添えて誤配を装置側でも防ぐ
- - 自動合流: 両方そろったら設定の腕で自動で進む(人の操作なし)
- - 人為停止は連動しない。人が止めた相手を残った側は待たず、ソロで自動進行
+ - 自動合流: 両方そろったら設定の選択肢で自動で進む(人の操作なし)
+ - 人為停止は連動しない。人が止めた相手を残った側は待たず、単独で自動進行
  - 異常(装置の異常報告・約5秒見えない)は連動停止。残り周回を記録し
    「続きから再開」できる
 """
@@ -182,11 +182,11 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
     assert r.get("ok"), r
     wait_until(lambda: all(d.get("running") or d.get("awaiting")
                            for d in devs(base)))
-    # 人為停止: 2P を止める → 1P は止まらず、以後はソロで自動進行
+    # 人為停止: 2P を止める → 1P は止まらず、以後は単独で自動進行
     assert post(base, "/api/stop", {"mode": "immediate", "dev": "2P"}).get("ok")
     wait_until(lambda: not devs(base)[1].get("running")
                and not devs(base)[1].get("awaiting"))
-    for _ in range(3):        # 1P が選択待ち→ソロ自動 SELECT で進み続ける
+    for _ in range(3):        # 1P が選択待ち→単独の自動 SELECT で進み続ける
         time.sleep(1.0)
         d = devs(base)[0]
         assert d.get("running") or d.get("awaiting"), \
@@ -198,12 +198,12 @@ def test_manual_stop_does_not_couple_and_solo_continues(env):
 
 
 def test_manual_restart_solo_not_auto_joined(env):
-    """人為停止 → その装置でソロ実行を開始しても、相手がまだ連結実行中の
+    """人為停止 → その装置で単独実行を開始しても、相手がまだ連結実行中の
     自動合流に誤って巻き込まれない。
 
     選択待ちの追跡が「連結実行のメンバーとして選択待ちしたか」を区別していないと、
-    人為停止後にソロ再開した装置の選択待ちまで『2台そろった』と誤認し、独立の
-    ソロ実行へ勝手に SELECT を送ってしまう。
+    人為停止後に単独で再開した装置の選択待ちまで『2台そろった』と誤認し、無関係な
+    単独実行へ勝手に SELECT を送ってしまう。
     """
     proj, _d1, _d2, base = env
     wait_ready(base)
@@ -217,22 +217,22 @@ def test_manual_restart_solo_not_auto_joined(env):
     assert post(base, "/api/stop", {"mode": "immediate", "dev": "2P"}).get("ok")
     wait_until(lambda: not devs(base)[1].get("running")
                and not devs(base)[1].get("awaiting"))
-    # その 2P でソロ実行を開始できる(1P はまだ連結実行として毎周選択待ちし、
+    # その 2P で単独実行を開始できる(1P はまだ連結実行として毎周選択待ちし、
     # 来ない相手=2Pを待ち続けている状況)
     assert post(base, "/api/run", {"name": "合流", "loops": 1,
                                    "dev": "2P"}).get("ok")
-    # 誤発火する実装では、ここで 1P の選択待ちと 2P のソロ選択待ちが「2台そろった」
-    # と誤認され、2P へ勝手に SELECT が送られて1周だけの実行が完走してしまう。
+    # 誤発火する実装では、ここで 1P の選択待ちと 2P の単独実行の選択待ちを
+    # 「2台そろった」と誤認し、2P へ SELECT が送られて1周だけ完走してしまう。
     # 正しい実装では、SELECT する人がいないので 2P は選択待ちしたまま止まる
     time.sleep(3.0)
     d2s = devs(base)[1]
     assert d2s.get("awaiting"), \
-        f"ソロ実行のはずの2Pが勝手に選択されて進んでしまった" \
+        f"単独実行のはずの2Pが勝手に選択されて進んでしまった" \
         f"(連結の自動合流が誤発火): {d2s}"
     logs = proj.read_logs(500)
     solo_joins = [e for e in logs if e.get("kind") == "PC_AUTO_JOIN"
                  and e.get("dev") == "bbbb00000002"]
-    assert not solo_joins, f"ソロ実行の2Pが自動合流の対象になった: {solo_joins}"
+    assert not solo_joins, f"単独実行の2Pが自動合流の対象になった: {solo_joins}"
     post(base, "/api/stop_both", {"mode": "immediate"})
 
 
@@ -251,7 +251,7 @@ def test_transient_error_does_not_end_run(env):
                            for d in devs(base)))
     # 2P の収集を一瞬だけ失敗させる。収集スレッド(約1秒周期)が次の成功で
     # 消してしまうので、**監視(0.5秒周期)が1回は必ず見る**ように、
-    # 消される側を止めてから立てる。立てて 1.2 秒眠るだけだと、窓に
+    # 消される側を止めてから立てる。立てて 1.2 秒待つだけだと、窓に
     # 入らなかったときに猶予の分岐を一度も通らないまま緑になる
     link2 = gui._Handler.pool.get("2P")
     link2.stop()                      # 収集スレッドだけ止める(接続は保つ)
@@ -279,9 +279,9 @@ def test_transient_error_does_not_end_run(env):
 
 
 def test_solo_progress_ignores_oneshot(env):
-    """人為停止後のソロ自動進行は、ワンショット保留に妨げられないこと。
+    """人為停止後の単独での自動進行は、ワンショット保留に妨げられないこと。
 
-    ワンショットは「合流の腕を人が選ぶ」ための保留で、相手のいないソロ進行
+    ワンショットは「合流の選択肢を人が選ぶ」ための保留で、相手のいない単独進行
     には合流が無い。保留すると解除経路(両方へ同時に選ぶ = 両方の選択待ちが必要)
     も無く、恒久停止になる。
     """
@@ -299,7 +299,7 @@ def test_solo_progress_ignores_oneshot(env):
         time.sleep(1.0)
         d = devs(base)[0]
         assert d.get("running") or d.get("awaiting"), \
-            "ワンショット保留がソロ進行まで止めた(恒久停止)"
+            "ワンショット保留が単独進行まで止めた(恒久停止)"
     post(base, "/api/stop_both", {"mode": "immediate"})
 
 
@@ -403,7 +403,7 @@ def test_watch_survives_a_failure_in_the_error_path(tmp_path, monkeypatch):
     異常の記録は members() を呼んで「どの装置の記録か」を決めるが、異常の
     原因がその members() 自身(設定ファイルが壊れている等)だと、except の
     中で二度目の例外が出る。except から送出された例外は同じ try では
-    捕まらないので、守りが無ければ監視スレッドごと死ぬ。そうなると連動停止も
+    捕まらないので、守りが無ければ監視スレッドごと終了する。そうなると連動停止も
     自動合流も黙って止まり、設定を直しても GUI を再起動するまで戻らない。
     """
     proj = Project(tmp_path)
@@ -430,5 +430,5 @@ def test_watch_survives_a_failure_in_the_error_path(tmp_path, monkeypatch):
     c.close()
     th.join(timeout=2)
     assert not th.is_alive(), "監視が止まらない"
-    # 2周以上回っている = 1周目の二次例外で死んでいない
+    # 2周以上回っている = 1周目の二次例外で終わっていない
     assert len(calls) >= 4, calls

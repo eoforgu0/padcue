@@ -1,6 +1,6 @@
 """実行の区切りを監視して、画面に知らせる「きっかけ」を作る(通知)。
 
-判定をサーバが持つ理由: ブラウザは裏に回るとタイマーを絞られる
+判定をサーバが持つ理由: ブラウザはタブが隠れるとタイマーを制限する
 (Chrome は5分以上隠れたタブのタイマーを毎分1回まで落とす)。画面自身の
 定期取得で「終わった」を捉えると、放置運転を待っているときに最大1分遅れる。
 サーバで判定して /api/events(SSE)で押し出せば、隠れたタブでも即座に届く。
@@ -38,7 +38,7 @@ class RunWatcher:
     def __init__(self, pool, coupler, autostart: bool = True):
         self.pool = pool
         self.coupler = coupler
-        # 監視が落ちた直近の理由(同じ理由で端末を埋めないため)
+        # 監視が失敗した直近の理由(同じ理由で端末を埋めないため)
         self._tick_error = ""
         self._lock = threading.Lock()
         self._waiters: list[threading.Event] = []
@@ -107,7 +107,7 @@ class RunWatcher:
             try:
                 self.tick()
                 self._tick_error = ""
-            except Exception as e:   # noqa: BLE001  監視は死なせない
+            except Exception as e:   # noqa: BLE001  監視は止めない
                 # 死なせないのはよいが、黙って捨てると「終了の知らせが
                 # 来ない」としか見えなくなる。放置運転を待っている人には
                 # 「まだ終わっていない」と区別がつかない。同じ理由で

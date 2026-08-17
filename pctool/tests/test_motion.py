@@ -133,10 +133,10 @@ def test_gyro_one_frame_warns():
 
 
 def test_wait_branch_arm_does_not_leak_motion(tmp_path):
-    """腕1がジャイロを変えても、腕2の先頭は分岐時点の状態から始まること。
+    """選択肢1がジャイロを変えても、選択肢2の先頭は分岐時点の状態から始まること。
 
-    分岐時点の保存・復元にモーションが含まれないと、腕1の残留ジャイロが
-    腕2の先頭スナップショットへ焼き込まれ、選んだ腕によって意図しない
+    分岐時点の保存・復元にモーションが含まれないと、選択肢1の残留ジャイロが
+    選択肢2の先頭スナップショットへ書き込まれ、選んだ選択肢によって意図しない
     回転が出たり出なかったりする。
     """
     p = make(tmp_path, {"p": [
@@ -150,8 +150,8 @@ def test_wait_branch_arm_does_not_leak_motion(tmp_path):
     c = compile_flow(str(p.root), "p")
     ev = c.events
     aw = next(e for e in ev if isinstance(e, binfmt.Await))
-    # 腕1の先頭は自分の gyro 3000 が同一フレーム統合で乗る(正しい)。
-    # 腕2の先頭は分岐時点の 1000 に戻ること(腕1の 3000 が漏れてはいけない)
+    # 選択肢1の先頭は自分の gyro 3000 が同一フレーム統合で乗る(正しい)。
+    # 選択肢2の先頭は分岐時点の 1000 に戻ること(選択肢1の 3000 が漏れてはいけない)
     heads = [ev[t] for t in aw.targets]
     assert all(isinstance(h, binfmt.State) for h in heads)
     assert [h.gy for h in heads] == [3000, 1000]

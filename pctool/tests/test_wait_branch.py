@@ -1,4 +1,4 @@
-"""待機分岐(手動で枝を選ぶ)のテスト。
+"""待機分岐(手動で選択肢を選ぶ)のテスト。
 
 止まっている間は全ニュートラルで、時間も刻まない。選択にかかった時間は
 以降の予定時刻を後ろへずらすだけなので、待った長さは精度に影響しない。
@@ -51,7 +51,7 @@ def proj(tmp_path):
 
 
 def test_arms_get_their_own_continuation(proj):
-    """分岐より後ろの続きが、腕ごとに正しい時刻で展開されること。"""
+    """分岐より後ろの続きが、選択肢ごとに正しい時刻で展開されること。"""
     r = proj.build("分岐")
     assert r.wait_branch_arms == [["成功", "失敗"]]
     _n, ev, total = binfmt.decode(r.blob)
@@ -63,7 +63,7 @@ def test_arms_get_their_own_continuation(proj):
            engine.run(ev, total, 1, choices=[0], await_frames=120)]
     assert got == [(0, A), (5, 0), (30, 0), (150, B), (155, 0), (180, Y), (185, 0)]
 
-    # 「失敗」を選ぶと、腕の長さの違いが続きの時刻に正しく反映される
+    # 「失敗」を選ぶと、選択肢の長さの違いが続きの時刻に正しく反映される
     got = [(e.frame, e.buttons) for e in
            engine.run(ev, total, 1, choices=[1], await_frames=120)]
     assert got == [(0, A), (5, 0), (30, 0), (150, X), (155, 0), (210, Y), (215, 0)]
@@ -90,13 +90,13 @@ def test_timeout_aborts_by_default(proj):
 def test_on_timeout_can_pick_an_arm(tmp_path):
     flow = json.loads(json.dumps(FLOW))
     flow["body"][2]["timeout_frames"] = 600
-    flow["body"][2]["on_timeout"] = 2      # 2 番目の腕(失敗)へ
+    flow["body"][2]["on_timeout"] = 2      # 2 番目の選択肢(失敗)へ
     p = make(tmp_path, flow)
     r = p.build("分岐")
     _n, ev, total = binfmt.decode(r.blob)
     got = [(e.frame, e.buttons) for e in
            engine.run(ev, total, 1, choices=[], await_frames=600)]
-    # 待ち始め 30F + 待ち 600F = 630F から「失敗」の腕が走る
+    # 待ち始め 30F + 待ち 600F = 630F から「失敗」の選択肢が走る
     assert (630, X) in got
 
 
@@ -116,7 +116,7 @@ def test_c_engine_matches_python(proj, host_exe, tmp_path):
         assert res.returncode == 0, res.stdout + res.stderr
         got = [(int(line.split()[0]), int(line.split()[1]))
                for line in res.stdout.strip().splitlines()[:-1]]
-        assert got == expected, f"腕 {choice}"
+        assert got == expected, f"選択肢 {choice}"
 
 
 def test_nesting_is_rejected(tmp_path):
@@ -139,7 +139,7 @@ def test_inside_loop_is_rejected(tmp_path):
 
 
 def test_device_flow_select(proj):
-    """実機と同じ手順: 実行 → 待機で止まる → 腕を選ぶ → 続きが走る。"""
+    """実機と同じ手順: 実行 → 待機で止まる → 選択肢を選ぶ → 続きが走る。"""
     r = proj.build("分岐")
     with MockDevice(speed=500.0) as dev, DeviceClient("127.0.0.1", dev.port) as cli:
         cli.put(r.name, r.blob)

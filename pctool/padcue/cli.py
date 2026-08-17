@@ -103,10 +103,10 @@ def _dev_arg(args) -> str:
 
 
 def _via_gui(p: Project, path: str, body: dict, done) -> int | None:
-    """画面が開いていれば、その API を叩いて終了コードを返す。
+    """画面が開いていれば、その API を呼んで終了コードを返す。
 
     開いていなければ None を返すので、呼ぶ側は直結の処理へ進む。
-    「開いているか見る → 投げる → error を見る → 印を出す」の4段が
+    「開いているか見る → 送る → error を見る → 印を出す」の4段が
     コマンドごとに書き写されるのを防ぐ(coupling.md D10 の経路選択はここだけ)。
     done は成功したときに表示する文言。応答の中身を使いたいときは関数を渡す。
     """
@@ -126,7 +126,7 @@ def _refuse_while_gui(p: Project, what: str) -> bool:
     if _gui_base(p) is None:
         return False
     print(f"padcue.bat(操作画面)が開いています。{what}は装置をまるごと"
-          "預かる操作のため、画面を閉じてからやり直してください")
+          "専有する操作のため、画面を閉じてからやり直してください")
     return True
 
 
@@ -181,7 +181,7 @@ def _client(args) -> DeviceClient:
     except DeviceError as e:
         if e.code == "DEVICE_MISMATCH":
             print(f"{dev['host']} は {dev.get('name')} ではありません。"
-                  "LAN 内で本人を探します…", file=sys.stderr)
+                  "LAN 内で登録した個体を探します…", file=sys.stderr)
         else:
             raise
     except (OSError, ConnectionError):
@@ -189,7 +189,7 @@ def _client(args) -> DeviceClient:
     found = discover()
     want_id_early = dev.get("id", "")
     if want_id_early and not any(f.device_id == want_id_early for f in found):
-        # UDP 探索で本人が見えない。個体名(mDNS)でも追跡を試す
+        # UDP 探索では登録した個体が見えない。個体名(mDNS)でも追跡を試す
         # (ブロードキャストが通らないネットワークの保険。実機は
         # pademu-<MAC下4桁>.local を名乗る)
         name_host = f"pademu-{want_id_early[-4:]}.local"
@@ -223,7 +223,7 @@ def _client(args) -> DeviceClient:
             continue
         connected.append((target, c, info))
         if want_id:
-            break                        # ID 一致は本人確定
+            break                        # ID 一致で個体が確定
     if want_id and connected:
         target, c, info = connected[0]
         p.update_device(cfg, cfg["devices"].index(dev),
@@ -404,7 +404,7 @@ def _print_status(d: dict) -> None:
 
     経路ごとに書き分けると、直結のときだけ出る行(記録落ち・送出失敗・
     ロールバック)が生まれる。同じ `padcue status` の出力が、操作画面を
-    開いているかどうかで変わるのは、計測値として壊れている。
+    開いているかどうかで変わるのは、計測値として成り立たない。
 
     ラベルはコロンの前を11セルで揃える。印(⚠)は値の側に置く — 端末や
     フォントによって幅が変わる文字を、桁を担う位置に置かないため。
@@ -729,8 +729,8 @@ def cmd_discover(args) -> int:
 
 def cmd_mock(args) -> int:
     # 模擬デバイスと操作画面は、その付随部品(HTTP サーバ・ブラウザ起動・
-    # 記録)を連鎖的にで連れてくる。使う命令のときだけ読み込んで、
-    # `padcue status` のような短い命令の立ち上がりを鈍らせない
+    # 記録)の読み込みを連鎖的に伴う。使う命令のときだけ読み込んで、
+    # `padcue status` のような短い命令の起動を遅くしない
     from .discover import PORT as DISCOVER_PORT
     from .mockdevice import MockDevice
     d = MockDevice(host="127.0.0.1", port=args.port, speed=args.speed,

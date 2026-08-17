@@ -35,7 +35,7 @@ class _Proc:
 def _first_await(events, start_index: int, start_base: int,
                  skip: int) -> tuple[int | None, int, int, int]:
     """最初に到達する待機分岐について
-    (フレーム, 腕の数, 待つ上限フレーム, 時間切れの行き先)を返す。
+    (フレーム, 選択肢の数, 待つ上限フレーム, 時間切れの行き先)を返す。
 
     フレームは再開点を基準にした値。実行系(engine.run)と同じ順で歩く:
     Djnz が base を進め、ジャンプに従う。待機分岐が無ければ
@@ -97,7 +97,7 @@ class MockDevice:
     # 宛てた SELECT が新しい実行の選択待ちと偶然一致しないように)
     _await_gen: int = 0
     # ペアリングの観測値(実機と同形)。既定は「既知本体の記録手渡し(0x04)を
-    # 1回受けて登録済み」の健全な姿。登録未完(step=0x01 のまま回数増)は
+    # 1回受けて登録済み」の正常な値。登録未完(step=0x01 のまま回数増)は
     # テストが pair_state() で注入する
     _pair_reqs: int = 1
     _pair_step: int = 0x04
@@ -228,7 +228,7 @@ class MockDevice:
 
         実機(app_ctrl.c handle_client)と同じく、現クライアントが約1秒無通信の
         間に新しい接続が来たら現接続を手放す(後着優先の横取り)。この挙動が
-        mock に無いと、2台化で最も危険な「収集と操作の接続奪い合い」故障を
+        mock に無いと、2台化の「収集と操作の接続奪い合い」故障を
         テストで再現できない。奪った接続を返す(無ければ None)。
         """
         buf = b""
@@ -314,14 +314,14 @@ class MockDevice:
                 # 区切り停止: 要求を受けた周回を終えた時点で止める。
                 # 仮想時計はポーリング間隔 × speed ぶんまとめて進むので、
                 # フレームを周回境界へ戻してから記録する(実機は境界ちょうど
-                # で止まる。戻さないと a と完了周がポーリング依存の嘘になる)
+                # で止まる。戻さないと a と完了周がポーリング依存でずれる)
                 r["frames"] = (r["graceful_pass"] + 1) * r["loop_frames"]
                 self._finish("RUN_ABORT")
 
     def _resume_from_await(self, r: dict, arm: int) -> None:
-        """選択待ちからの再開(SELECT とタイムアウトの腕進みが共用)。
+        """選択待ちからの再開(SELECT とタイムアウトの選択肢進みが共用)。
         呼び出し元が self._lock を握っていること。"""
-        del arm   # どの腕でも所要時間は同じ扱い(時間モデルの簡略化)
+        del arm   # どの選択肢でも所要時間は同じ扱い(時間モデルの簡略化)
         r["awaiting"] = False
         r["t0"] = time.monotonic()   # 待っていた時間ぶんずらす
         r["frames_at_await"] = r["frames"]
@@ -414,7 +414,7 @@ class MockDevice:
             with self._lock:
                 if self._run is None:
                     # 冪等: 停止済みでも成功にする(実機ファームと同じ。
-                    # 固着からの脱出口を STOP 一発にするための仕様)
+                    # 固着からの脱出口を STOP だけにするための仕様)
                     return Message(proto.T_STOP | proto.T_RESP, {})
                 if o.get("mode") == "cancel":
                     # 「今の周で止める」の予約だけを取り消す。既に止まった後は
@@ -455,7 +455,7 @@ class MockDevice:
                     return self._err("BAD_STATE", "待機分岐で止まっていません")
                 arm = int(o.get("arm", -1))
                 if not (0 <= arm < r["await_arms"]):
-                    return self._err("BAD_ARG", "腕の番号が範囲外です")
+                    return self._err("BAD_ARG", "選択肢の番号が範囲外です")
                 # 世代照合(実機と同じ): 別の選択待ちに宛てた古い選択を拒否する
                 if (isinstance(o.get("gen"), (int, float))
                         and int(o["gen"]) != self._await_gen):
@@ -542,7 +542,7 @@ class MockDevice:
         # 待機分岐に到達する絶対フレームを、実行系と同じ base の進み方で求める。
         # Await.frame はセグメント相対なので、ループ(Djnz が base を進める)の
         # 後ろにある待機分岐を e.frame のまま使うと「開始直後に選択待ち」に
-        # 化けてしまう
+        # なってしまう
         (await_rel, await_arms,
          await_timeout, await_on_timeout) = _first_await(
             events, start_index, start_base, skip)
@@ -596,7 +596,7 @@ class MockDevice:
                     "imu_enabled": True,
                     # ペアリング・入力モード・手動操作の可観測化(実機と同形)。
                     # 模擬は「既知本体の記録手渡し(0x04)を 1 回受けて登録済み」
-                    # という健全な姿を返す。異常系はテストが pair_state() で注入
+                    # という正常な値を返す。異常系はテストが pair_state() で注入
                     "pair_reqs": self._pair_reqs,
                     "pair_step": self._pair_step,
                     "input_mode": 0x30,
@@ -612,7 +612,7 @@ class MockDevice:
             self._pair_step = step
 
     def report_host_info(self, a: int, b: int) -> None:
-        """本体識別子(HOST_INFO)のログを発報する(本体パネルの検査用)。"""
+        """本体識別子(HOST_INFO)のログを出す(本体パネルの検査用)。"""
         self._log("HOST_INFO", a, b)
 
     def inject_fault(self, reason: str = "ENGINE_FAULT") -> None:

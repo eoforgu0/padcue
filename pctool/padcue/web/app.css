@@ -10,7 +10,7 @@
   --fs-body:12px;    /* 本文とラベル、小さめの操作(button.small・折り畳み) */
   --fs-name:13px;    /* 名前と小見出し: レーンの見出し・一覧の名前 */
   --fs-title:15px;   /* 見出し: アプリ名 */
-  --fs-glyph:15px;   /* 単独の記号(⚙ ×)。読む文字ではなく押す的なので、
+  --fs-glyph:15px;   /* 単独の記号(⚙ ×)。読む文字ではなく押す対象なので、
                         見出しと同じ値でも別に持つ */
   --fs-field:14px;   /* 打つ欄(input/select)。body から継承させる起点 */
 }
@@ -28,7 +28,7 @@
    入れ子であることは枠の形と見出しの文字が既に言っているので、平常の
    構造表示にその水準の色は要らない。細い線は
    色みが立ちにくいので下げすぎると灰に見えるが、そこは許容した——
-   ティール等へ色相を変える案も撮って比べたうえで、黄緑を残す判断
+   ティール等へ色相を変える案は採らず、黄緑を残す。
 
    **意味の色は6配色すべて同じ値**にする。系統が変えてよいのは中立・強調・
    分類だけ。6配色それぞれに意味の色を手書きすると、琥珀ライトで「注意」と
@@ -265,7 +265,7 @@ header h1 { font-size:var(--fs-title); margin:0; letter-spacing:.02em; }
    なければ同心にならず、ずれると四隅だけ広く空いて枠が歪んで見える。
    余白は常に固定しておく(リングが出るときだけ足すと、出た瞬間に行の
    高さが変わって下の行が動く。box-shadow を使う理由がそれなので、
-   padding で台無しにしない) */
+   padding で打ち消さない) */
 #cbotharms { padding:0; border-radius:7px; }
 #cbotharms.needs { box-shadow:0 0 0 3px var(--warn); }
 .lane.faulted { box-shadow:0 0 0 3px var(--err); }
@@ -386,7 +386,7 @@ main > .card { min-width:0; }
 .chip { display:inline-block; border-radius:99px; padding:1px 9px; font-size:var(--fs-sub);
   border:1px solid var(--line); color:var(--muted); }
 .chip:empty { display:none; }   /* 中身が空のときは枠だけ残さない */
-/* 保存できた合図: バッジの枠がパッと光ってスッと消える。
+/* 保存できた合図: バッジの枠が一瞬光って消える。
    「保存しました」の文を出す代わり(正常系は状態変化で伝える。文だと
    消し忘れが実状とずれる)。異常系のメッセージは文で出す */
 @keyframes chipflash {
@@ -461,7 +461,7 @@ label.f { display:flex; flex-direction:column; gap:3px; font-size:var(--fs-sub);
    他の項目と同じ2列に並べる(名前=左・値=右) */
 .kv dt.kvhead { grid-column:1 / -1; }
 .kv dt.kvsub { padding-left:14px; }
-/* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に静かに置く */
+/* 前提条件: 警告ではなく「押す前に読む案内」。実行ボタンのすぐ上に控えめに置く */
 .prenote { font-size:var(--fs-body); color:var(--ink); background:var(--accent-soft);
            border-left:3px solid var(--accent); border-radius:0 7px 7px 0;
            padding:6px 10px; margin-bottom:9px; }
@@ -718,7 +718,7 @@ table.grid td.fn { color:var(--muted); padding:2px 6px; text-align:right;
    (高さは変えないので位置は動かない)。地色を重ねる手は採らない——枠の地と
    同じ色を持ち回ることになり、配色を切り替えたときに合わなくなる。
    いちばん古い行まで戻ったときは外す(ログは異常の原因を読む場所なので、
-   先頭の1行が常に霞んでいては困る) */
+   先頭の1行が常に薄いままでは読めない) */
 .logs.scrolled { mask-image:linear-gradient(to bottom, transparent 0, #000 16px);
   -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 16px); }
 .logline .ldev { color:var(--accent); flex:none; min-width:2em; }

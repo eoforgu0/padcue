@@ -141,7 +141,7 @@ def walk(page, proj, dev, prompt):
     if state != "待機中":
         print("     → runbook の指示どおり装置パネルの行の「探す」を押す")
         row.locator("button", has_text="探す").click()
-        for _ in range(60):          # 名前を引けない環境では十数秒かかる
+        for _ in range(60):          # 名前解決できない環境では十数秒かかる
             page.wait_for_timeout(500)
             if txt(page, ".devconnmsg"):
                 break

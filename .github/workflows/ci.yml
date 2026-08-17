@@ -6,8 +6,8 @@ name: CI
 # 組まない。宣言している最小版で通れば、それ以降の版でも同じ結果になる)。
 on:
   # push は main だけ。タグは main のコミットを指すので、押すと同じ内容の
-  # 実行がもう1本増える。枝は pull_request 側が拾う(自分の repo の枝から
-  # PR を出すと push と pull_request で二重に走るのも、これで止まる)
+  # 実行がもう1本増える。ブランチは pull_request 側が拾う(自分の repo の
+  # ブランチから PR を出すと push と pull_request で二重に走るのも、これで止まる)
   push:
     branches: [main]
   pull_request:
@@ -38,8 +38,8 @@ jobs:
 
       - name: 検査
         # runner には gcc が入っている。C 実装と Python 参照実装の送出列一致は
-        # このプロジェクトの中核的な主張なので、gcc が無いときの skip に
-        # 逃げられないよう要求フラグを立てる(手元の Windows では skip 可)。
+        # このプロジェクトの中核的な主張なので、gcc が無いときに
+        # skip されないよう要求フラグを立てる(手元の Windows では skip 可)。
         env:
           PADCUE_REQUIRE_GCC: "1"
         run: python -m pytest -q
@@ -70,7 +70,7 @@ jobs:
         run: playwright install chromium
 
       # 実機に触れないよう、道具の側で探索先を模擬デバイスに固定している
-      # (tools/_localonly.py)。CI には実機がいないので二重に安全。
+      # (tools/_localonly.py)。CI には実機が無いので二重に安全。
       - name: 操作画面の検査(134 項目)
         run: python pctool/tools/uicheck.py uicheck-out
 

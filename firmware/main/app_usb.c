@@ -179,7 +179,7 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 // HOST_INFO(ペアリング引数の記録)のコア間受け渡し。
 // 書き手 = usb_task(コア1、下の set_report_cb)、読み手 = supervisor(コア0)。
 // s_procon の中身を直接読ませると、コピー中に次の 0x01 が上書きする競合が
-// 起きる(0x01 が 100ms 間隔で殺到する状況では現実に起きる)ので、
+// 起きる(0x01 が 100ms 間隔で届き続ける状況では現実に起きる)ので、
 // ここでスピンロック越しの写しに移してから渡す
 static portMUX_TYPE s_hi_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t s_hi[8];

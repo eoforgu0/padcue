@@ -30,7 +30,7 @@
             aria-haspopup="true" aria-expanded="false">⚙</button>
     <div id="setlist" class="menu setpanel" style="display:none">
       <div class="setsec">通知</div>
-      <!-- 「いつ」を行に、「どう知らせるか」を列に取る(世間の通知設定と
+      <!-- 「いつ」を行に、「どう知らせるか」を列に取る(一般的な通知設定と
            同じ形)。音と点滅は別々に選べる — 片方だけ・両方・どちらも切、が
            場面ごとに要る。中身は JS で組む -->
       <div class="ngrid" id="notifygrid"></div>
@@ -61,7 +61,7 @@
   <!-- ホーム(左ペイン: 手順の一覧と装置の台帳) -->
   <div class="stack v-home">
     <!-- 実行対象の選択はレーンの手順プルダウン(操作領域の設定行)の仕事。
-         手順の在庫管理(並べ替え・フォルダ・表示選別)は「手順を編集」の
+         手順の管理(並べ替え・フォルダ・表示選別)は「手順を編集」の
          仕事なので、ホームに手順一覧カードは置かない(原則 §1 系) -->
     <div class="card">
       <h2>装置</h2>
@@ -121,7 +121,7 @@
         <!-- プリセット未使用時はバッジ無し(保存済み/未保存の概念が無い) -->
         <span class="chip" id="cforminfo" style="display:none"></span>
         <!-- 保存は2つ。押す前に何が起きるか名前で分かるように、使用中は
-             「上書き保存」と名乗り、別名で残す道を隣に出す(原則 §5) -->
+             「上書き保存」と表示し、別名で保存するボタンを隣に出す(原則 §5) -->
         <button class="small" id="cformsave">プリセットへ保存</button>
         <button class="small" id="cformsaveas" style="display:none"
                 title="いまの割り当てを、別の名前の新しいプリセットとして保存します">

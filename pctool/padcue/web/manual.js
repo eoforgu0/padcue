@@ -78,7 +78,7 @@ function paintManual() {
   const fig = document.getElementById('padfig');
   fig.style.display = manualOn ? '' : 'none';
   // 切り替えの間は図を薄くして触れなくする。図ごと閉じると、対象を替える
-  // たびにパネルが開閉して画面が跳ねる
+  // たびにパネルが開閉して下の行がずれる
   fig.classList.toggle('busy', manualSwitching);
   document.getElementById('manualcard').classList.toggle('on', manualOn);
   // ヘッダの印はどのタブでも見える(入力はタブを移っても送られ続けるので、
@@ -117,7 +117,7 @@ async function switchManualDev(next) {
   figClear();
   paintManual();
   try {
-    // 前の装置は必ず中立(全ボタンを離した状態)にしてから手を離す。
+    // 前の装置は必ず中立(全ボタンを離した状態)にしてから終える。
     // enable:false は装置側で中立に戻る
     await api('/api/passthrough', 'POST', {enable: false, dev: prev});
     const r = await api('/api/passthrough', 'POST', {enable: true, dev: next});
@@ -206,7 +206,7 @@ setInterval(async () => {
     ptError(r.error ? '手動操作が届いていません: ' + r.error : '');
   } catch (e) {
     // fetch 自体の失敗(操作画面のサーバが落ちた等)は r.error にならない。
-    // ここで拾わないと、再び「操作中の見た目のまま黙る」に戻る
+    // ここで拾わないと、再び「届いていないのに操作中の見た目」に戻る
     ptError('手動操作が届いていません: 操作画面のサーバに繋がりません');
   } finally { ptBusy = false; }
 }, 33);   // 最速で約30Hz(応答が遅い環境では自然に間隔が伸びる)
@@ -293,7 +293,7 @@ async function refresh() {
   // api() は決して例外を投げず、失敗も {error} で返す(core.js の約束)。
   // ここを try/catch で書くと catch が一度も動かず、失敗した応答を
   // そのまま state に入れてしまう —— 以降 state.procedures が無いので
-  // 描画が途中で止まり、しかも「古い」ことは名乗らないまま画面は
+  // 描画が途中で止まり、しかも古いことを示さないまま画面は
   // 前の値を出し続ける。
   // 画面サーバに届かないときは、前の値を残したまま薄くして補間を止める
   if (!got || got.error) {

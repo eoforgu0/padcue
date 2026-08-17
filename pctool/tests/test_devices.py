@@ -191,7 +191,7 @@ def test_await_gen_is_monotonic_across_runs(tmp_path):
         c.run(r.name, proc_hash(r.blob))
         st = _wait_awaiting(c)
         assert st.get("await_gen") == 1
-        c.stop("immediate")                   # 仕切り直し
+        c.stop("immediate")                   # 実行を止めてやり直す
         time.sleep(0.05)
         c.run(r.name, proc_hash(r.blob))
         st = _wait_awaiting(c)
@@ -296,7 +296,7 @@ def test_mock_is_refused_while_real_id_is_registered(tmp_path):
     """実機のIDを記録したまま mock に繋がると、黙って操作せず止まること。
 
     練習の設定(host=127.0.0.1)が残ったまま実機セッションを始めた場合、
-    mock 上で実行が「成功」して実機は無反応、という偽成功が最悪の事故。
+    mock 上で実行が「成功」して実機は無反応、という偽成功が起きる。
     照合で確実に止め、練習への正しい切替(ID記録の解除)を案内する。
     """
     with MockDevice() as d:                  # 既定 id = mock00000000

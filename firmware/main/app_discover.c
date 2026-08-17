@@ -79,7 +79,7 @@ static void discover_task(void *arg) {
             if (n <= 0) break;
             buf[n] = '\0';
             if (strncmp(buf, APP_DISCOVER_PROBE, strlen(APP_DISCOVER_PROBE)) != 0) {
-                continue;   // 自分宛の問い合わせでなければ黙る
+                continue;   // 自分宛の問い合わせでなければ応答しない
             }
             int len = snprintf(reply, sizeof(reply),
                 "{\"magic\":\"%s\",\"id\":\"%s\",\"fw\":\"%s\",\"port\":%d}",

@@ -153,11 +153,11 @@ def _node_to_stmt(node, file: str, path: str, project: _Project) -> Stmt:
     if t == "counter_branch":
         arms = node.get("arms")
         if not isinstance(arms, list) or len(arms) < 2:
-            raise _err(file, path, "arms は2つ以上の腕(ノード配列)の配列です")
+            raise _err(file, path, "arms は2つ以上の選択肢(ノード配列)の配列です")
         parsed = []
         for i, arm in enumerate(arms):
             if not isinstance(arm, list):
-                raise _err(file, f"{path}.arms[{i}]", "腕はノードの配列です")
+                raise _err(file, f"{path}.arms[{i}]", "選択肢はノードの配列です")
             parsed.append([
                 _node_to_stmt(ch, file, f"{path}.arms[{i}][{j}]", project)
                 for j, ch in enumerate(arm) if not _is_off(ch)
@@ -167,11 +167,11 @@ def _node_to_stmt(node, file: str, path: str, project: _Project) -> Stmt:
         arms = node.get("arms")
         if not isinstance(arms, dict) or not arms:
             raise _err(file, path,
-                       'arms は {"腕の名前": [ノード…]} のオブジェクトです')
+                       'arms は {"選択肢の名前": [ノード…]} のオブジェクトです')
         names, bodies = [], []
         for label, arm in arms.items():
             if not isinstance(arm, list):
-                raise _err(file, f"{path}.arms[{label}]", "腕はノードの配列です")
+                raise _err(file, f"{path}.arms[{label}]", "選択肢はノードの配列です")
             names.append(str(label))
             bodies.append([
                 _node_to_stmt(ch, file, f"{path}.arms[{label}][{j}]", project)

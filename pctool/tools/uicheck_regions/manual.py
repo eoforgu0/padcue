@@ -1,4 +1,4 @@
-"""手動操作と待機分岐(人が枝を選ぶ)。"""
+"""手動操作と待機分岐(人が選択肢を選ぶ)。"""
 from __future__ import annotations
 
 from padcue.mockdevice import MockDevice
@@ -93,7 +93,7 @@ def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
         """手動操作中でも実行は押せる(押したら手動操作は自動で終わる)。"""
         page.wait_for_timeout(1400)
         assert not lane(page).locator("button", has_text="1回実行").is_disabled(), \
-            "手動操作中に実行が押せない(自動で終わらせる方針にしたはず)"
+            "手動操作中に実行が押せない(押せば手動操作は自動で終わる)"
     c.check("手動操作中でも実行は押せる(自動で終わる)", t_manual_then_run_is_allowed)
 
     def t_record():
@@ -127,7 +127,7 @@ def run_manual_and_branch(c: Checker, page, proj: Project, dev: MockDevice,
         assert "記録テスト" in proj.part_names(), \
             f"{proj.part_names()} / {text(page, '#manualmsg')}"
         assert "として保存しました" in text(page, "#manualmsg"), \
-            f"保存の完了が視線の先(手動操作カード)に出ない: "\
+            f"保存の完了が操作した場所(手動操作カード)に出ない: "\
             f"{text(page, '#manualmsg')!r}"
         tbl = proj.load_part_table("記録テスト")
         assert "A" in tbl["header"], f"A の列が無い: {tbl['header']}"

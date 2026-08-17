@@ -280,7 +280,7 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(supervisor_task, "supervisor", 3072, NULL, 4, NULL, 0);
     if (diag) {
-        // 生きていること・WiFi の状態を目に見える形で出し続ける
+        // 動作が続いていること・WiFi の状態を目に見える形で出し続ける
         for (int i = 0; ; i++) {
             ESP_LOGI(TAG, "診断 %d 秒: WiFi=%s 状態=%d 空きヒープ=%u",
                      i * 2, app_wifi_is_connected() ? "接続" : "切断",

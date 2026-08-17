@@ -197,7 +197,7 @@ def test_meaning_colors_are_shared(theme):
 
 @pytest.mark.parametrize("theme", sorted(THEMES))
 def test_meaning_colors_differ_from_accent(theme):
-    """意味の色と強調色が、並べて判別できること(琥珀での色ぶつかりを止める)。"""
+    """意味の色と強調色が、並べて判別できること(琥珀での色差の接近を止める)。"""
     v = THEMES[theme]
     for k in ("err", "warn", "ok"):
         d = _delta_e(v[k], v["accent"])

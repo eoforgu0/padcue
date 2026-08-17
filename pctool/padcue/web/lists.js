@@ -262,7 +262,7 @@ function renderLogs(entries) {
     line.append(el('span', 'lt', r.time));
     // どの装置の記録かは2台以上のときだけ意味を持つ。保存キーは id なので
     // 改名しても過去の行が正しい名前で出る。台帳から外した装置の行は
-    // ID の下4桁で残す(誰の記録か消さない)
+    // ID の下4桁で残す(どの装置の記録か消さない)
     if (multi) line.append(el('span', 'ldev',
       e.dev ? (names[e.dev] || e.dev.slice(-4).toUpperCase()) : '—'));
     line.append(el('span', 'lm', r.text));

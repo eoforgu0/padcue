@@ -33,7 +33,7 @@ function buildLane(d) {
   lane.msg = el('div', 'lmsg');
   card.append(lane.msg);
   // 実行(設定は上、行動は下。原則 §2)。小見出し「実行」は置かない——
-  // レーン=実行の場所であることは形で分かるので、見出しは面積を食うだけ
+  // レーン=実行の場所であることは形で分かるので、見出しは高さを取るだけ
   lane.prenote = el('div', 'prenote');
   lane.prenote.style.display = 'none';
   card.append(lane.prenote);
@@ -108,7 +108,7 @@ function wireLane(lane) {
   };
   lane.run1.onclick = () => laneRun(lane, 1);
   lane.run.onclick = () => {
-    // 空欄や変な値は 0(止めるまで)。|| だと 0 が 1 に化けるので不可
+    // 空欄や不正な値は 0(止めるまで)。|| だと 0 が 1 になるので不可
     const v = parseInt(lane.loops.value, 10);
     laneRun(lane, Number.isFinite(v) && v >= 0 ? v : 0);
   };
@@ -382,7 +382,7 @@ function updateLane(lane, d) {
   } else {
     lane.badge.style.display = 'none';
   }
-  // 前提条件は「押す前に読むもの」なので、走り出したら沈める(原則 §2)
+  // 前提条件は「押す前に読むもの」なので、走り出したら薄くする(原則 §2)
   lane.prenote.classList.toggle('dim', running || awaiting);
   // 開始・終了予定は、連結して開始した組では上部バーが組全体で出す
   etaLine(lane.eta, (!inRun && (running || awaiting)) ? d.run_started_at : 0,
@@ -568,7 +568,7 @@ let cplJoinSeen = 0;         // ズレの大きい合流を知らせた時刻(at
 
 // この ms を超えた合流のズレだけ知らせる。ふだんは数十ms、WiFi 次第で
 // 百ms強(specs/coupling.md §1)なので、その倍を超えたら想定外。
-// 通常のズレをいちいち出すと、読み切れないうちに消える文が毎回増える
+// 通常のズレをすべて出すと、読み切れないうちに消える文が毎回増える
 const JOIN_SKEW_WARN_MS = 300;
 
 function cpl() { return state.coupling || null; }
@@ -872,7 +872,7 @@ async function saveFormation(asNew) {
                   asNew ? loadedFormation : '');
     if (!name) return;
   }
-  // 気づかずに別のプリセットを潰さないための確認。「上書き保存」は
+  // 気づかずに別のプリセットを上書きしないための確認。「上書き保存」は
   // ボタン名のとおりなので聞かない
   const exists = (state.formations || []).some(f => f.name === name);
   if (exists && (asNew || name !== loadedFormation)
@@ -1091,7 +1091,7 @@ function renderCoupling() {
       refresh();
     };
     row.append(rs);
-    // 片方だけ続ける(残った正常な側をソロで)。手順は止まった連結実行の
+    // 片方だけ続ける(残った正常な側を単独で)。手順は止まった連結実行の
     // 計画のもの(いまのレーンの選択に差し替えられていても、再開の意図は
     // 「同じ手順の続き」)
     for (const d of devs.slice(0, 2)) {
@@ -1099,7 +1099,7 @@ function renderCoupling() {
       if (d.error || d.name === ls.cause || rem <= 0) continue;
       const planp = (run.plan || []).find(p => p.dev === d.name) || {};
       const b = el('button', 'small', `${d.name} だけ続ける(残り${rem} 周)`);
-      b.title = `「${planp.name || '?'}」の残り周回を、この装置だけソロで実行します`;
+      b.title = `「${planp.name || '?'}」の残り周回を、この装置だけ単独で実行します`;
       b.onclick = async () => {
         const r = await api('/api/run', 'POST',
                             {name: planp.name || '',
@@ -1136,7 +1136,7 @@ function renderCoupling() {
   // 実測の開始ズレだけ(原則 §5)。「前回の」は付けない——実行中はいま走って
   // いる組のズレなので、いつの値かを語ると却って迷う。ホットキーの凡例も
   // 置かない——入切を決める ⚙ に書いてあり、使う人はそこで読む
-  // (値の位置に別の話が地続きで並ぶ形そのものが読みにくい)
+  // (値の位置に別の話が区切りなく並ぶ形そのものが読みにくい)
   const bits = [];
   if (run.skew_ms != null) {
     const who = (run.members || []).length

@@ -5,7 +5,7 @@
  - 人が「今すぐ止める」を押した停止では知らせない(本人が見ている)。
    「今の周で止める」(予約)は待つことになるので知らせる
  - 連結中は両方が終わっても知らせは1回(連結=1つの仕事)
- - 操作待ちは「自動では解けない選択待ち」だけ。自動合流中の相手待ちは黙る
+ - 操作待ちは「自動では解けない選択待ち」だけ。自動合流中の相手待ちは知らせない
  - 画面を開いた瞬間に、すでに終わっている実行の知らせを鳴らさない
 """
 import json
@@ -128,7 +128,7 @@ def test_awaiting_counts_as_running():
 # ---- 操作待ち ----
 
 def test_notifies_when_waiting_for_a_choice():
-    """人が腕を選ぶまで進まない選択待ちは知らせること。"""
+    """人が選択肢を選ぶまで進まない選択待ちは知らせること。"""
     link = FakeLink("1P", running=True, state="RUNNING")
     w = watcher(FakePool(link))
     w.tick()
@@ -287,7 +287,7 @@ def test_stream_skips_events_from_before_connect(server):
 def test_watcher_survives_errors_and_records_why(capsys):
     """tick が例外を投げ続けても、ループは回り続けて理由が残ること。
 
-    監視を死なせない方針は正しいが、黙って捨てると「終了の知らせが
+    監視を止めない方針は正しいが、黙って捨てると「終了の知らせが
     来ない」としか見えない。24時間の放置運転では、それが原因究明の
     唯一の手がかりを奪う。同じ理由で端末が埋まらないよう、出すのは
     理由が変わったときだけ。
@@ -302,7 +302,7 @@ def test_watcher_survives_errors_and_records_why(capsys):
     try:
         time.sleep(RunWatcher.POLL_S * 3)
         assert w._tick_error == "RuntimeError: わざと壊す"
-        assert w._thread.is_alive(), "監視が死んでいる"
+        assert w._thread.is_alive(), "監視が止まっている"
         # 出るのは1回だけ(毎周期は出さない)
         err = capsys.readouterr().err
         assert err.count("Traceback (most recent call last)") == 1, err

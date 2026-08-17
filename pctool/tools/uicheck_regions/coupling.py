@@ -92,7 +92,7 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "連結中" not in bar, \
             "バーは連結中にしか存在しない純粋な重複チップが残っている"
         assert "もう一回" not in bar, \
-            "置かないと決めた「もう一回(同じ条件)」ボタンが出ている"
+            "置かないはずの「もう一回(同じ条件)」ボタンが出ている"
         assert page.locator("#formcard").is_visible(), "プリセットカードが出ない"
         # #chint は実測(開始ズレ)だけ。ホットキーの凡例は入切を決める ⚙ にある
         # ——値の位置に別の話が地続きで並ぶ形にはしない
@@ -100,7 +100,7 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "F9" not in hint and "F10" not in hint, \
             f"ホットキーの凡例が #chint に残っている: {hint}"
         assert "µs" not in hint and "連動停止が効くのは" not in hint, \
-            f"出さないと決めた教育文が #chint に出ている: {hint}"
+            f"出さないはずの説明文が #chint に出ている: {hint}"
         page.click("#setbtn")
         page.wait_for_timeout(200)
         legend = page.locator(".sethint").first.inner_text()
@@ -209,7 +209,7 @@ def run_coupling(c: Checker, page, proj: Project,
             "  return ch && ch.textContent === '相手待ち'; }",
             timeout=10000)
         assert lane_at(page, 0).locator(".lawait .msg.wait").count() == 0, \
-            "出さないと決めた毎秒の相手待ち文が出ている"
+            "出さないはずの毎秒の相手待ち文が出ている"
         assert lane_at(page, 0).locator(".lawait .msg.warn").count() == 0, \
             "正常な相手待ちに黄色が使われている"
         # 畳んだ単独操作(合流の対応がずれる警告つき)がある
@@ -258,7 +258,7 @@ def run_coupling(c: Checker, page, proj: Project,
         assert "needs" in cls_both, "選択肢のまわりが光っていない"
         # リングは押す物に密着させる(余白 0)。丸みが「ボタンの丸み + 余白」
         # でないと同心にならず、直線部より角が広く空いて枠が歪んで見える。
-        # 余白を変えるなら丸みも一緒に動かすこと、を機械で縛る
+        # 余白を変えるなら丸みも一緒に動かすことを、この検査で強制する
         geo = page.evaluate(
             "() => {"
             "  const w = document.getElementById('cbotharms');"
@@ -422,7 +422,7 @@ def run_formations(c: Checker, page, prompt_value: list, proj: Project):
     """
     def t_formation_roundtrip():
         # 保存の決まりは上部バーに一本化(原則 §4)。未使用時は #cformsave が
-        # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に化ける
+        # 「新規保存(名前を聞く)」、使用中は同名の「上書き保存」に変わる
         assert page.locator("#cformsaveas").is_hidden(), \
             "上書きする相手がいないのに「別名で保存」が出ている"
         prompt_value[0] = "いつもの"

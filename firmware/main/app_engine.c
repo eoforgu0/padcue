@@ -586,7 +586,7 @@ void app_engine_poll_await_timeout(void) {
         app_engine_stop(false);   // supervisor が RUN_ABORT として記録する
     } else {
         // 指定の腕へ自動で進む(通常の SELECT と同じ経路 = 精度も同じ)。
-        // 占有権は app_engine_select 自身が取る。負けたら何もしない
+        // 占有権は app_engine_select 自身が取る。取れなければ何もしない
         if (app_engine_select((uint8_t)(on_to - 1)) == ESP_OK) {
             app_log_put(APP_LOG_RING_CORE0, APP_LOG_AWAIT_TIMEOUT,
                         waited_frames, on_to);
@@ -608,7 +608,7 @@ void app_engine_get_progress(app_engine_progress_t *out) {
     // **停止後も読む**: 停止はタイマーを止めるだけでカウンタは凍結される
     // (次の実行開始で 0 に戻る)ので、凍結値がそのまま「中断した時点」になる。
     // 実行中しか読まないと、停止のあと終了ログの順で必ず読み飛ばしし、
-    // 中断ログが「最後の状態変化のフレーム」に化ける
+    // 中断ログの値が「最後の状態変化のフレーム」に置き換わる
     uint64_t fe = atomic_load(&s_frames_elapsed);
     uint64_t now_us = 0;
     if (gptimer_get_raw_count(s_timer, &now_us) == ESP_OK

@@ -98,7 +98,7 @@ function visibleCols() {
 function renderPart() {
   // 再構築でドラッグ中の要素が DOM ごと消えると pointercancel は来ない
   // (Pointer Events の仕様)。先に安全に畳まないと fillDrag が残留し、
-  // 後の何気ないクリックで古いドラッグが確定されてデータが書き換わる
+  // 後の無関係なクリックで古いドラッグが確定されてデータが書き換わる
   if (fillDrag) fillEnd(false);
   const t = document.getElementById('parttable');
   t.textContent = '';
@@ -183,7 +183,7 @@ function renderPart() {
           if (e.key === 'Enter') {
             // ボタンセルでも Enter は「移動」。切り替えは Space(ボタンの標準)。
             // そのまま通すにするとブラウザ既定で click が発火し、数値セルで身につく
-            // 「Enter=下へ」の手癖が、ここでは黙って値を反転させてしまう
+            // 「Enter=下へ」の操作の癖が、ここでは黙って値を反転させてしまう
             if (e.isComposing) return;
             e.preventDefault();
             if (e.shiftKey) {
@@ -230,7 +230,7 @@ function renderPart() {
         //   Esc=グリッドから抜ける(Tab が中で折り返すため、唯一の出口)
         // ↑↓(値の±1)と ←→(桁のカーソル移動)は数値入力の標準のまま触らない。
         // 矢印をセル移動に使うと、↑↓は標準慣習に反し、←→は桁編集を壊した上で
-        // 「縦は矢印・横は別手段」という質の悪い非対称になる
+        // 「縦は矢印・横は別手段」という非対称になる
         i.onkeydown = (e) => {
           // Ctrl+D: すぐ上の値を取り込んで1つ下へ(表計算の下方向コピー)
           if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {

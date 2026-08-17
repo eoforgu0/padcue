@@ -55,7 +55,7 @@ def web_asset(name: str) -> str:
     """画面の資産(index.html / app.css / 各 JS)を読む。
 
     検査もここを通す。資産が Python の文字列の中にあると、検査は正規表現で
-    こそぎ取ることになり、書式を少し変えるだけで黙って空振りする。
+    取り出すことになり、書式を少し変えるだけで、失敗せずに何も検査しなくなる。
     """
     if name not in {v[0] for v in _STATIC.values()}:
         raise ValueError(f"画面の資産ではありません: {name}")
@@ -158,7 +158,7 @@ class _Handler(BaseHTTPRequestHandler):
     @classmethod
     def _pool(cls):
         # プロジェクトが差し替わっていたら作り直す(プールはクラス属性なので、
-        # テストや再起動で project だけ入れ替えると古い装置を掴んだままになる)
+        # テストや再起動で project だけ入れ替えると古い装置に接続したままになる)
         if cls.pool is not None and cls.pool.project is not cls.project:
             cls.pool.close()
             cls.pool = None
@@ -222,7 +222,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # ---- 入口のアクセス制御 ----
     # 127.0.0.1 で待つだけでは足りない。利用者が別のタブで開いた任意の
-    # Web ページから fetch を投げられ、応答は同一生成元規則で読めなくても
+    # Web ページから fetch を呼ばれ、応答は同一生成元規則で読めなくても
     # **副作用は起きる**(実機が動き出す)。Host と Origin で弾く。
 
     def _local_host(self) -> bool:
@@ -264,7 +264,7 @@ class _Handler(BaseHTTPRequestHandler):
         # POST と同じく、想定外の例外をここで受ける。受けないと
         # http.server が応答を返さずに接続を切り、画面には「操作画面に
         # つながりません」としか出ない(/api/state は毎秒なので画面が
-        # 丸ごと死ぬ)。設定ファイルが壊れているだけでもここに来る
+        # 丸ごと使えなくなる)。設定ファイルが壊れているだけでもここに来る
         try:
             return self._get()
         except Exception as e:       # noqa: BLE001
@@ -420,14 +420,14 @@ class _Handler(BaseHTTPRequestHandler):
             # 相手が名乗る ID を問わず接続確認して採用する(黙って別個体へ
             # 乗り換えない)
             want_id = dev0.get("id", "")
-            # ID学習済みなら本人(完全一致)のみ。未学習なら実機のみを
+            # ID学習済みならその個体(完全一致)のみ。未学習なら実機のみを
             # 対象にし、実機を差し置いて mock を採用しない(127.0.0.1 は
             # IP 順で先頭に来がち)。mock への切替は明示操作
             # (padcue-練習.bat / device 127.0.0.1)だけで行う
             # 他のレーンが記録している個体は、ID 未学習でも採用しない。
             # 1P が落ちている状態で 1P の「探す」を押すと、応答するのは 2P
             # だけになる。ここを見ないと 1P の接続先が 2P のアドレスに書き換わり、
-            # 両方のレーンが同じ実機を掴む(片方の操作がもう片方に出る)。
+            # 両方のレーンが同じ実機に繋がる(片方の操作がもう片方に出る)。
             # 追加登録(/api/device_scan)と CLI も同じ形でここを防ぐ
             others = {d.get("id") for i, d in enumerate(devs_all)
                       if i != didx and d.get("id")}
@@ -571,7 +571,7 @@ class _Handler(BaseHTTPRequestHandler):
             listing, status = link.call(_run)
             link.write_through(status=status, listing=listing)
             return {"ok": True}
-        # 停止・異常解除・腕の選択は、繰り返しても結果が変わらない(冪等)ので、
+        # 停止・異常解除・選択肢の選択は、繰り返しても結果が変わらない(冪等)ので、
         # 接続が切れていたら繋ぎ直してやり直す。転送・実行は二重に効きうるので
         # やり直さない(下の with のまま)
         if path == "/api/stop":

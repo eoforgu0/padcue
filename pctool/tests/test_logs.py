@@ -60,7 +60,7 @@ def test_abort_frame_reflects_when_stopped(dev):
     """
     c = _client(dev)
     h, total = _push(c, "長い手順", "press A 2\nwait 6000")
-    c.logs()                                   # 起動ログを流す
+    c.logs()                                   # 起動ログを読み捨てる
     rng = random.Random(4649)
     seen = []
     for _ in range(5):

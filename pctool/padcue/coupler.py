@@ -46,7 +46,7 @@ class Coupler:
         self._parked_since: dict[str, float] = {}  # 装置名 -> 選択待ちを見つけた時刻
         self._parked_gen: dict[str, int] = {}      # 装置名 -> その選択待ちの世代
         self._late_warned: dict[str, int] = {}     # 装置名 -> 警告済みの選択待ち世代
-        # 片側送信に終わった SELECT の再送待ち: 装置名 -> (世代, 腕)。
+        # 片側送信に終わった SELECT の再送待ち: 装置名 -> (世代, 選択肢)。
         # 放置すると到達順の対応が1周ずれる
         self._select_retry: dict[str, tuple] = {}
         self._idle_since: float | None = None     # 全員停止を最初に見た時刻
@@ -265,7 +265,7 @@ class Coupler:
         return {"ok": True, "skew_ms": skew_ms, "warnings": warnings}
 
     def _rollback_started(self, names: list) -> None:
-        """開始が揃わなかったときの巻き取り(今の周で止める)。"""
+        """開始が揃わなかったときの後始末(今の周で止める)。"""
         for name in names:
             try:
                 l2 = self._link(name)
@@ -397,8 +397,8 @@ class Coupler:
             try:
                 self._watch_once()
                 self._watch_error = ""
-            except Exception as e:   # noqa: BLE001  監視は死なせない
-                # 死なせないのはよいが、黙って捨てると計測値が静かに壊れる。
+            except Exception as e:   # noqa: BLE001  監視は止めない
+                # 止めないのはよいが、記録せずに捨てると計測値が誤ったまま残る。
                 # 連動停止も自動合流もこの監視が担っているので、毎周期
                 # 落ち続けていても、利用者からは「連動が効かなくなった」と
                 # しか見えず、原因を追う手がかりが残らない。
@@ -411,7 +411,7 @@ class Coupler:
                     # その呼び出し自身(設定ファイルが壊れている等)だと、
                     # この except の中でもう一度落ちる。except の中から
                     # 送出された例外は同じ try では捕まらないので、
-                    # **監視ごと死ぬ**(連動停止も自動合流も黙って
+                    # **監視スレッドごと終わる**(連動停止も自動合流も黙って
                     # 止まり、GUI を再起動するまで戻らない)。
                     # 記録できるときだけ記録する
                     try:
@@ -568,7 +568,7 @@ class Coupler:
             if not busy[oname]:
                 if oname in run["manual"]:
                     # 人為的に相手を止めた → ソロで自動進行(coupling.md §1)。
-                    # ワンショットは「合流の腕を人が選ぶ」ための保留で、
+                    # ワンショットは「合流の選択肢を人が選ぶ」ための保留で、
                     # 相手のいないソロ進行には合流が無い。保留すると解除
                     # 経路(両方へ同時に選ぶ)も無く恒久停止になるため、
                     # ソロでは無視して進める
@@ -576,7 +576,7 @@ class Coupler:
                         self._auto_select([link], run, cfgc["arm"], solo=True)
                 else:
                     # 相手は完走した(異常ではない)のに、こちらは合流を
-                    # 待っている。待っても誰も来ないので止めて知らせる
+                    # 待っている。相手はもう来ないので止めて知らせる
                     self._linked_stop(
                         run, links, oname,
                         "相手は完走し、もう合流の相手が来ません", only=name)

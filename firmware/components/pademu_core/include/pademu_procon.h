@@ -18,7 +18,7 @@ extern "C" {
 #define PADEMU_PROCON_REPORT_SIZE 64
 
 // ハンドシェイク・初期化の到達段階。つながらないときに「どこまで進んで
-// 止まったか」を外から読むための足跡
+// 止まったか」を外から読むための記録
 typedef enum {
     PADEMU_BC_HS_STATUS   = 1u << 0,  // 0x80 0x01 受信
     PADEMU_BC_HS_SHAKE    = 1u << 1,  // 0x80 0x02 受信
