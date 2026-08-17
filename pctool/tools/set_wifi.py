@@ -2,7 +2,7 @@
 
 なぜ要るか: WiFi の SSID/パスワードは ESP-IDF のビルド設定 `sdkconfig` の中に
 あるが、このファイルは作り直されると中身が消える。消えると
-マイコンがネットワークから見えなくなった。
+マイコンがネットワークから見えなくなる。
 
 そこで、消えない場所(`firmware/sdkconfig.defaults.local`)に置く。
 このファイルは git に入らず(.gitignore 済み)、sdkconfig を作り直しても
