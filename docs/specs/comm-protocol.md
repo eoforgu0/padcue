@@ -85,8 +85,8 @@ docs/specs/coupling.md D2)。
 要: BOOT → WIFI_CONNECTING → IDLE ⇄ RUNNING(⇄ AWAITING)/ ERROR(ラッチ、
 CLEAR_ERROR で解除)/ OTA
 
-- プレイヤー番号(Switch からのサブコマンド 0x30)受信時は LED に反映(1P/2P 以降の
-  判別)
+- **LED は状態だけで決まる。**プレイヤー番号(Switch からのサブコマンド 0x30)は
+  受信を記録するのみで表示には使わない(LED は1個で、状態の表示に使い切っている)
 - USB 切断・サスペンドを RUNNING 中に検出した場合: 中断+全ニュートラル+位置(周回・
   index)記録 → ERROR
 

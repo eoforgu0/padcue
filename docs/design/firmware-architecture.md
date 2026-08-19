@@ -76,7 +76,7 @@ typedef struct {
 
 // プロコン方式が本体から受け取る通知。pademu_procon.h
 typedef struct {
-    void (*on_player_lights)(void *ctx, uint8_t bitmap);   // 1P/2P 表示(LED へ)
+    void (*on_player_lights)(void *ctx, uint8_t bitmap);   // 1P/2P。ログのみ
     void (*on_rumble)(void *ctx, const uint8_t raw[8]);    // 記録のみ
     void *ctx;
 } pademu_procon_cb_t;
