@@ -1,7 +1,8 @@
-"""装置台帳の検証: 設定移行・個体ID照合・乗り換え禁止・横取り。
+"""装置台帳の検証: 台帳の読み書き・個体ID照合・乗り換え禁止・横取り。
 
 守りたい不変条件:
- - 旧設定(host/port 単一)は自動で devices へ移行し、元ファイルの記録が残る
+ - 読むだけでは台帳を作らない(既定の1台はフォールバック値)
+ - 接続先は台帳の1箇所にしか無い(同じ事実が2箇所にあると必ずずれる)
  - 接続は登録した個体ID(MAC)と照合され、別個体は絶対に操作されない
  - 接続不調時の探索は「同じ個体」への追跡のみ(黙って別の1台へ乗り換えない)
  - mock は実機と同じ「後着優先の横取り」をする(2台化の故障モードを再現できる)
@@ -15,42 +16,62 @@ from padcue.client import DeviceClient, DeviceError, connect_verified, proc_hash
 from padcue.mockdevice import MockDevice
 from padcue.project import Project
 
-# ---- 設定の移行 ----
+# ---- 装置台帳(padcue.json)----
 
 
-def test_old_config_migrates_to_devices(tmp_path):
+def test_reading_does_not_create_the_ledger(tmp_path):
+    """読むだけでは台帳を作らないこと。
+
+    読むだけで状態が生まれると、間違ったフォルダで1コマンド叩いただけで
+    そこに台帳ができ、以後そちらが使われる(登録済みの実機ではなく LAN 全体の
+    探索に落ちる)。既定の1台はフォールバック値であって保存された状態ではない。
+    """
     p = Project(tmp_path)
-    p.config_path.write_text(json.dumps({"host": "10.0.0.9", "port": 5556}),
-                             encoding="utf-8")
     cfg = p.load_config()
     assert cfg["devices"] == [{"id": "", "name": "1P",
-                               "host": "10.0.0.9", "port": 5556}]
-    # 旧キーは1台目の写しとして残る(移行期間中の旧ツールが読める)
-    assert cfg["host"] == "10.0.0.9" and cfg["port"] == 5556
-    # 元ファイルの記録が残る(事故時に手で戻せる)
-    assert (tmp_path / "padcue.json.bak").is_file()
+                               "host": "pademu.local", "port": 5555}]
+    assert not p.config_path.exists(), "読んだだけで台帳ができた"
 
 
-def test_legacy_host_write_updates_first_device(tmp_path):
-    """既存ツールの「cfg['host'] を書いて保存」が1台目の変更として効くこと。"""
+def test_saving_in_a_fresh_folder_keeps_what_was_set(tmp_path):
+    """新しい場所で登録しても、指定した接続先が保たれること。"""
     p = Project(tmp_path)
     cfg = p.load_config()
-    cfg["host"], cfg["port"] = "192.168.1.50", 6000
+    cfg["devices"] = [{"id": "a1", "name": "1P", "host": "127.0.0.1",
+                       "port": 61234}]
     p.save_config(cfg)
-    cfg = p.load_config()
-    assert cfg["devices"][0]["host"] == "192.168.1.50"
-    assert cfg["devices"][0]["port"] == 6000
+    got = Project(tmp_path).load_config()["devices"][0]
+    assert (got["host"], got["port"]) == ("127.0.0.1", 61234)
 
 
-def test_update_device_mirrors_legacy_keys(tmp_path):
-    """新コード用の update_device が旧キーも揃えること(巻き戻り防止)。"""
+def test_the_address_is_stored_in_exactly_one_place(tmp_path):
+    """接続先が台帳の2箇所に書かれないこと。
+
+    同じ事実が2箇所にあると必ずずれる。かつて1台目の接続先を
+    トップレベルの host/port にも写しており、その同期のためのコードが
+    「比較対象が無いと既定値を利用者の変更と誤認する」不具合を持っていた。
+    """
     p = Project(tmp_path)
     cfg = p.load_config()
-    p.update_device(cfg, 0, host="172.16.0.2", id="aabbccddeeff")
+    cfg["devices"][0].update(host="10.0.0.9", port=5556)
+    p.save_config(cfg)
+    raw = json.loads(p.config_path.read_text(encoding="utf-8"))
+    outer = {k: raw[k] for k in ("host", "port") if k in raw}
+    assert not outer, f"接続先が台帳の外側にも書かれている: {outer}"
+    assert raw["devices"][0]["host"] == "10.0.0.9"
+
+
+def test_update_device_writes_only_the_target(tmp_path):
+    """update_device が対象の装置だけを変えること。"""
+    p = Project(tmp_path)
     cfg = p.load_config()
-    assert cfg["devices"][0]["host"] == "172.16.0.2"
-    assert cfg["devices"][0]["id"] == "aabbccddeeff"
-    assert cfg["host"] == "172.16.0.2"
+    cfg["devices"] = [{"id": "a1", "name": "1P", "host": "10.0.0.1", "port": 5555},
+                      {"id": "b2", "name": "2P", "host": "10.0.0.2", "port": 5555}]
+    p.save_config(cfg)
+    p.update_device(cfg, 1, host="172.16.0.2", id="b2")
+    devs = Project(tmp_path).load_config()["devices"]
+    assert devs[0]["host"] == "10.0.0.1", "触っていない装置が変わった"
+    assert devs[1]["host"] == "172.16.0.2"
 
 
 # ---- 個体ID照合 ----
@@ -214,15 +235,15 @@ def test_cli_device_add_list_rename(tmp_path, capsys):
     with MockDevice(device_id="cccc00000003") as d:
         p = Project(tmp_path)
         cfg = p.load_config()
-        cfg["port"] = d.port
+        cfg["devices"][0]["port"] = d.port
         p.save_config(cfg)
-        assert _cli(tmp_path, "device", "add", "127.0.0.1", "2号機") == 0
+        assert _cli(tmp_path, "device", "add", f"127.0.0.1:{d.port}", "2号機") == 0
         out = capsys.readouterr().out
         assert "cccc00000003" in out
         # ここで既に2台(既定の1台目+2号機)。3台目は個体の異同を見るまでも
         # なく上限で断られる(2台までの制限。test_add_device_rejects_third
         # が2台超過そのものの検証、こちらは既存の CLI 経路の確認)
-        assert _cli(tmp_path, "device", "add", "127.0.0.1", "3号機") == 1
+        assert _cli(tmp_path, "device", "add", f"127.0.0.1:{d.port}", "3号機") == 1
         assert "2台まで" in capsys.readouterr().out
         assert _cli(tmp_path, "device", "list") == 0
         out = capsys.readouterr().out
@@ -264,9 +285,9 @@ def test_cli_device_flag_selects_registered_device(tmp_path, capsys):
     with MockDevice(device_id="cccc00000003") as d:
         p = Project(tmp_path)
         cfg = p.load_config()
-        cfg["port"] = d.port
+        cfg["devices"][0]["port"] = d.port
         p.save_config(cfg)
-        assert _cli(tmp_path, "device", "add", "127.0.0.1", "2P") == 0
+        assert _cli(tmp_path, "device", "add", f"127.0.0.1:{d.port}", "2P") == 0
         capsys.readouterr()
         assert _cli(tmp_path, "--device", "2P", "status") == 0
         assert "転送方式" in capsys.readouterr().out
@@ -338,9 +359,9 @@ def test_cli_device_forget_and_remove(tmp_path, capsys):
     with MockDevice(device_id="cccc00000003") as d:
         p = Project(tmp_path)
         cfg = p.load_config()
-        cfg["port"] = d.port
+        cfg["devices"][0]["port"] = d.port
         p.save_config(cfg)
-        assert _cli(tmp_path, "device", "add", "127.0.0.1", "2P") == 0
+        assert _cli(tmp_path, "device", "add", f"127.0.0.1:{d.port}", "2P") == 0
         capsys.readouterr()
         assert _cli(tmp_path, "device", "forget", "2P") == 0
         assert "解除" in capsys.readouterr().out
@@ -354,9 +375,9 @@ def test_cli_device_rename_rejects_duplicates(tmp_path, capsys):
     with MockDevice(device_id="cccc00000003") as d:
         p = Project(tmp_path)
         cfg = p.load_config()
-        cfg["port"] = d.port
+        cfg["devices"][0]["port"] = d.port
         p.save_config(cfg)
-        assert _cli(tmp_path, "device", "add", "127.0.0.1", "2P") == 0
+        assert _cli(tmp_path, "device", "add", f"127.0.0.1:{d.port}", "2P") == 0
         capsys.readouterr()
         assert _cli(tmp_path, "device", "rename", "2P", "1P") == 1
         assert "使用済み" in capsys.readouterr().out
@@ -382,3 +403,62 @@ def test_update_device_does_not_clobber_other_writers(tmp_path):
     assert cfg["devices"][0]["host"] == "10.0.0.99"     # 変更は効く
     assert any(d["name"] == "2P" for d in cfg["devices"]), \
         "他プロセスの登録が消えた"
+
+
+def test_project_is_found_by_walking_up(tmp_path, monkeypatch):
+    """台帳を上へ探すこと。
+
+    これが無いと「いまいるフォルダ」がプロジェクトになるので、
+    `cd firmware` してから装置を操作すると別のプロジェクトを指す。そこには
+    台帳が無いので既定値で動き、登録済みの実機ではなく LAN 全体の探索に落ちる。
+    """
+    from padcue.project import find_project_root
+    root = tmp_path / "repo"
+    (root / "firmware" / "build").mkdir(parents=True)
+    Project(root).save_config({"devices": [{"id": "a1", "name": "1P",
+                                            "host": "10.0.0.1", "port": 5555}]})
+    for start in (root, root / "firmware", root / "firmware" / "build"):
+        assert find_project_root(start) == root, f"{start} から辿れない"
+
+
+def test_walking_up_stops_where_there_is_no_ledger(tmp_path):
+    """どこにも台帳が無ければ、出発点をそのまま使うこと(init 前の1回目)。"""
+    from padcue.project import find_project_root
+    here = tmp_path / "どこでもない"
+    here.mkdir()
+    assert find_project_root(here) == here
+
+
+def test_init_does_not_walk_up(tmp_path, monkeypatch):
+    """init は上へ探さないこと。
+
+    探すと、既存のプロジェクトの下に新しいプロジェクトを作れなくなる
+    (手順書 §9 の練習用フォルダがまさにそれ)。--project を書かずに
+    そのフォルダで実行する、という実際の経路で確かめる。
+    """
+    from padcue import cli
+    root = tmp_path / "repo"
+    sub = root / "練習"
+    sub.mkdir(parents=True)
+    Project(root).save_config({"devices": []})
+    monkeypatch.chdir(sub)
+    assert cli.main(["init"]) == 0
+    assert (sub / "procedures").is_dir(), "上のプロジェクトに作られている"
+    assert not (root / "procedures").exists()
+
+
+def test_commands_find_the_project_from_a_subfolder(tmp_path, monkeypatch):
+    """子フォルダから叩いても、上の台帳が使われること。
+
+    報告された不具合そのもの: `cd firmware` してから ota を実行すると、
+    そこに台帳が無いので既定値で動き、登録済みの実機に届かなかった。
+    """
+    from padcue import cli
+    root = tmp_path / "repo"
+    sub = root / "firmware"
+    sub.mkdir(parents=True)
+    Project(root).save_config({"devices": [{"id": "a1", "name": "1P",
+                                            "host": "10.0.0.1", "port": 5555}]})
+    monkeypatch.chdir(sub)
+    assert cli.main(["device", "list"]) == 0
+    assert not (sub / "padcue.json").exists(), "子フォルダに台帳ができた"

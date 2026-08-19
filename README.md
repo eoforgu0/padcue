@@ -216,7 +216,7 @@ idf.py build
 cd ..
 
 # 実機への無線更新(2回目以降。Switch に挿したまま更新できます)
-# 装置台帳 padcue.json はリポジトリ直下にあるので、必ずここから実行します
+# 装置台帳 padcue.json は上へ辿って探すので、リポジトリ内ならどこからでも可
 python -m padcue ota
 ```
 

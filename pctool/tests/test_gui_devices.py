@@ -100,12 +100,13 @@ def test_scan_hides_mocks_and_registered(env, monkeypatch):
 
 
 def test_add_rename_remove_roundtrip(env):
-    _proj, _d1, base = env
+    _proj, d1, base = env
     d2 = MockDevice(speed=2000.0, device_id="bbbb00000002")
     d2.start()
     try:
         # 登録済みの個体(d1 と同じ宛先)は名指しで断られる
-        r = post(base, "/api/device_add", {"host": "127.0.0.1"})
+        r = post(base, "/api/device_add",
+                 {"host": "127.0.0.1", "port": d1.port})
         assert "登録済み" in str(r.get("error", "")), r
         # 新しい個体は登録でき、名前は自動で 2P になる
         r = post(base, "/api/device_add",
@@ -235,15 +236,3 @@ def test_console_key_ignores_pairing_phase():
     assert host_mac(0x0100005e, 0x00530200) == "00005e005302"
 
 
-def test_console_names_migrate_to_mac_key(tmp_path):
-    """旧キー(8バイト)で付けた名前が、MAC キーへ移って残ること。"""
-    from padcue.project import Project
-    p = Project(tmp_path)
-    cfg = p.load_config()
-    cfg["consoles"] = {"0100005e0053013c": "Switch2",
-                       "0100005e00530200": "Switch1"}
-    p.save_config(cfg)
-    got = Project(tmp_path).load_config()["consoles"]
-    assert got == {"00005e005301": "Switch2", "00005e005302": "Switch1"}
-    # 二度目は何も変えない(冪等)
-    assert Project(tmp_path).load_config()["consoles"] == got

@@ -126,4 +126,4 @@ def test_default_host_is_the_name():
 
     from padcue.project import Project
     p = Project(tempfile.mkdtemp())
-    assert p.load_config()["host"] == "pademu.local"
+    assert p.load_config()["devices"][0]["host"] == "pademu.local"

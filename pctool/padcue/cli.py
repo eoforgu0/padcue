@@ -43,11 +43,27 @@ from . import proto, registry
 from .client import DeviceClient, DeviceError, connect_verified, is_mock
 from .discover import discover
 from .flowfmt import FlowError
-from .project import Project
+from .project import Project, find_project_root
 
 
 def _project(args) -> Project:
-    return Project(Path(args.project).resolve())
+    """操作の対象になるプロジェクト。
+
+    --project を書いたらそこ。書かなければ padcue.json を上へ探す
+    (`cd firmware` してから叩いても、リポジトリ直下の台帳が使われる)。
+    """
+    if args.project is not None:
+        return Project(Path(args.project).resolve())
+    return Project(find_project_root())
+
+
+def _project_here(args) -> Project:
+    """いま**このフォルダ**を指すプロジェクト(init 用)。
+
+    init まで上へ探すと、既存のプロジェクトの下に新しいプロジェクトを
+    作れなくなる(練習用のフォルダがまさにそれ)。
+    """
+    return Project(Path(args.project or ".").resolve())
 
 
 def _gui_base(p: Project) -> str | None:
@@ -170,7 +186,7 @@ def _client(args) -> DeviceClient:
     p = _project(args)
     cfg = p.load_config()
     if args.host:                       # 明示指定 = 直結(記録もしない)
-        c = DeviceClient(args.host, int(cfg.get("port", proto.DEFAULT_PORT)))
+        c = DeviceClient(args.host, proto.DEFAULT_PORT)
         c.connect()
         return c
     dev = _pick_device(args, cfg)
@@ -266,7 +282,7 @@ def _print_build(r) -> None:
 
 
 def cmd_init(args) -> int:
-    p = _project(args)
+    p = _project_here(args)
     p.init_sample()
     print(f"雛形を作成しました: {p.root}")
     print("  procedures/サンプル.flow.json, parts/サンプル部品.csv")
@@ -701,7 +717,7 @@ def cmd_device(args) -> int:
     # 向け替える(記録したまま向けると照合で止まり練習が成立しない。解除は
     # この明示操作のときだけ。探索が黙って mock を採用することはない)
     try:
-        probe = DeviceClient(addr, int(cfg.get("port", proto.DEFAULT_PORT)),
+        probe = DeviceClient(addr, int(dev.get("port", proto.DEFAULT_PORT)),
                              timeout=1.5)
         info = probe.connect()
         probe.close()
@@ -779,7 +795,8 @@ def cmd_gui(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="padcue", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--project", default=".", help="プロジェクトフォルダ")
+    ap.add_argument("--project", default=None,
+                    help="プロジェクトフォルダ(既定: padcue.json を上へ探す)")
     ap.add_argument("--host", default="", help="デバイスの IP(照合なしの直結。復旧用)")
     ap.add_argument("--device", default="",
                     help="操作する装置の名前(省略時は1台目)")

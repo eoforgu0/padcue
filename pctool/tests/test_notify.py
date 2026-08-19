@@ -241,7 +241,6 @@ def server(tmp_path):
     # 掴ませると、繋がらない相手への収集で毎回数秒待つことになる
     cfg = proj.load_config()
     cfg["devices"] = []
-    cfg["host"] = ""
     proj.save_config(cfg)
     gui._Handler.project = proj
     drop_handler_state()

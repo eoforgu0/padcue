@@ -45,7 +45,7 @@ def test_cli_init_and_build(tmp_path, capsys):
 def test_cli_push_run_status(proj, device, capsys):
     assert run_cli(proj, "device", "127.0.0.1") == 0
     cfg = proj.load_config()
-    cfg["port"] = device.port
+    cfg["devices"][0]["port"] = device.port
     proj.save_config(cfg)
 
     assert run_cli(proj, "push", "サンプル") == 0
@@ -60,8 +60,8 @@ def test_cli_push_run_status(proj, device, capsys):
 
 def test_cli_run_missing_proc_is_reported(proj, device, capsys):
     cfg = proj.load_config()
-    cfg["host"] = "127.0.0.1"
-    cfg["port"] = device.port
+    cfg["devices"][0]["host"] = "127.0.0.1"
+    cfg["devices"][0]["port"] = device.port
     proj.save_config(cfg)
     assert run_cli(proj, "run", "存在しない") == 1
     assert "push" in capsys.readouterr().out
@@ -77,7 +77,7 @@ def test_cli_without_device_reports_clearly(proj, monkeypatch):
     # 既定の接続先は pademu.local。実機が同じ LAN にいると名前が引けてしまうので、
     # 届かないアドレスを明示しておく
     cfg = proj.load_config()
-    cfg["host"] = "192.0.2.9"
+    cfg["devices"][0]["host"] = "192.0.2.9"
     proj.save_config(cfg)
     with pytest.raises(SystemExit):
         run_cli(proj, "status")
@@ -98,8 +98,8 @@ def test_build_timeline_shape(proj):
 @pytest.fixture
 def guiserver(proj, device):
     cfg = proj.load_config()
-    cfg["host"] = "127.0.0.1"
-    cfg["port"] = device.port
+    cfg["devices"][0]["host"] = "127.0.0.1"
+    cfg["devices"][0]["port"] = device.port
     proj.save_config(cfg)
     gui._Handler.project = proj
     drop_handler_state()          # 前の検査のプール・監視を持ち込まない

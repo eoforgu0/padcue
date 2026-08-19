@@ -17,7 +17,7 @@ def env(tmp_path):
     dev = MockDevice(speed=2000.0)
     dev.start()
     cfg = proj.load_config()
-    cfg["host"], cfg["port"] = "127.0.0.1", dev.port
+    cfg["devices"][0].update(host="127.0.0.1", port=dev.port)
     proj.save_config(cfg)
     try:
         yield str(tmp_path), dev

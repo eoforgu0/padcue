@@ -52,6 +52,40 @@ def validate_name(name: str) -> str:
     return n
 
 
+CONFIG_NAME = "padcue.json"
+
+
+def find_project_root(start: str | Path | None = None) -> Path:
+    """padcue.json のある場所を、指定の場所から上へ探す。
+
+    git が .git を、npm が package.json を探すのと同じ。これが無いと
+    「いまいるフォルダ」がプロジェクトになるので、`cd firmware` してから
+    装置を操作すると別のプロジェクトを指してしまう(そこに台帳が無ければ
+    既定値で動き、登録済みの実機ではなく LAN 全体の探索に落ちる)。
+
+    どこにも無ければ出発点を返す(まだ init していない場所での1回目)。
+    """
+    here = Path(start or Path.cwd()).resolve()
+    for d in (here, *here.parents):
+        if (d / CONFIG_NAME).is_file():
+            return d
+    return here
+
+
+# 装置台帳(padcue.json)の形式。devices が唯一の正で、1台目を別のキーに
+# 写して持つようなことはしない(同じ事実が2箇所にあると必ずずれる)
+CONFIG_SCHEMA = 1
+
+
+def default_device() -> dict:
+    """まだ何も登録していないときの1台目。
+
+    保存された状態ではなくフォールバック値。画面の装置パネルに出る行の実体で、
+    ここから「探す」を押して最初の1台につなぐ。
+    """
+    return {"id": "", "name": "1P", "host": HOSTNAME, "port": DEFAULT_PORT}
+
+
 @dataclass
 class BuildResult:
     name: str
@@ -84,42 +118,23 @@ class Project:
 
     @property
     def config_path(self) -> Path:
-        return self.root / "padcue.json"
+        return self.root / CONFIG_NAME
 
     def load_config(self) -> dict:
+        """装置台帳を読む。無ければ既定を返す(**書き出さない**)。
+
+        読むだけで状態が生まれると、間違ったフォルダで1コマンド叩いただけで
+        そこに台帳ができ、以後そちらが使われる。既定の1台は
+        **フォールバック値**であって保存された状態ではない。書くのは、実際に
+        記録することが起きたとき(登録・個体IDの学習・改名)だけ。
+        """
+        cfg = {}
         if self.config_path.is_file():
             cfg = json.loads(self.config_path.read_text(encoding="utf-8"))
-        else:
-            cfg = {"host": HOSTNAME, "port": DEFAULT_PORT}
-        return self._migrate_config(cfg)
-
-    def _migrate_config(self, cfg: dict) -> dict:
-        """旧形式(host/port 単一)を装置台帳(devices)へ移行する。
-
-        - devices: [{id(MAC・保存キー), name(表示名), host, port}] を正とする
-        - 旧キー host/port は devices[0] の写しとして併記し続ける(移行期間中の
-          旧コード・外部ツールが読めるように)
-        - 初回移行時は元ファイルを .bak として残す(事故時に手で戻せる)
-        """
-        if "devices" not in cfg:
-            if self.config_path.is_file():
-                bak = self.config_path.with_suffix(".json.bak")
-                if not bak.exists():
-                    bak.write_text(self.config_path.read_text(encoding="utf-8"),
-                                   encoding="utf-8")
-            cfg["devices"] = [{"id": "", "name": "1P",
-                              "host": cfg.get("host", HOSTNAME),
-                              "port": int(cfg.get("port", DEFAULT_PORT))}]
-            self.save_config(cfg)
-        # 本体の名前(consoles)のキーを、ペアリング引数の先頭8バイトから
-        # 本体 MAC の6バイトへ移す。8バイトには先頭のフェーズ
-        # 番号と末尾のフェーズ依存バイトが混ざっていて、同じ本体でも登録の
-        # 前後で別キーになり、付けた名前が引き継がれない
-        cons = cfg.get("consoles")
-        if isinstance(cons, dict) and any(len(k) == 16 for k in cons):
-            cfg["consoles"] = {(k[2:14] if len(k) == 16 else k): v
-                               for k, v in cons.items()}
-            self.save_config(cfg)
+        cfg.setdefault("schema", CONFIG_SCHEMA)
+        # setdefault なので、明示的に空(1台も登録していない)なら空のまま。
+        # 既定を足すのは「devices をまだ持っていない台帳」のときだけ
+        cfg.setdefault("devices", [default_device()])
         return cfg
 
     # 台帳の読み直し〜書き戻しを直列化する。装置の追加・改名・個体IDの記録は
@@ -131,29 +146,7 @@ class Project:
             self._save_config_locked(cfg)
 
     def _save_config_locked(self, cfg: dict) -> None:
-        devs = cfg.get("devices")
-        if devs:
-            # 旧キー host/port を書き換えた呼び出し元(既存ツール)の意図は
-            # 「1台目の接続先の変更」なので devices[0] へ取り込む。
-            # 「呼び出し元が本当に旧キーを変えたのか」はディスク上の値との
-            # 差で判別する(devices 側だけを差し替えた呼び出し元の変更を、
-            # 読み込んだままの古い旧キーで巻き戻さないため)
-            disk_host = disk_port = None
-            if self.config_path.is_file():
-                try:
-                    disk = json.loads(
-                        self.config_path.read_text(encoding="utf-8"))
-                    disk_host, disk_port = disk.get("host"), disk.get("port")
-                except ValueError:
-                    pass
-            if cfg.get("host") is not None and cfg["host"] != disk_host \
-                    and cfg["host"] != devs[0]["host"]:
-                devs[0]["host"] = cfg["host"]
-            if cfg.get("port") is not None and cfg["port"] != disk_port \
-                    and int(cfg["port"]) != devs[0]["port"]:
-                devs[0]["port"] = int(cfg["port"])
-            cfg["host"] = devs[0]["host"]
-            cfg["port"] = devs[0]["port"]
+        cfg.setdefault("schema", CONFIG_SCHEMA)
         # 一時ファイル経由で置き換える(coupler の runstate と同じ理由。
         # 書き込み途中で落ちると台帳が壊れ、全装置の登録をやり直しになる。
         # 失っても再実行で済む runstate より、こちらのほうが失うものが大きい)
@@ -163,16 +156,12 @@ class Project:
         tmp.replace(self.config_path)
 
     def update_device(self, cfg: dict, idx: int, **fields) -> None:
-        """装置台帳のエントリを更新して保存する(新コードはこれを使う)。
+        """装置台帳のエントリを更新して保存する。
 
-        2つの事故を防ぐ:
-        - 旧キー host/port との突き合わせによる巻き戻り(save_config は
-          「旧キーの変更=1台目の接続先変更の意図」と解釈するため、
-          ここで両方を同時に揃える)
-        - 手元の cfg が古いまま全量保存して、他プロセスの変更(別端末の
-          device add 等)を消すこと。保存直前にディスクから読み直し、
-          対象エントリ(IDが記録してあればID、なければ名前、最後は位置で特定)
-          にだけ変更を当てる
+        手元の cfg が古いまま全量保存すると、他プロセスの変更(別端末の
+        device add 等)を消してしまう。保存直前にディスクから読み直し、
+        対象エントリ(IDが記録してあればID、なければ名前、最後は位置で特定)
+        にだけ変更を当てる。
         """
         with self._config_write_lock:
             self._update_device_locked(cfg, idx, **fields)
@@ -185,10 +174,10 @@ class Project:
         fresh = cfg
         if self.config_path.is_file():
             try:
-                fresh = self._migrate_config(json.loads(
-                    self.config_path.read_text(encoding="utf-8")))
+                fresh = json.loads(
+                    self.config_path.read_text(encoding="utf-8"))
             except ValueError:
-                pass                               # 壊れていれば手元を正とする
+                fresh = cfg                        # 壊れていれば手元を正とする
         devs = fresh.get("devices") or [target]
         hit = (next((d for d in devs
                      if target.get("id") and d.get("id") == target["id"]), None)
@@ -196,9 +185,6 @@ class Project:
                         if d.get("name") == target.get("name")), None)
                or devs[min(idx, len(devs) - 1)])
         hit.update(fields)
-        if hit is devs[0]:
-            fresh["host"] = hit["host"]
-            fresh["port"] = hit["port"]
         self._save_config_locked(fresh)
 
     # ---- ログ(logs.jsonl) ----

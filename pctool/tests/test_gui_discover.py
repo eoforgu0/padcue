@@ -29,7 +29,7 @@ def env(tmp_path):
     dev = MockDevice(speed=2000.0)
     dev.start()
     cfg = proj.load_config()
-    cfg["host"], cfg["port"] = "127.0.0.1", dev.port
+    cfg["devices"][0].update(host="127.0.0.1", port=dev.port)
     proj.save_config(cfg)
     gui._Handler.project = proj
     gui._Handler.recorder = None
@@ -75,7 +75,8 @@ def test_keeps_a_working_connection(env):
     assert r.get("ok"), r
     assert r.get("kept") is True, r
     assert r["host"] == "127.0.0.1"
-    assert proj.load_config()["host"] == "127.0.0.1", "接続先が書き換えられた"
+    dev = proj.load_config()["devices"][0]
+    assert dev["host"] == "127.0.0.1", "接続先が書き換えられた"
 
 
 def test_kept_answer_is_immediate(env):
@@ -98,13 +99,13 @@ def test_does_not_adopt_an_unreachable_candidate(env, monkeypatch):
     proj, dev, base = env
     monkeypatch.setattr(gui, "discover", lambda *a, **k: [])
     cfg = proj.load_config()
-    cfg["host"] = "192.0.2.9"        # 応答しないアドレスにしておく
+    cfg["devices"][0]["host"] = "192.0.2.9"   # 応答しないアドレスにしておく
     proj.save_config(cfg)
     dev.stop()                          # 探しても見つからない状態にする
     r = post(base, "/api/discover")
     assert "error" in r, r
     assert "変えていません" in r["error"] or "見つかりません" in r["error"], r
-    assert proj.load_config()["host"] == "192.0.2.9", \
+    assert proj.load_config()["devices"][0]["host"] == "192.0.2.9", \
         "つながらないのに接続先を書き換えた"
 
 

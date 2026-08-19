@@ -373,25 +373,20 @@ class _Handler(BaseHTTPRequestHandler):
                 return {"error": "接続先を入力してください"
                                  "(分からなければ「探す」を押してください)"}
             cfg = self.project.load_config()
+            # 指定した装置の接続先だけを書き換える。dev 省略時は1台目
             dev = (body.get("dev") or "").strip()
             if dev:
-                # レーンの「接続」: 指定した装置の接続先だけを書き換える
                 idx = next((i for i, d in
                             enumerate(cfg.get("devices", []))
                             if d.get("name") == dev), None)
                 if idx is None:
                     return {"error": f"装置「{dev}」は登録されていません"}
-                fields = {"host": host}
-                if body.get("port"):
-                    fields["port"] = int(body["port"])
-                self.project.update_device(cfg, idx, **fields)
             else:
-                # 従来形(1台目)。旧キー host/port の書き換えは save_config が
-                # devices[0] へ取り込む
-                cfg["host"] = host
-                if body.get("port"):
-                    cfg["port"] = int(body["port"])
-                self.project.save_config(cfg)
+                idx = 0
+            fields = {"host": host}
+            if body.get("port"):
+                fields["port"] = int(body["port"])
+            self.project.update_device(cfg, idx, **fields)
             self._pool().refresh()       # 古い接続はプールが捨てて追従する
             return {"ok": True, "host": host}
         if path == "/api/discover":
@@ -841,7 +836,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "hidden": name in hidden_set,
                 })
         cfg = self.project.load_config()
-        out = {"procedures": procs, "host": cfg.get("host", ""),
+        out = {"procedures": procs,
                "project": str(self.project.root),
                "proc_folders": org["folders"],
                "consoles": cfg.get("consoles") or {}}
