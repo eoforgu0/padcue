@@ -1,0 +1,83 @@
+[project]
+name = "padcue"
+# バージョン番号の元となる場所(P26)。padcue/__init__.py はここを読み、模擬装置は
+# 末尾に `-mock` を付けて報告する。装置のファームウェアのバージョンだけは別に持つ
+# (firmware/main/app_config.h。装置の中身は PC 側とは別に配布する)
+version = "0.1.0"
+description = "Nintendo Switch 2 を自動で操作する padcue の、PC 側のツール"
+# readme は指定しない。README はリポジトリ直下(このフォルダーの外)にあり、
+# setuptools はパッケージのフォルダーより外のファイルを読まない
+# (`Cannot access ... (or anything outside ...)` で必ず失敗する)。
+# ファイルを動かすより、説明は description と GitHub の README に任せる
+license = "Apache-2.0"
+requires-python = ">=3.11"
+
+# 実行時の依存はない(principles.md P29)。標準ライブラリだけで動くので、
+# 「Python を入れて padcue.bat を開くだけ」で使える。空の並びは書き忘れでは
+# なく、この決まりを示すものなので、明示したまま保つ。
+# numpy と OpenCV は、入っていれば映像の判定に使う(速くなるだけで、結果は
+# 同じ)。入れるかどうかは使う人が決めるので、ここには書かない。
+dependencies = []
+
+[project.optional-dependencies]
+# 開発時だけ必要。pytest はテスト、playwright は画面を実際に動かすテストに使う
+# (uicheck.py / runbook_walk.py / shoot.py)、ruff は lint。pytest の下限は、
+# pytest.ini の tmp_path_retention_policy が 7.3 からの設定であることによる
+# (ci.yml のファームウェアのジョブも同じ下限で入れる)。ruff は CI が
+# 合否を決めるテストなので、開発の環境にも同じものが入るようにしておく。
+dev = ["pytest>=7.3", "playwright>=1.40", "ruff>=0.6"]
+
+[project.scripts]
+padcue = "padcue.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["padcue"]
+
+# 画面そのもの(HTML / CSS / JS)と、画面が使う同梱のソフトウェア(web/vendor。
+# ライセンスの全文を含む)。pip install したときも同梱する
+[tool.setuptools.package-data]
+padcue = ["web/*", "web/vendor/*"]
+
+# pytest の設定の元となる場所はリポジトリ直下の pytest.ini(pythonpath も
+# norecursedirs も、リポジトリルートを基準にしないと書けないため)。
+# ここに書くと `cd pctool` してから実行したときだけ別の条件になる。
+
+[tool.ruff]
+line-length = 88
+extend-exclude = ["build"]
+
+[tool.ruff.lint]
+# preview を開けるのは、pycodestyle の空白・空行の規則(E1xx / E2xx / E3xx)が
+# ruff ではまだ preview 扱いだから。"E" を選んでいても動かないので、空行が
+# 2 つでも 4 つでも lint は緑のままになる。
+# explicit-preview-rules = true と対で使い、番号で指名したものだけを
+# 有効にする。開けっ放しにすると ruff を更新するたびに未知の規則が増えて、
+# コードを変えていない日に CI が赤くなる。
+preview = true
+explicit-preview-rules = true
+
+# BLE(握り潰しの検出)は必ず含める。既存の `# noqa: BLE001` は意図して
+# 置いた注釈で、外すと RUF100(不要な noqa)で一斉に消される。
+select = [
+    "E", "F", "W", "I", "B", "BLE", "UP", "RUF",
+    # 空行の数(定義の前後・入れ子の定義の前)。接頭辞 "E3" では preview の
+    # 規則は起きないので、6 つとも番号で書く
+    "E301", "E302", "E303", "E304", "E305", "E306",
+    # 桁まわり: コメントのぶら下げ / カンマの後の空白 / 行末コメントの前の空白
+    "E116", "E231", "E261",
+]
+
+ignore = [
+    # 日本語のコメント・文字列・docstring に全角記号を使うのは正当。
+    # この 3 つは「× と x」「＋ と +」のような見た目の紛らわしさを見る規則で、
+    # 英語圏のコードを前提にしていて、日本語主体のこのコードでは全件が
+    # 誤検知になる。なお図の桁が崩れる問題(曖昧幅)とは別物で、そちらは
+    # 文書側で ASCII に統一してある。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
