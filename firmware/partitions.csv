@@ -1,0 +1,13 @@
+# pademu パーティション構成(8MB フラッシュ / AtomS3 Lite)
+# OTA A/B + ロールバック(otadata)+ 手順データ領域(procs)
+# 注意: この表は OTA では変更できない。変更には有線書き込みが必要なため、
+#       手順データ領域まで含めてあらかじめ確定させてある
+# Name,     Type, SubType, Offset,   Size
+nvs,        data, nvs,     0x9000,   0x6000
+otadata,    data, ota,     0xf000,   0x2000
+phy_init,   data, phy,     0x11000,  0x1000
+ota_0,      app,  ota_0,   0x20000,  0x300000
+ota_1,      app,  ota_1,   0x320000, 0x300000
+procs,      data, spiffs,  0x620000, 0x100000
+# クラッシュ時の記録(どこで異常終了したか)
+coredump,   data, coredump, 0x720000, 0x10000

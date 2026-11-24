@@ -1,0 +1,42 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+# フラッシュ 8MB(ESP32-S3FN8)
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# パーティション(OTA A/B + procs)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# OTA ロールバック(起動セルフテスト通過まで新しいバージョンを確定しない)
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# 1ms tick(タイミング系の分解能)
+CONFIG_FREERTOS_HZ=1000
+# FreeRTOS の関数を内蔵 RAM に置く。ESP-IDF 6 の既定はフラッシュで、USB の送信の
+# 流れが呼ぶ関数がキャッシュにないと、そのつど読み出しを待つ
+CONFIG_FREERTOS_IN_IRAM=y
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# USB-OTG(TinyUSB)。HID デバイス 1 個
+CONFIG_TINYUSB_HID_COUNT=1
+CONFIG_TINYUSB_CDC_ENABLED=n
+CONFIG_TINYUSB_MSC_ENABLED=n
+
+# GPTimer の ISR をフラッシュキャッシュ無効中も動かす(実行エンジンの必須設定)
+CONFIG_GPTIMER_ISR_CACHE_SAFE=y
+CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM=y
+
+# Wi-Fi の設定を NVS へ書かせない(実行中の暗黙のフラッシュ書き込みを排除)
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+
+# SPIFFS の名前はマウント先("/procs")を除いた "/" + 手順の id(32 桁)+ ".bin" の
+# 37 バイトで、終端を含めて 38 バイトが必要(既定 32 では不足)
+CONFIG_SPIFFS_OBJ_NAME_LEN=48
+
+# クラッシュしたときに「どこで異常終了したか」をフラッシュへ残す。
+# これが無効だと、実行中のパニックを追うのに逆アセンブル解析が必要である。
+# 有効にしておけば padcue で吸い出して原因を直接見られる(形式は ELF、
+# チェックサムは SHA-256。ESP-IDF 6 ではこの組だけになった)
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_STACK_SIZE=1280
