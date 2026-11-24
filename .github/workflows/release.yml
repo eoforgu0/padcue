@@ -1,0 +1,56 @@
+# タグ v<PC 側のバージョン> をプッシュすると、ファームウェアをビルドしてリリースに添付する。
+# 添付するのは 2 つ。ケーブルで最初に書き込む、ブートローダーとパーティションの表を
+# 含めて 1 つにまとめたイメージと、無線で更新する(padcue ota)アプリのイメージである。
+# 利用者は ESP-IDF を入れずに、同じリリースのページから取って書き込む。
+name: リリース
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ファームウェアをビルドしてリリースを作る
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # タグは PC 側のバージョン(pctool/pyproject.toml)に合わせる(CONTRIBUTING)
+      - name: タグが PC 側のバージョンと同じであること
+        run: |
+          v=$(sed -n 's/^version = "\(.*\)"$/\1/p' pctool/pyproject.toml)
+          if [ "$GITHUB_REF_NAME" != "v$v" ]; then
+            echo "タグ $GITHUB_REF_NAME が PC 側のバージョン $v と違います"
+            exit 1
+          fi
+
+      # ci.yml と同じ ESP-IDF でビルドする(dependencies.lock が記録しているバージョン)
+      - name: ESP-IDF でビルドし、ケーブルで書き込むイメージを 1 つにまとめる
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32s3
+          path: firmware
+          command: idf.py build && idf.py merge-bin
+
+      - name: 添付するファイルにファームウェアのバージョンを付ける
+        run: |
+          fw=$(sed -n 's/^#define PADEMU_FW_VERSION "\(.*\)"$/\1/p' firmware/main/app_config.h)
+          mkdir -p release
+          cp firmware/build/merged-binary.bin "release/padcue-firmware-$fw.bin"
+          cp firmware/build/pademu.bin "release/padcue-firmware-$fw-ota.bin"
+
+      # リリースの説明は、CHANGELOG のそのバージョンの節を使う
+      - name: リリースを作る
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v head="## $GITHUB_REF_NAME" \
+            'index($0, head) == 1 { on = 1; next } /^## / { on = 0 } on' \
+            CHANGELOG.md > release-notes.md
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --title "padcue $GITHUB_REF_NAME" --notes-file release-notes.md

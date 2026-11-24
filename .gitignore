@@ -1,0 +1,40 @@
+# ESP-IDF
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+# ruff は .ruff_cache/.gitignore(中身は *)を自分で書くが、それに頼らずここにも
+# 書く。書き出す前の一瞬や、そのファイルを消した状態では追跡の候補に現れる。
+# .pytest_cache と同じ扱いにそろえる
+.ruff_cache/
+
+# 利用者のデータ(手順・フレーム表・条件・プリセット・登録情報・ログ・変換の結果など)。
+# padcue は、指定がなければ padcue のフォルダーの data をプロジェクトに使う
+# (project.default_root)。ソフトウェア本体ではない
+/data/
+
+# デモのサンドボックス(padcue-demo.bat)。中身はすべて生成物
+/demo/
+
+# 操作権の識別子(この padcue ぶん)。複製したツリーが同じ値を送ると、
+# どの padcue が持ち主かを見分けられなくなる
+.padcue-client-id
+
+# テストがファームウェアの C をホストでビルドした物(conftest._build_host)
+.hosttest/
+# テストのツールの出力先(CI と同じ名前)
+uicheck-out/
+runbook-walk-out/
+# パッケージのビルド成果物
+dist/
+*.egg-info/
+.venv/
+
+# 画面のスクリーンショットの出力先(pctool/tools/shoot.py <出力フォルダー>)。
+# 文書に載せるものだけ docs/images/ に置いて追跡する
+shots/

@@ -1,0 +1,187 @@
+name: CI
+
+# 読むだけで足りる。既定に任せると、リポジトリの設定しだいで書き込み権限を
+# 持った GITHUB_TOKEN が公開リポジトリの pull_request(fork からも実行される)に
+# 渡される可能性がある
+permissions:
+  contents: read
+
+# 対象は Windows。バッチ(padcue.bat)から起動するツールなので、画面のテストは
+# Windows で実行する。パッケージは標準ライブラリだけで書かれていて、Windows に
+# 固有の処理(画面とウィンドウの取得、通知、スリープの抑止)は OS を見て分けて
+# いるので、pytest と lint は Windows より速い ubuntu で、対応している最も古い
+# Python(pctool/pyproject.toml の requires-python)と最新の Python の 2 つで実行
+# する。新しい Python でだけ変わる標準ライブラリの動きも、ここで見つける
+# (CONTRIBUTING.md「バージョンと公開」)。ほかのジョブは、これから入れる人が使う
+# 最新の Python で実行する。
+on:
+  # push は main だけにする。タグは main のコミットを指すので、タグでも実行すると
+  # 同じ内容の実行がもう 1 本増える。ブランチは pull_request でテストする(同じ
+  # リポジトリのブランチから PR を出したときに、push と pull_request で二重に
+  # 実行されるのも、これで防ぐ)
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pc:
+    name: PC 側(テストと lint、Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # どのジョブにも上限を設ける。テストが終わらなくなると、上限がなければ GitHub の
+    # 既定の 6 時間まで runner を使い続ける。上限は、通常かかる時間の数倍にする
+    timeout-minutes: 90
+    strategy:
+      # 片方が失敗しても、もう片方を最後まで実行する(どのバージョンで失敗したかが
+      # 分かる)
+      fail-fast: false
+      matrix:
+        # 1 つ目は requires-python の下限(tests/test_version.py が一致していることを
+        # 確認する)、2 つ目は最新の Python
+        python-version: ["3.11", "3.15"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # README と CONTRIBUTING が最初に案内する手順そのものを実行する。
+      # ここを通さないと、パッケージの宣言が壊れていてもテストは通る。pytest は
+      # リポジトリ直下の pytest.ini の pythonpath で pctool を読み、install を経ない
+      - name: 開発用の依存を入れる(README と同じ手順)
+        run: pip install -e "./pctool[dev]"
+
+      - name: インストールした padcue コマンドが動く
+        run: padcue --help
+
+      - name: lint
+        run: ruff check pctool
+
+      - name: テスト
+        # C 実装と Python の参照実装が同じ入力の列を出力するかの比較は、gcc が
+        # ないと skip される。ubuntu の runner には gcc が入っているので、
+        # PADCUE_REQUIRE_GCC で、gcc がないことを失敗にする。
+        env:
+          PADCUE_REQUIRE_GCC: "1"
+        run: python -m pytest -q
+
+      # numpy と OpenCV は任意で、入っていれば映像の判定に使う。速くなるだけで、
+      # 値は入っていないときと同じでなければならない。上のテストは入っていない形で
+      # 実行したので、入れてから、映像の判定のテストをもう一度実行する(速い経路と
+      # 標準ライブラリだけの経路が同じ値を出すかのテストは、入っているときだけ実行
+      # される)
+      - name: numpy と OpenCV があるときの映像の判定
+        run: |
+          pip install numpy opencv-python-headless
+          python -m pytest -q pctool/tests/test_conditions.py pctool/tests/test_frames.py pctool/tests/test_sources.py
+
+  pc-windows:
+    name: PC 側(テスト、Windows)
+    # Windows に固有の処理(通知、スリープの抑止、映像ソース)を確認する
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+
+      - name: 開発用の依存を入れる(README と同じ手順)
+        run: pip install -e "./pctool[dev]"
+
+      - name: テスト
+        run: python -m pytest -q
+
+  ui:
+    name: 画面(ブラウザーで実操作)
+    # 利用者が実際に動かすのは Windows。pytest とは別に、ブラウザーで画面を
+    # 操作して、押したときの動きと表示を、対象の OS でテストする。
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+
+      # ブラウザーは playwright が用意する(Windows なので OS 側の追加は不要)。
+      # 依存は pc ジョブと同じく CONTRIBUTING の手順で入れる。
+      # 1 ステップに並べない。pwsh は最後のコマンドの終了コードだけを見るので、
+      # pip が失敗しても playwright が成功すればステップは緑になり、次のテストが
+      # 理由の分からない import エラーで失敗する
+      - name: 画面テストの依存を入れる
+        run: pip install -e "./pctool[dev]"
+
+      # 映像の判定を速くする numpy と OpenCV も入れる(README が勧める 2 つ。OpenCV
+      # は、画面を持たない runner 向けに、ウィンドウの機能を除いた版を入れる)。
+      # 入れないと一致度の計算が約 8 倍遅く、条件の編集の目安などが検査の待ちに
+      # 間に合わない。2 つの計算のやり方が同じ値を出すことは、pc ジョブの pytest が
+      # 入れた形と入れない形の両方で確かめる
+      - name: numpy と OpenCV を入れる
+        run: pip install numpy opencv-python-headless
+
+      - name: ブラウザーを入れる
+        run: playwright install chromium
+
+      # ツールは、探索先を模擬装置に固定し、loopback 以外への接続を拒否する
+      # (pctool/tools/_localonly.py の lock_to_mock)。CI の runner には実機もない
+      - name: 操作画面のテスト
+        run: python pctool/tools/uicheck.py uicheck-out
+
+      - name: 手順書どおりの通し確認
+        run: python pctool/tools/runbook_walk.py runbook-walk-out
+
+      # 文書に掲載する画面のスクリーンショットを撮るツール。テストではないが、画面の名前が
+      # 変わると動かなくなるので、動くことだけをここで確認する
+      - name: 画面のスクリーンショットを撮るツールが動くこと
+        run: python pctool/tools/shoot.py shots
+
+      # 失敗した項目は画面のスクリーンショットが残る。CI のログだけでは、何がどう
+      # 違ったかが分からないので、artifact としてダウンロードできるようにする
+      - name: 失敗時の画面を残す
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: uicheck-screenshots
+          path: |
+            uicheck-out/*.png
+            runbook-walk-out/*.png
+          if-no-files-found: ignore
+
+  firmware:
+    name: ファームウェア(ビルド)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # main/ のうち ESP-IDF に依存する部分(USB・Wi-Fi・TCP・保存をつなぐ所)は、
+      # PC の gcc を使うほかのテストではビルドできない。ビルドが通ることを、ここで
+      # 確認する。
+      - name: ESP-IDF でビルド
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          # dependencies.lock が記録しているバージョン(idf 6.1.0)と合わせる。
+          # ずれると component manager が依存を解決し直すので lock が使われず、
+          # lock 自体も書き換わる。v6.1 のタグが 6.1.0 である
+          esp_idf_version: v6.1
+          target: esp32s3
+          path: firmware
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+
+      # 割り込みから呼ぶ関数がフラッシュに残ると、フラッシュへの書き込みと
+      # 重なったときに装置が異常終了する。ビルド結果(map)から IRAM への配置を
+      # 確認する。あわせて、イメージのバージョンが装置の報告するバージョンと同じことを確認する。
+      # どちらのテストもビルド結果がないと skip されるので、CI では
+      # PADCUE_REQUIRE_FIRMWARE で、ビルド結果がないことを失敗にする
+      - name: ビルド結果を確認する
+        env:
+          PADCUE_REQUIRE_FIRMWARE: "1"
+        run: |
+          pip install "pytest>=7.3"
+          python -m pytest -q pctool/tests/test_firmware_iram.py pctool/tests/test_firmware_image.py
